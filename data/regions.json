@@ -1,0 +1,149 @@
+[
+  {
+    "id": "vice-city",
+    "name": "Vice City",
+    "short": "VC",
+    "tagline": "The neon metropolis on Leonida's southeast coast.",
+    "description": [
+      "Leonida's biggest city and its nightlife and commercial core: a beachfront strip on the barrier islands, a downtown skyline, bayside neighborhoods and Washington Island.",
+      "It has the densest mix of shops, interiors and side activity in the state, so expect the most secrets per square mile. You can reach the city before the story sends you there."
+    ],
+    "color": "#ff4f9a",
+    "label": [
+      -79.95,
+      26.06
+    ],
+    "labelAnchor": "start",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      },
+      {
+        "label": "Gfinity — Every confirmed location in Leonida",
+        "url": "https://www.gfinityesports.com/article/gta-6-map-guide-every-confirmed-location-in-leonida"
+      }
+    ]
+  },
+  {
+    "id": "leonida-keys",
+    "name": "Leonida Keys",
+    "short": "LK",
+    "tagline": "An island chain trailing off the southern tip.",
+    "description": [
+      "A string of islands, bridges and shallow turquoise water hanging off the bottom of the state.",
+      "On this map the chain is drawn from the real Florida Keys it parodies; in-game island positions will differ. Boats beat roads out here."
+    ],
+    "color": "#25e2d0",
+    "label": [
+      -81.2,
+      24.4
+    ],
+    "labelAnchor": "middle",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "Gfinity — Every confirmed location in Leonida",
+        "url": "https://www.gfinityesports.com/article/gta-6-map-guide-every-confirmed-location-in-leonida"
+      }
+    ]
+  },
+  {
+    "id": "grassrivers",
+    "name": "Grassrivers",
+    "short": "GR",
+    "tagline": "Sawgrass, slow water and a lot of teeth.",
+    "description": [
+      "Wide wetlands south of the interior. Map guides report flamingos and alligators here, plus explorable underwater areas that hide loot.",
+      "Channels cut the region into pieces. Watch the water's edge before you wade in."
+    ],
+    "color": "#6dfc9b",
+    "label": [
+      -81.38,
+      26.02
+    ],
+    "labelAnchor": "middle",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "allthings.how — Every confirmed region in Leonida",
+        "url": "https://allthings.how/gta-6-map-locations-every-confirmed-region-in-leonida/"
+      }
+    ]
+  },
+  {
+    "id": "port-gellhorn",
+    "name": "Port Gellhorn",
+    "short": "PG",
+    "tagline": "A worn-down industrial port on the northwest gulf.",
+    "description": [
+      "Docks, rail yards and motels along the gulf coast of Leonida's northwest arm. Fan maps place it inside Kelly County, which is also where players report a nighttime UFO encounter.",
+      "Rockstar has not published its exact position. The placement here follows the most common community reading and is approximate."
+    ],
+    "color": "#ffb347",
+    "label": [
+      -85.05,
+      30.82
+    ],
+    "labelAnchor": "middle",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "Gfinity — Every confirmed location in Leonida",
+        "url": "https://www.gfinityesports.com/article/gta-6-map-guide-every-confirmed-location-in-leonida"
+      },
+      {
+        "label": "thegameswiki — Map and regions",
+        "url": "https://thegameswiki.com/gta6/wiki/map-and-regions"
+      }
+    ]
+  },
+  {
+    "id": "ambrosia",
+    "name": "Ambrosia",
+    "short": "AM",
+    "tagline": "Rural interior country around the big lake.",
+    "description": [
+      "A confirmed region, but Rockstar has shared few specifics. Expect farmland, small-town main streets and long empty roads.",
+      "Its placement in the interior here is our inference from the real-world geography Leonida riffs on, not an official map."
+    ],
+    "color": "#ffd166",
+    "label": [
+      -80.9,
+      27.4
+    ],
+    "labelAnchor": "middle",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "allthings.how — Every confirmed region in Leonida",
+        "url": "https://allthings.how/gta-6-map-locations-every-confirmed-region-in-leonida/"
+      }
+    ]
+  },
+  {
+    "id": "mount-kalaga",
+    "name": "Mount Kalaga National Park",
+    "short": "MK",
+    "tagline": "High ground and deep woods on the northern border.",
+    "description": [
+      "Leonida's wilderness: forest, trails and the state's highest ground. Community renderings put it along the northern border, which is where it sits on this map (approximate).",
+      "If the series' habit of hiding a mystery on its tallest peak holds, this is where to look."
+    ],
+    "color": "#4db2ff",
+    "label": [
+      -82.85,
+      30.15
+    ],
+    "labelAnchor": "middle",
+    "confidence": "confirmed",
+    "sources": [
+      {
+        "label": "allthings.how — Every confirmed region in Leonida",
+        "url": "https://allthings.how/gta-6-map-locations-every-confirmed-region-in-leonida/"
+      }
+    ]
+  }
+]

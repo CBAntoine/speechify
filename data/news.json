@@ -1,0 +1,124 @@
+{
+  "updatedAt": "2026-11-19T15:00:00.000Z",
+  "brief": {
+    "date": "2026-11-19",
+    "headline": "Launch day: Leonida is open",
+    "bullets": [
+      { "text": "GTA VI is out now on PS5 and Xbox Series X|S. There's still no PC release date.", "url": "https://www.nbcnews.com/pop-culture/pop-culture-news/live-blog/gta-6-release-grand-theft-reviews-live-updates-rcna610118" },
+      { "text": "Critics are almost unanimous: it sits at 99 on Metacritic, with perfect scores from IGN and GameSpot.", "url": "https://www.bloomberg.com/news/articles/2026-11-18/-grand-theft-auto-vi-becomes-the-best-reviewed-video-game-ever" },
+      { "text": "First confirmed Easter eggs: an egg nest atop Vice City's tallest tower, a famous TV apartment on Washington Island, and Bigfoot in Gullet Marsh.", "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/" },
+      { "text": "The Standard Edition costs $79.99 and the Ultimate $99.99. GTA Online isn't part of this launch.", "url": "https://techspot.com/news/112883-gta-6-standard-edition-confirmed-cost-80-while.html" }
+    ],
+    "model": "editor"
+  },
+  "items": [
+    {
+      "id": "nbc-live-2026-11-19",
+      "title": "'GTA 6' release live updates: Gamers skip work to play after 13-year wait",
+      "url": "https://www.nbcnews.com/pop-culture/pop-culture-news/live-blog/gta-6-release-grand-theft-reviews-live-updates-rcna610118",
+      "source": "NBC News",
+      "publishedAt": "2026-11-19T09:00:00.000Z",
+      "summary": "Rolling coverage of the launch on PS5 and Xbox Series X|S, the reviews, and fans taking the day off.",
+      "tags": ["launch"]
+    },
+    {
+      "id": "techradar-live-2026-11-19",
+      "title": "GTA 6 secrets, tips and reactions live on launch day",
+      "url": "https://www.techradar.com/live/news/gta-6-launch-day-november-19",
+      "source": "TechRadar",
+      "publishedAt": "2026-11-19T10:34:28.000Z",
+      "summary": "A running list of what players are finding in their first hours, including auto-save confusion, surprising animals and offbeat ways to play.",
+      "tags": ["secrets", "tips"]
+    },
+    {
+      "id": "kotaku-live-2026-11-19",
+      "title": "GTA 6 launch live updates: news, conversations and discoveries",
+      "url": "https://kotaku.com/live-updates-on-gta-6-the-biggest-launch-in-gaming-history-2000758030",
+      "source": "Kotaku",
+      "publishedAt": "2026-11-19T08:00:00.000Z",
+      "summary": "Kotaku's live hub for the launch, collecting community discoveries as they happen.",
+      "tags": ["launch", "secrets"]
+    },
+    {
+      "id": "ibtimes-egg-2026-11-19",
+      "title": "GTA 6 Easter egg is literally an egg, and throwing it from a tower unlocks a secret cutscene",
+      "url": "https://www.ibtimes.co.uk/gta-6-player-discovers-literal-easter-egg-leonida-1833342",
+      "source": "IBTimes UK",
+      "publishedAt": "2026-11-19T07:00:00.000Z",
+      "summary": "A player climbed Vice City's tallest radio tower, found a nest of painted eggs, and threw one. Mapped on Neon Atlas.",
+      "tags": ["easter-egg", "secrets"]
+    },
+    {
+      "id": "benzinga-youtube-2026-11-19",
+      "title": "YouTube marks GTA 6 release with interactive features and a 24-hour livestream",
+      "url": "https://www.benzinga.com/markets/tech/26/11/63422368/youtube-marks-gta-6-release-with-dedicated-interactive-features-24-hour-livestream-and-more-ttwo-declines-over-2-in-premarket",
+      "source": "Benzinga",
+      "publishedAt": "2026-11-19T12:00:00.000Z",
+      "summary": "YouTube is celebrating the launch with dedicated features, while Take-Two shares slipped in premarket trading.",
+      "tags": ["business"]
+    },
+    {
+      "id": "cbs-ready-2026-11-19",
+      "title": "Grand Theft Auto 6 is ready to roll",
+      "url": "https://www.cbsnews.com/news/grand-theft-auto-6-release-date-price-what-to-know/",
+      "source": "CBS News",
+      "publishedAt": "2026-11-19T06:00:00.000Z",
+      "summary": "Release timing, price and first impressions from players. One called it visually incredible.",
+      "tags": ["launch"]
+    },
+    {
+      "id": "yahoo-out-now-2026-11-19",
+      "title": "'GTA 6' is out now and officially ready to play: everything you need to know",
+      "url": "https://tech.yahoo.com/gaming/breaking-news/article/gta-6-is-out-now-and-officially-ready-to-play-everything-you-need-to-know-about-the-rockstar-game-launch-including-reviews-pricing-story-mode-and-more-050048410.html",
+      "source": "Yahoo Tech",
+      "publishedAt": "2026-11-19T05:00:48.000Z",
+      "summary": "The launch at midnight local time, a staggered worldwide rollout, and a recap of reviews and pricing.",
+      "tags": ["launch"]
+    },
+    {
+      "id": "bloomberg-best-reviewed-2026-11-18",
+      "title": "'Grand Theft Auto VI' becomes the best-reviewed video game ever",
+      "url": "https://www.bloomberg.com/news/articles/2026-11-18/-grand-theft-auto-vi-becomes-the-best-reviewed-video-game-ever",
+      "source": "Bloomberg",
+      "publishedAt": "2026-11-18T17:00:00.000Z",
+      "summary": "With the review embargo lifted, aggregate scores make it the best-reviewed game on record.",
+      "tags": ["reviews"]
+    },
+    {
+      "id": "gamespot-eggs-2026-11-18",
+      "title": "GTA 6 Easter eggs are everywhere, but these are the best ones",
+      "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+      "source": "GameSpot",
+      "publishedAt": "2026-11-18T20:41:59.000Z",
+      "summary": "A reviewer's list of verified Easter eggs: Liberty City and western novels, Dexter's apartment, the literal egg, and Bigfoot. All mapped here.",
+      "tags": ["easter-egg", "secrets"]
+    },
+    {
+      "id": "vgc-beginners-2026-11-18",
+      "title": "GTA 6 beginner's guide: 6 tips you need to know before starting",
+      "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/",
+      "source": "VGC",
+      "publishedAt": "2026-11-18T12:59:05.000Z",
+      "summary": "Practical early-game advice: cash stash, door colors in Focus Mode, enterable buildings and roadside repairs.",
+      "tags": ["tips", "guide"]
+    },
+    {
+      "id": "thr-india-99-2026-11-18",
+      "title": "GTA 6 reviews: Grand Theft Auto VI scores 99 on Metacritic",
+      "url": "https://www.hollywoodreporterindia.com/features/insight/grand-theft-auto-6-receives-near-universal-acclaim-from-critics-scores-99-on-metacritic",
+      "source": "The Hollywood Reporter India",
+      "publishedAt": "2026-11-18T15:00:00.000Z",
+      "summary": "A roundup of the critic scores behind the near-universal acclaim.",
+      "tags": ["reviews"]
+    },
+    {
+      "id": "tribune-price-2026-06-24",
+      "title": "Rockstar confirms GTA 6 price and launch editions ahead of pre-orders going live",
+      "url": "https://tribune.com.pk/story/2614883/rockstar-confirms-gta-6-price-and-details-launch-editions-ahead-of-pre-orders-going-live",
+      "source": "The Express Tribune",
+      "publishedAt": "2026-06-24T10:00:00.000Z",
+      "summary": "Pricing and the two-edition lineup announced ahead of the June 25 pre-order opening.",
+      "tags": ["business"]
+    }
+  ]
+}

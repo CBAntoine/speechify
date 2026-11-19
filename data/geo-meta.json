@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-11-19",
+  "bbox": [
+    -88.4,
+    23.9,
+    -78.95,
+    31.75
+  ],
+  "imageBounds": {
+    "west": -88.59375,
+    "east": -78.75,
+    "north": 31.95216223802496,
+    "south": 23.88583769986199
+  },
+  "preview": {
+    "width": 1600,
+    "height": 1486
+  },
+  "grid": {
+    "west": -87.75,
+    "east": -79.85,
+    "north": 31.1,
+    "south": 24.35,
+    "cols": 10,
+    "rows": 10
+  },
+  "regionBounds": {
+    "vice-city": [
+      -80.53,
+      25.43,
+      -80.01,
+      27.016
+    ],
+    "leonida-keys": [
+      -82.413,
+      21.539,
+      -80.22,
+      25.383
+    ],
+    "grassrivers": [
+      -81.548,
+      25.121,
+      -80.381,
+      26.321
+    ],
+    "port-gellhorn": [
+      -87.627,
+      29.634,
+      -84.806,
+      31
+    ],
+    "ambrosia": [
+      -81.404,
+      26.418,
+      -80.313,
+      27.466
+    ],
+    "mount-kalaga": [
+      -84.939,
+      29.552,
+      -82.166,
+      30.747
+    ]
+  },
+  "home": {
+    "west": -87.7,
+    "south": 24.35,
+    "east": -79.85,
+    "north": 31.05
+  },
+  "attribution": [
+    "Natural Earth (public domain)",
+    "Seafloor & terrain: AWS Terrain Tiles (ETOPO1, SRTM, GMTED; Mapzen/AWS Open Data)"
+  ]
+}

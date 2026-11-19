@@ -1,0 +1,406 @@
+[
+  {
+    "id": "tower-egg-nest",
+    "name": "The Literal Easter Egg",
+    "category": "easter-egg",
+    "region": "vice-city",
+    "confidence": "confirmed",
+    "placement": "approximate",
+    "area": "Top of the tallest tower in Vice City proper",
+    "summary": "A bird's nest of painted eggs sits at the very top of Vice City's tallest tower. Take one and throw it.",
+    "details": [
+      "Rockstar's joke on the term: a real egg, painted like an Easter egg, waiting in a nest at the summit of the city's tallest tower.",
+      "Either protagonist can pick it up and throw it. Players say throwing it kicks off a surprise vehicle-strike cutscene."
+    ],
+    "steps": [
+      "Head downtown and find the tallest tower in Vice City proper. At night, look for the highest set of red aircraft-warning lights.",
+      "Climb all the way up. Reports put the climb at roughly six to seven minutes, so don't fall.",
+      "Walk to the nest, take an egg, and throw it."
+    ],
+    "requirements": [
+      "Any point in the story",
+      "Jason or Lucia"
+    ],
+    "tags": [
+      "climb",
+      "cutscene",
+      "vice city"
+    ],
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      },
+      {
+        "label": "IBTimes UK — Player discovers a literal Easter egg",
+        "url": "https://www.ibtimes.co.uk/gta-6-player-discovers-literal-easter-egg-leonida-1833342",
+        "date": "2026-11-19"
+      }
+    ],
+    "addedAt": "2026-11-19",
+    "lng": -80.1918,
+    "lat": 25.7743,
+    "radiusKm": 2.5
+  },
+  {
+    "id": "washington-island-apartment",
+    "name": "A Certain Forensic Analyst's Apartment",
+    "category": "easter-egg",
+    "region": "vice-city",
+    "confidence": "confirmed",
+    "placement": "approximate",
+    "area": "Washington Island, near the Vice Beach Top Fun Drones shop",
+    "summary": "A near-faithful recreation of Dexter Morgan's apartment complex from the TV series, open from the start of the game.",
+    "details": [
+      "Fans of the Miami-set crime drama will recognize the building straight away. One guide rates it about 90% faithful to the show's version.",
+      "It sits on Washington Island, a Vice City subregion, close to the Top Fun Drones shop on Vice Beach. You can drive to Vice City before the story takes you there."
+    ],
+    "steps": [
+      "Cross to Washington Island in Vice City.",
+      "Look for the Vice Beach Top Fun Drones shop; the apartment complex is nearby."
+    ],
+    "requirements": [
+      "Available from the start"
+    ],
+    "tags": [
+      "tv reference",
+      "vice beach"
+    ],
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      },
+      {
+        "label": "LibertyCity — Aliens and Dexter's apartment",
+        "url": "https://libertycity.net/news/gta-6/10517-aliens-and-dexters-apartment-players.html",
+        "date": "2026-11-19"
+      }
+    ],
+    "addedAt": "2026-11-19",
+    "lng": -80.152,
+    "lat": 25.83,
+    "radiusKm": 5.5
+  },
+  {
+    "id": "kelly-county-ufo",
+    "name": "Kelly County UFO Encounter",
+    "category": "secret",
+    "region": "port-gellhorn",
+    "confidence": "reported",
+    "placement": "approximate",
+    "area": "Somewhere in Kelly County (fan-mapped around Port Gellhorn)",
+    "summary": "Players report a hidden alien encounter in Kelly County after Chapter 1, most reliably late at night.",
+    "details": [
+      "Early players say a UFO event can trigger in Kelly County once you have finished the first chapter.",
+      "It reportedly only happens at night, most reliably after 2:00 a.m. on the in-game clock. The exact trigger spot hasn't been pinned down, so the circle shows the whole search area."
+    ],
+    "steps": [
+      "Finish Chapter 1.",
+      "Drive into Kelly County after dark. Check the time on your phone (D-pad up).",
+      "Wait for 2:00 a.m. in-game and explore the open country. If it fails, try a different night."
+    ],
+    "requirements": [
+      "Chapter 1 complete",
+      "Night, ideally after 2:00 a.m."
+    ],
+    "tags": [
+      "ufo",
+      "night",
+      "unconfirmed trigger"
+    ],
+    "sources": [
+      {
+        "label": "LibertyCity — Aliens and Dexter's apartment",
+        "url": "https://libertycity.net/news/gta-6/10517-aliens-and-dexters-apartment-players.html",
+        "date": "2026-11-19"
+      }
+    ],
+    "addedAt": "2026-11-19",
+    "lng": -85.95,
+    "lat": 30.48,
+    "radiusKm": 42
+  },
+  {
+    "id": "grassrivers-underwater-loot",
+    "name": "Grassrivers Underwater Stashes",
+    "category": "collectible",
+    "region": "grassrivers",
+    "confidence": "reported",
+    "placement": "approximate",
+    "area": "Deeper channels and pools of the Grassrivers",
+    "summary": "Map guides report explorable underwater areas in the Grassrivers that hold treasure and secrets.",
+    "details": [
+      "Pre-launch map roundups describe underwater spaces in the wetlands worth diving for.",
+      "Exact stash points haven't been charted yet. Gators share the water, so dive from a boat and keep an eye on your surroundings."
+    ],
+    "steps": [
+      "Take a boat into the wider channels.",
+      "Dive near wrecks, pilings and drop-offs; that's where loot usually sits."
+    ],
+    "requirements": [],
+    "tags": [
+      "diving",
+      "loot",
+      "uncharted"
+    ],
+    "sources": [
+      {
+        "label": "allthings.how — Every confirmed region in Leonida",
+        "url": "https://allthings.how/gta-6-map-locations-every-confirmed-region-in-leonida/"
+      }
+    ],
+    "addedAt": "2026-11-19",
+    "lng": -81.05,
+    "lat": 25.5,
+    "radiusKm": 24
+  },
+  {
+    "id": "grassrivers-wildlife",
+    "name": "Gators & Flamingos",
+    "category": "wildlife",
+    "region": "grassrivers",
+    "confidence": "reported",
+    "placement": "approximate",
+    "area": "Southern wetlands",
+    "summary": "Alligators and flamingos have been spotted across the Grassrivers. Great photos, bad swimming.",
+    "details": [
+      "Wildlife is one of Leonida's signatures, and the wetlands are where you'll see the most of it.",
+      "Players are already sharing surprising animal encounters. Treat any shoreline as gator territory."
+    ],
+    "steps": [],
+    "requirements": [],
+    "tags": [
+      "wildlife",
+      "photography"
+    ],
+    "sources": [
+      {
+        "label": "allthings.how — Every confirmed region in Leonida",
+        "url": "https://allthings.how/gta-6-map-locations-every-confirmed-region-in-leonida/"
+      },
+      {
+        "label": "TechRadar — Launch-day secrets, tips and reactions",
+        "url": "https://www.techradar.com/live/news/gta-6-launch-day-november-19",
+        "date": "2026-11-19"
+      }
+    ],
+    "addedAt": "2026-11-19",
+    "lng": -80.9,
+    "lat": 25.22,
+    "radiusKm": 16
+  },
+  {
+    "id": "vice-rooftop-sweep",
+    "name": "Downtown Rooftop Sweep",
+    "category": "collectible",
+    "region": "vice-city",
+    "confidence": "theory",
+    "placement": "approximate",
+    "area": "Downtown Vice City rooftops and helipads",
+    "summary": "Where to look first for hidden collectibles: series tradition loves rooftops, helipads and ledges.",
+    "details": [
+      "This is an inference, not a find. Hidden packages and collectibles in the series have long clustered on rooftops and hard-to-reach ledges.",
+      "Downtown Vice City has the most of both. Grab a helicopter, or start from the tower climb for the egg nest."
+    ],
+    "steps": [
+      "Work the tallest buildings first, then the parking-garage roofs.",
+      "Check the world map: darker blue buildings have interiors and often roof access."
+    ],
+    "requirements": [],
+    "tags": [
+      "theory",
+      "collectibles"
+    ],
+    "sources": [],
+    "addedAt": "2026-11-19",
+    "lng": -80.19,
+    "lat": 25.79,
+    "radiusKm": 3
+  },
+  {
+    "id": "keys-wreck-dive",
+    "name": "Keys Reef & Wreck Dive",
+    "category": "collectible",
+    "region": "leonida-keys",
+    "confidence": "theory",
+    "placement": "approximate",
+    "area": "Shallow reefs along the island chain",
+    "summary": "A prime spot to check for sunken loot. Earlier games hid wrecks and treasure offshore.",
+    "details": [
+      "Inference: Leonida leans hard on water, and past entries rewarded divers with wrecks and hidden pieces offshore.",
+      "The Keys' shallow reefs are the most obvious place to start sweeping."
+    ],
+    "steps": [
+      "Rent or steal a boat at a marina.",
+      "Sweep the reef line slowly. Look for hull shapes and debris fields."
+    ],
+    "requirements": [],
+    "tags": [
+      "theory",
+      "diving"
+    ],
+    "sources": [],
+    "addedAt": "2026-11-19",
+    "lng": -80.52,
+    "lat": 24.98,
+    "radiusKm": 20
+  },
+  {
+    "id": "kalaga-summit-watch",
+    "name": "Summit Mystery Watch",
+    "category": "secret",
+    "region": "mount-kalaga",
+    "confidence": "theory",
+    "placement": "approximate",
+    "area": "Mount Kalaga's high ground",
+    "summary": "GTA V hid its most famous mystery on its tallest mountain. Mount Kalaga's peak is the natural first stop.",
+    "details": [
+      "Pure theory, flagged as such: nothing has been found here yet.",
+      "Mysteries in the series often depend on time and weather, so go at night, in fog or storms, and check every lookout and mural."
+    ],
+    "steps": [
+      "Head for the highest point in the park.",
+      "Return at night and in bad weather. Note anything that changes."
+    ],
+    "requirements": [],
+    "tags": [
+      "theory",
+      "mystery",
+      "night"
+    ],
+    "sources": [],
+    "addedAt": "2026-11-19",
+    "lng": -83.2,
+    "lat": 30.62,
+    "radiusKm": 15
+  },
+  {
+    "id": "gullet-marsh-bigfoot",
+    "name": "Bigfoot of Gullet Marsh",
+    "category": "story",
+    "region": null,
+    "confidence": "confirmed",
+    "placement": "unplaced",
+    "area": "Gullet Marsh (position on the map not yet charted)",
+    "summary": "Bigfoot is back. A close encounter in Gullet Marsh happens during a particular story mission, so you can't miss it.",
+    "details": [
+      "This one is part of a mission, not a free-roam secret.",
+      "We haven't pinned Gullet Marsh on the map yet. If you know where it is, send us the spot."
+    ],
+    "steps": [],
+    "requirements": [
+      "Story mission (unmissable)"
+    ],
+    "tags": [
+      "mission",
+      "cryptid"
+    ],
+    "spoiler": true,
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "jasons-house",
+    "name": "Jason's House",
+    "category": "story",
+    "region": null,
+    "confidence": "confirmed",
+    "placement": "unplaced",
+    "area": "Starting safehouse (position on the map not yet charted)",
+    "summary": "Your first base. Stash cash under the bedroom floorboards, feed Dolores the snake, sleep to skip time.",
+    "details": [
+      "Until the mission \"Buck Me\" unlocks a bank account, the loose floorboards in Jason's bedroom are the safe place for cash. Money you carry is at risk if you die or get arrested.",
+      "Feed Jason's pet snake, Dolores, and watch her eat for an early Focus Mode buff.",
+      "Sleeping here moves the clock on. Use it to start night jobs on your schedule. There's also a book on the small table by the back door (see below)."
+    ],
+    "steps": [],
+    "requirements": [
+      "Chapter 1"
+    ],
+    "tags": [
+      "safehouse",
+      "money",
+      "focus"
+    ],
+    "sources": [
+      {
+        "label": "VGC — GTA 6 beginner's guide",
+        "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/",
+        "date": "2026-11-18"
+      }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "liberty-city-book",
+    "name": "The Liberty City Saga Continues",
+    "category": "easter-egg",
+    "region": null,
+    "confidence": "confirmed",
+    "placement": "unplaced",
+    "area": "Jason's house, small table near the back door",
+    "summary": "Books around Leonida keep a Liberty City storyline going. The first one is in Jason's home early in Chapter 1.",
+    "details": [
+      "Check the literature lying around homes and businesses. The first example sits on the small table near Jason's back door.",
+      "More copies turn up across the state."
+    ],
+    "steps": [
+      "Early in Chapter 1, explore Jason's home and read the book on the table by the back door."
+    ],
+    "requirements": [
+      "Chapter 1",
+      "Jason"
+    ],
+    "tags": [
+      "series reference",
+      "reading"
+    ],
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "western-novels",
+    "name": "Cowboy Novels from the West",
+    "category": "easter-egg",
+    "region": null,
+    "confidence": "confirmed",
+    "placement": "unplaced",
+    "area": "Various; one is in Jacob's Tavern in Millport",
+    "summary": "Western novels about a cowboy in New Austin: a wink to Rockstar's frontier series. One is at Jacob's Tavern in Millport.",
+    "details": [
+      "Pick up and read the westerns you find around the state. The cowboy tales will be familiar to anyone who rode through New Austin.",
+      "We haven't charted Millport on the map yet. Pins welcome."
+    ],
+    "steps": [
+      "Visit Jacob's Tavern in Millport and look for the novel."
+    ],
+    "requirements": [],
+    "tags": [
+      "series reference",
+      "reading"
+    ],
+    "sources": [
+      {
+        "label": "GameSpot — GTA 6 Easter eggs and where to find them",
+        "url": "https://www.gamespot.com/articles/gta-6-easter-eggs-list-and-locations/",
+        "date": "2026-11-18"
+      }
+    ],
+    "addedAt": "2026-11-19"
+  }
+]

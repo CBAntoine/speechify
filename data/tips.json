@@ -1,0 +1,168 @@
+[
+  {
+    "id": "floorboard-stash",
+    "title": "Stash early cash under the floorboards",
+    "body": "You don't get a bank account until the mission \"Buck Me\". Until then, hide cash under the loose floorboards in Jason's bedroom. Money you carry can be lost if you die or get arrested.",
+    "topic": "money",
+    "confidence": "confirmed",
+    "locationId": "jasons-house",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "night-shift",
+    "title": "Work the night shift",
+    "body": "Press up on the D-pad to check the time on your phone. Streets empty out at night, which can make police responses easier to deal with. Sleep at Jason's house to skip ahead.",
+    "topic": "police",
+    "confidence": "confirmed",
+    "locationId": "jasons-house",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "door-colors",
+    "title": "Focus on doors: white is open, red is alarmed",
+    "body": "Aim Focus Mode at a door to check it. White means you can walk in; red means it's alarmed. Doors at the back of shop floors often lead to hidden rooms and staircases, and the minimap shows whether a door is locked for good.",
+    "topic": "exploration",
+    "confidence": "confirmed",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "blue-buildings",
+    "title": "Read the blue buildings",
+    "body": "On the world map, darker blue buildings have an entrance or interior; lighter blue ones don't. Up close, the minimap marks doors you can use with a white line.",
+    "topic": "exploration",
+    "confidence": "confirmed",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "feed-dolores",
+    "title": "Early Focus buff: feed Dolores",
+    "body": "Feed Jason's pet snake, Dolores, and watch her eat her mouse. It's a quick boost to Focus Mode early in the game.",
+    "topic": "combat",
+    "confidence": "confirmed",
+    "locationId": "jasons-house",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "call-mechanic",
+    "title": "Call the mechanic to the roadside",
+    "body": "After the mission \"Just A Scratch\", you can usually call your mechanic from wherever you are to fix a damaged car for a fee. No more limping to a garage.",
+    "topic": "vehicles",
+    "confidence": "confirmed",
+    "sources": [{ "label": "VGC — GTA 6 beginner's guide", "url": "https://www.videogameschronicle.com/guide/gta-6-beginners-guide-6-tips-you-need-to-know-before-starting-gta-6/", "date": "2026-11-18" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "early-suppressor",
+    "title": "Buy a suppressor early",
+    "body": "Launch guides report that Ammu-Nation sells suppressors for most guns and that they're affordable early on. Quieter work means fewer witnesses.",
+    "topic": "combat",
+    "confidence": "reported",
+    "sources": [
+      { "label": "GamerBolt — 20 things to know before you start", "url": "https://www.gamerbolt.com/gta-6-beginners-guide-tips/" },
+      { "label": "Red Bull — GTA 6 beginner's guide", "url": "https://www.redbull.com/int-en/gta-6-beginners-guide" }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "change-your-look",
+    "title": "Change your clothes and your car",
+    "body": "Guides report that police remember your outfit and your vehicle. After a job, swap both and you'll be far harder to find.",
+    "topic": "police",
+    "confidence": "reported",
+    "sources": [
+      { "label": "GamerBolt — 20 things to know before you start", "url": "https://www.gamerbolt.com/gta-6-beginners-guide-tips/" },
+      { "label": "TalkEsport — Best GTA 6 tips for beginners", "url": "https://www.talkesport.com/gta-6/best-gta-6-tips-tricks-beginners/" }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "manual-saves",
+    "title": "Save manually before big missions",
+    "body": "Launch guides say mission replay isn't available at launch, and players are confused about how auto-save behaves. Make a manual save before anything important.",
+    "topic": "story",
+    "confidence": "reported",
+    "sources": [
+      { "label": "GTA6Fans — Beginner checklist", "url": "https://gta6fans.net/gta-6/tips/gta-6-beginner-checklist-your-first-24-hours/" },
+      { "label": "TechRadar — Launch-day live: auto save confusion", "url": "https://www.techradar.com/live/news/gta-6-launch-day-november-19", "date": "2026-11-19" }
+    ],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "focus-mode",
+    "title": "Focus Mode slows the moment",
+    "body": "Click both sticks to trigger Focus Mode. With a gun out, it slows time briefly so you can line up shots.",
+    "topic": "combat",
+    "confidence": "reported",
+    "sources": [{ "label": "Red Bull — GTA 6 beginner's guide", "url": "https://www.redbull.com/int-en/gta-6-beginners-guide" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "settings-first",
+    "title": "Tune your settings before you roll",
+    "body": "Guides point to aim assist, subtitles and minimap options as worth setting first. This entry has more settings than any previous one.",
+    "topic": "settings",
+    "confidence": "reported",
+    "sources": [{ "label": "GamerBolt — 20 things to know before you start", "url": "https://www.gamerbolt.com/gta-6-beginners-guide-tips/" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "pet-the-cat",
+    "title": "Pet the cats",
+    "body": "Players report that petting a cat gives Jason a small Focus boost. Wholesome and useful.",
+    "topic": "combat",
+    "confidence": "reported",
+    "sources": [{ "label": "LibertyCity — Aliens and Dexter's apartment", "url": "https://libertycity.net/news/gta-6/10517-aliens-and-dexters-apartment-players.html", "date": "2026-11-19" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "storage-space",
+    "title": "Clear a lot of space",
+    "body": "Checklists put the download at up to 212 GB. If you're installing today, clear room first, or plan for an external drive.",
+    "topic": "settings",
+    "confidence": "reported",
+    "sources": [{ "label": "GTA6Fans — Beginner checklist", "url": "https://gta6fans.net/gta-6/tips/gta-6-beginner-checklist-your-first-24-hours/" }],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "dont-buy-cars",
+    "title": "Don't blow early money on cars",
+    "body": "Series wisdom: anything with wheels can be borrowed for free. Spend early cash on what you can't steal: gear, upgrades and anything that pays you back.",
+    "topic": "money",
+    "confidence": "theory",
+    "sources": [],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "boats-beat-traffic",
+    "title": "Boats beat Vice City traffic",
+    "body": "Inference from the geography: the city wraps around bays and barrier islands, and the Keys are mostly water. A boat often outruns a car, and cops on the water are scarcer.",
+    "topic": "vehicles",
+    "confidence": "theory",
+    "sources": [],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "legends-need-weather",
+    "title": "Hunt legends at night and in bad weather",
+    "body": "Series tradition: the strangest encounters depend on time and weather. Early UFO reports point to late nights, so revisit spooky spots after 2 a.m. and in storms.",
+    "topic": "exploration",
+    "confidence": "theory",
+    "locationId": "kalaga-summit-watch",
+    "sources": [],
+    "addedAt": "2026-11-19"
+  },
+  {
+    "id": "break-line-of-sight",
+    "title": "Break line of sight, then go quiet",
+    "body": "Series fundamentals: get out of sight first, then hide. Alleys, parking garages and tunnels are your friends. Pair it with an outfit and car swap.",
+    "topic": "police",
+    "confidence": "theory",
+    "sources": [],
+    "addedAt": "2026-11-19"
+  }
+]

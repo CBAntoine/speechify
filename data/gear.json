@@ -1,0 +1,44 @@
+[
+  {
+    "id": "game-ps5",
+    "name": "GTA VI for PS5",
+    "blurb": "Standard Edition. Cheapest way into Leonida today.",
+    "query": "Grand Theft Auto VI PS5",
+    "badge": "Out now"
+  },
+  {
+    "id": "game-xbox",
+    "name": "GTA VI for Xbox Series X|S",
+    "blurb": "Same Leonida, green team.",
+    "query": "Grand Theft Auto VI Xbox Series X",
+    "badge": "Out now"
+  },
+  {
+    "id": "ssd",
+    "name": "2TB NVMe SSD with heatsink",
+    "blurb": "The install is reported at up to 212 GB. Make room for it.",
+    "query": "2TB NVMe SSD heatsink PS5 compatible",
+    "badge": "Storage"
+  },
+  {
+    "id": "console-pro",
+    "name": "PlayStation 5 Pro",
+    "blurb": "If you're upgrading for this, this is the one to get.",
+    "query": "PlayStation 5 Pro console",
+    "badge": "Console"
+  },
+  {
+    "id": "pro-controller",
+    "name": "Pro controller with back paddles",
+    "blurb": "Map Focus Mode and quick actions to paddles.",
+    "query": "DualSense Edge wireless controller",
+    "badge": "Controller"
+  },
+  {
+    "id": "headset",
+    "name": "Wireless gaming headset",
+    "blurb": "Vice City's radio deserves better than TV speakers.",
+    "query": "wireless gaming headset PS5 Xbox",
+    "badge": "Audio"
+  }
+]
