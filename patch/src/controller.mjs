@@ -134,7 +134,10 @@ export class Controller {
     }
 
     const risk = riskOf(view, action, value);
-    if (risk && !this.#checkConfirmation(confirmToken, id, action, value)) {
+    // A confirmation token is good once: it covers this exact action, whether the risk is known up front
+    // or only once the device looks (a phone button that turns out to say "Buy now").
+    const confirmed = !!confirmToken && this.#checkConfirmation(confirmToken, id, action, value);
+    if (risk && !confirmed) {
       return { ok: false, needsConfirmation: true, confirmToken: this.#issueConfirmation(id, action, value), message: `${risk} Ask the person to confirm before doing it.`, risk, device: this.publicDevice(id) };
     }
 
@@ -149,7 +152,7 @@ export class Controller {
       } else {
         const driver = driverById[d.driver];
         if (!driver?.act) throw new DeviceError(`${name} can't be controlled from here.`);
-        r = await driver.act(view, action, value, this.ctx());
+        r = await driver.act(view, action, value, { ...this.ctx(), confirmed });
       }
       const patch = { online: true };
       if (r.state) patch.state = r.state;
@@ -159,9 +162,12 @@ export class Controller {
         for (const dev of r.devices) this.inventory.upsert(dev.id === id ? { ...d, ...dev } : dev, { scanId: d.scanId });
       } else this.inventory.patch(id, patch);
       if (r.rescan && this.scanner) this.scanner.scan().catch(() => {});
-      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}) };
+      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}), ...(r.screen ? { screen: r.screen } : {}) };
     } catch (err) {
       const e = err instanceof DeviceError ? err : new DeviceError(err.message || String(err));
+      if (e.code === "ECONFIRM") {
+        return { ok: false, needsConfirmation: true, confirmToken: this.#issueConfirmation(id, action, value), message: `${e.message} Ask the person to confirm before doing it.`, risk: e.message, device: this.publicDevice(id) };
+      }
       if (e.code === "EOFFLINE") this.inventory.patch(id, { online: false });
       return { ok: false, error: e.code || "EDEVICE", message: e.message, hint: e.hint || null, device: this.publicDevice(id) };
     }

@@ -173,3 +173,115 @@ test("the app keeps the network file current; off Wi-Fi, a phone never scans mob
   assert.equal(networkFromEnv(env).wifi, null, "off Wi-Fi");
   fs.rmSync(file);
 });
+
+/** A stand-in for the Android app's bridge: answers like the phone does and records what Patch asked. */
+async function fakeBridge() {
+  const calls = [];
+  const items = [
+    { n: 1, kind: "Link", text: "Joe's Pizza", tappable: true },
+    { n: 2, kind: "Button", text: "Order online", tappable: true },
+    { n: 3, kind: "Text box", text: "Search", state: "empty", tappable: true },
+  ];
+  const state = { screen: true };
+  const find = (t) => (/^\d+$/.test(t) ? items[Number(t) - 1] : items.find((i) => i.text.toLowerCase().includes(String(t).toLowerCase())));
+  const answer = {
+    screen: () => (state.screen ? { ok: true, app: "Chrome", package: "com.android.chrome", items, more: true } : { ok: false, code: "ENOSCREEN", message: "Patch can't see the screen yet. Turn on Patch in your phone's Accessibility settings (Patch shows you how)." }),
+    tap: ({ target }) => {
+      const it = find(target);
+      return it ? { ok: true, n: it.n, text: it.text, kind: it.kind } : { ok: false, code: "ENOTFOUND", message: `I can't find “${target}” on the screen.` };
+    },
+    open_app: ({ name }) => (/spotify/i.test(name) ? { ok: true, app: "Spotify" } : { ok: false, code: "ENOTFOUND", message: `I can't find an app called “${name}” on this phone.` }),
+    play_media: ({ app }) => ({ ok: true, app: app === "spotify" || !app ? "Spotify" : app }),
+    volume: () => ({ ok: true, volume: 40 }),
+    media: () => ({ ok: true, playing: true }),
+  };
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      res.setHeader("content-type", "application/json");
+      if (req.headers["x-patch-phone"] !== "s3cret") return res.end(JSON.stringify({ ok: false, code: "EAUTH", message: "Not allowed." }));
+      const cmd = req.url.slice(1);
+      const args = body ? JSON.parse(body) : {};
+      calls.push({ cmd, args });
+      res.end(JSON.stringify(answer[cmd]?.(args) ?? { ok: true }));
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return { url: `http://127.0.0.1:${server.address().port}`, calls, state, close: () => server.close() };
+}
+
+test("with screen access, Patch reads and uses the phone's screen, opens apps and plays music", async () => {
+  const bridge = await fakeBridge();
+  Object.assign(process.env, { PATCH_PHONE_BRIDGE: bridge.url, PATCH_PHONE_TOKEN: "s3cret" });
+  const control = (b) => api("POST", "/api/control", { device: "this phone", ...b });
+  const last = () => bridge.calls.at(-1);
+  try {
+    let r = await control({ action: "read_screen" });
+    assert.ok(r.ok, r.message);
+    assert.equal(r.message, "Chrome: 3 things on screen.");
+    assert.match(r.screen, /^On screen: Chrome\.\n1\. Link: Joe's Pizza\n2\. Button: Order online\n3\. Text box: Search \(empty\)/);
+    assert.match(r.screen, /It scrolls/);
+
+    // By number, words like "the first one", or the words on it.
+    r = await control({ action: "tap", value: "the first one" });
+    assert.ok(r.ok, r.message);
+    assert.equal(r.message, "Tapped “Joe's Pizza”.");
+    assert.deepEqual(bridge.calls.slice(-2).map((c) => c.args), [{ target: "1", check: true }, { target: "1", expect: "Joe's Pizza" }]);
+
+    // A button that could spend money: only after the person says yes.
+    const before = bridge.calls.length;
+    r = await control({ action: "tap", value: "Order online" });
+    assert.equal(r.needsConfirmation, true);
+    assert.match(r.message, /could buy, send, delete or change something/);
+    assert.equal(bridge.calls.length, before + 1, "it only looked; nothing was tapped");
+    r = await control({ action: "tap", value: "Order online", confirmToken: r.confirmToken });
+    assert.ok(r.ok, r.message);
+    assert.deepEqual(last(), { cmd: "tap", args: { target: "2", expect: "Order online" } });
+
+    r = await control({ action: "launch_app", value: "Spotify" });
+    assert.equal(r.message, "Opened Spotify.");
+    r = await control({ action: "launch_app", value: "Flappy" });
+    assert.equal(r.ok, false);
+    assert.match(r.message, /can't find an app called “Flappy”/);
+
+    r = await control({ action: "play_music", value: "Bohemian Rhapsody by Queen on Spotify" });
+    assert.equal(r.message, "Playing “Bohemian Rhapsody by Queen” in Spotify.");
+    assert.deepEqual(last(), { cmd: "play_media", args: { query: "Bohemian Rhapsody by Queen", app: "spotify", kind: null } });
+    await control({ action: "play_music", value: "my chill playlist" });
+    assert.deepEqual(last().args, { query: "my chill playlist", app: null, kind: "playlist" });
+
+    for (const [action, value, cmd, args, message] of [
+      ["scroll", "down", "scroll", { direction: "down" }, "Scrolled down."],
+      ["scroll", "back to the top", "scroll", { direction: "up" }, "Scrolled up."],
+      ["type_text", "pizza near me", "type", { text: "pizza near me" }, "Typed “pizza near me”."],
+      ["press_button", "search", "enter", {}, "Pressed enter."],
+      ["press_button", "back", "global", { action: "back" }, "Went back."],
+      ["press_button", "home", "global", { action: "home" }, "Went to the home screen."],
+      ["next", undefined, "media", { action: "next" }, "Skipped to the next one."],
+      ["pause", undefined, "media", { action: "pause" }, "Paused."],
+      ["volume_up", undefined, "volume", { action: "up" }, "Volume 40%."],
+      ["set_volume", "half", "volume", { action: "set", percent: 50 }, "Volume 40%."],
+    ]) {
+      r = await control({ action, value });
+      assert.ok(r.ok, `${action}: ${r.message}`);
+      assert.equal(r.message, message);
+      assert.deepEqual(last(), { cmd, args }, action);
+    }
+
+    // Web pages go straight to Android, with or without the Patch screen open.
+    r = await control({ action: "web_search", value: "weather tomorrow" });
+    assert.ok(r.ok, r.message);
+    assert.deepEqual(last(), { cmd: "open_url", args: { url: "https://www.google.com/search?q=weather%20tomorrow" } });
+
+    // Screen access switched off: say how to turn it on.
+    bridge.state.screen = false;
+    r = await control({ action: "read_screen" });
+    assert.equal(r.ok, false);
+    assert.match(r.message, /Accessibility settings/);
+  } finally {
+    delete process.env.PATCH_PHONE_BRIDGE;
+    delete process.env.PATCH_PHONE_TOKEN;
+    bridge.close();
+  }
+});

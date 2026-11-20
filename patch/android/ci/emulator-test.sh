@@ -76,6 +76,56 @@ adb logcat -d -s Patch:V | grep -q "Opening www.google.com outside Patch" || fai
 echo "The web search was handed to Android."
 adb exec-out screencap -p > "$OUT/after-web-search.png" || true
 
+echo "Keeping Patch listening while a conversation is going…"
+node "$HERE/cdp-eval.mjs" "window.PatchAndroid.voiceStarted(), 'started'" || fail "couldn't start listening"
+sleep 3
+adb shell dumpsys activity services "$PKG" | grep -q "ListeningService" || fail "the listening service didn't start"
+adb shell dumpsys notification --noredact | grep -q "Patch is listening" && echo "The 'Patch is listening' notification is showing."
+node "$HERE/cdp-eval.mjs" "window.PatchAndroid.voiceStopped(), 'stopped'" || fail "couldn't stop listening"
+sleep 3
+if adb shell dumpsys activity services "$PKG" | grep -q "ListeningService"; then fail "the listening service didn't stop"; fi
+echo "Listening starts and stops with the conversation."
+
+echo "Turning on screen access (the person does this once in Settings → Accessibility)…"
+[ "$(node "$HERE/cdp-eval.mjs" "window.PatchAndroid.screenAccess()")" = "false" ] || fail "screen access should start off"
+adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.PatchAccessibility"
+adb shell settings put secure accessibility_enabled 1
+for i in $(seq 1 30); do
+  adb logcat -d -s Patch:V | grep -q "Screen access is on" && break
+  [ "$i" = 30 ] && fail "screen access didn't turn on"
+  sleep 1
+done
+[ "$(node "$HERE/cdp-eval.mjs" "window.PatchAndroid.screenAccess()")" = "true" ] || fail "the dashboard can't tell screen access is on"
+
+phone() { api -X POST "$BASE/api/control" -d "{\"device\":\"this phone\",$1}" || fail "/api/control didn't answer"; }
+expect() { # expect <name> <json> <node condition on r>
+  echo "$2" > "$OUT/$1.json"
+  node -e "const r = require(process.argv[1]); console.log('  ' + (r.screen || r.message).split('\\n').join('\\n  ')); process.exit(($3) ? 0 : 1)" "$OUT/$1.json" || fail "$1"
+}
+
+echo "Opening Settings by name…"
+expect open-settings "$(phone '"action":"launch_app","value":"Settings"')" 'r.ok && /Settings/.test(r.message)'
+sleep 3
+echo "Reading the screen…"
+expect read-settings "$(phone '"action":"read_screen"')" 'r.ok && /Network|Battery|Apps/.test(r.screen)'
+echo "Tapping “Network & internet”…"
+expect tap-network "$(phone '"action":"tap","value":"Network & internet"')" 'r.ok && /Network/.test(r.message)'
+sleep 2
+expect read-network "$(phone '"action":"read_screen"')" 'r.ok && /Internet|Airplane|Hotspot|SIM|Wi.?Fi/i.test(r.screen)'
+adb exec-out screencap -p > "$OUT/settings-network.png" || true
+expect back "$(phone '"action":"press_button","value":"back"')" 'r.ok'
+expect home "$(phone '"action":"press_button","value":"home"')" 'r.ok'
+sleep 1
+echo "Opening an app while Patch is in the background…"
+expect open-again "$(phone '"action":"launch_app","value":"Settings"')" 'r.ok'
+sleep 3
+expect read-again "$(phone '"action":"read_screen"')" 'r.ok && /Network|Battery|Apps/.test(r.screen)'
+expect scroll "$(phone '"action":"scroll","value":"down"')" 'r.ok'
+expect home-again "$(phone '"action":"press_button","value":"home"')" 'r.ok'
+echo "Music: no Spotify on this emulator, so Patch should say so."
+expect no-spotify "$(phone '"action":"play_music","value":"Bohemian Rhapsody on Spotify"')" '!r.ok && /Spotify/.test(r.message)'
+expect volume "$(phone '"action":"volume_up"')" 'r.ok && /Volume \d+%/.test(r.message)'
+
 echo "---- Patch's log ----"
 patch_log 120
 echo "All emulator checks passed."

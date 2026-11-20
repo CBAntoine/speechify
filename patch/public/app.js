@@ -351,6 +351,17 @@ function todoItems() {
   const items = [];
   if (!state.setup.sdk) items.push({ id: "sdk", icon: "alert", tint: "var(--warn)", title: "Finish installing voice", text: "In the Patch folder, run npm install, then restart Patch." });
   else if (!state.setup.voice) items.push({ id: "voice", icon: "mic", tint: "var(--voice)", title: "Turn on Patch's voice", text: "Add your ElevenLabs key once to talk or type to Patch.", button: `<button class="btn btn--voice btn--sm" data-ui="settings" data-focus="el">Add key</button>` });
+  if (BOOT.phone && window.PatchAndroid?.screenAccess && !window.PatchAndroid.screenAccess()) {
+    const greyed = (window.PatchAndroid.androidVersion?.() || 0) >= 33;
+    items.push({
+      id: "screen",
+      icon: "eye",
+      tint: "var(--c-computer)",
+      title: "Let Patch see and use your screen",
+      text: `So it can choose things in your browser, pick songs in Spotify and send music to speakers. In Settings, tap Patch and switch it on.${greyed ? " If it's greyed out, open App info, tap ⋮ (top right), choose Allow restricted settings, then try again." : ""}`,
+      button: `<button class="btn btn--primary btn--sm" data-ui="screen-access">Turn on</button>${greyed ? `<button class="btn btn--sm" data-ui="app-info">App info</button>` : ""}`,
+    });
+  }
   for (const d of state.devices.filter((x) => x.setup && x.online !== false)) {
     const id = esc(d.id);
     const button = needsPair(d)
@@ -580,12 +591,45 @@ function remoteHtml(d) {
   return out.join("");
 }
 
+const PHONE_APPS = [
+  ["Spotify", "#1db954"],
+  ["YouTube", "#ff0033"],
+  ["Chrome", "#1a73e8"],
+];
+
+/** The phone Patch runs on (in the Patch app): its screen, music, apps and the web. */
+function phoneHtml(d) {
+  const id = esc(d.id);
+  const screenOn = !!window.PatchAndroid?.screenAccess?.();
+  const greyed = (window.PatchAndroid?.androidVersion?.() || 0) >= 33;
+  const out = [];
+  out.push(`<div class="panel"><h3>Screen</h3>
+    ${
+      screenOn
+        ? `<p class="phone-note">${icon("check", 16)} Patch can see and use your screen. Ask it what's on screen, or to tap, scroll or type something.</p>`
+        : `<div class="note">${icon("eye", 18, 'class="note__icon"')}<p>Let Patch see and use your screen so it can choose things in your browser, pick songs in Spotify and send music to speakers. In Settings, tap <b>Patch</b> and switch it on.${greyed ? " If it's greyed out, open <b>App info</b>, tap <b>⋮</b> (top right), choose <b>Allow restricted settings</b>, then try again." : ""}</p></div>
+           <div class="btns" style="margin-bottom:10px"><button class="btn btn--primary btn--sm" data-ui="screen-access">Turn on</button>${greyed ? `<button class="btn btn--sm" data-ui="app-info">App info</button>` : ""}</div>`
+    }
+    <div class="btns">${btn(id, "press_button", `${icon("back", 15)} Back`, "", "back")}${btn(id, "press_button", `${icon("home", 15)} Home`, "", "home")}${btn(id, "press_button", "Recent apps", "", "recent apps")}</div></div>`);
+  out.push(`<div class="panel"><h3>Music</h3>
+    <form class="search-box" data-form="play_music" data-id="${id}">${icon("music", 17)}<input name="value" placeholder="A song, artist or playlist" aria-label="What to play"><button class="btn btn--sm btn--primary">Play</button></form>
+    <div class="btns" style="margin-top:10px">${btn(id, "previous", icon("prev", 15))}${btn(id, "play", icon("play", 15))}${btn(id, "pause", icon("pause", 15))}${btn(id, "next", icon("next", 15))}<span style="flex:1"></span>${btn(id, "volume_down", "−")}${btn(id, "volume_up", "+")}</div>
+    <p class="phone-hint">Plays in Spotify, or another music app if you don't have it. To hear it on a speaker, ask Patch, for example "play it on the kitchen speaker".</p></div>`);
+  out.push(`<div class="panel"><h3>Apps</h3><div class="app-tiles">${PHONE_APPS.map(([name, color]) => `<button class="app-tile" style="--app:${color}" type="button" data-act="launch_app" data-value="${esc(name)}" data-id="${id}">${esc(name)}</button>`).join("")}</div>
+    <form class="search-box" style="margin-top:10px" data-form="launch_app" data-id="${id}">${icon("grid", 17)}<input name="value" placeholder="Open another app, e.g. Maps" aria-label="App name"><button class="btn btn--sm">Open</button></form></div>`);
+  out.push(`<div class="panel"><h3>Web</h3><div class="stack">
+    <form class="search-box" data-form="web_search" data-id="${id}">${icon("search", 17)}<input name="value" placeholder="Search the web" aria-label="Search the web"><button class="btn btn--sm">Search</button></form>
+    <form class="search-box" data-form="open_website" data-id="${id}">${icon("globe", 17)}<input name="value" placeholder="Open a website, e.g. bbc.co.uk" aria-label="Website"><button class="btn btn--sm">Open</button></form></div></div>`);
+  return out.join("");
+}
+
 /** The Controls tab: a remote for TVs, sliders and swatches for lights, and so on. */
 function controlsHtml(d) {
   const s = d.state || {};
   const id = esc(d.id);
   if (d.online === false && !d.setup) return `<div class="note">${icon("info", 18, 'class="note__icon"')}<p>${esc(d.name)} isn't answering right now.${d.lastSeen ? ` Last seen ${ago(d.lastSeen)}.` : ""} Check it has power and is on your WiFi.</p></div>`;
   if (isTvLike(d)) return remoteHtml(d);
+  if (d.self && d.kind === "phone") return phoneHtml(d);
   const rows = [];
   if (isPowered(d)) rows.push(`<div class="control-row"><label>Power</label><button class="switch" role="switch" aria-checked="${s.on}" data-act="${s.on ? "turn_off" : "turn_on"}" data-id="${id}" aria-label="Power"></button></div>`);
   else if (has(d, "turn_on") || has(d, "turn_off")) rows.push(`<div class="control-row"><label>Power</label><div class="btns">${has(d, "turn_on") ? btn(id, "turn_on", `${icon("power", 14)} On`) : ""}${has(d, "turn_off") ? btn(id, "turn_off", "Off") : ""}</div></div>`);
@@ -971,6 +1015,8 @@ document.addEventListener("click", async (e) => {
     else if (what === "speed") runSpeed();
     else if (what === "settings") openSettings(ui.dataset.focus);
     else if (what === "ask") voice.open();
+    else if (what === "screen-access") window.PatchAndroid?.openScreenSettings?.();
+    else if (what === "app-info") window.PatchAndroid?.openAppInfo?.();
     else if (what === "todo-more") {
       state.todoOpen = !state.todoOpen;
       renderSetup();
@@ -1204,6 +1250,8 @@ export const ui = {
 
 const voice = createVoice(ui);
 $("#voiceFine").textContent = `Voice by ElevenLabs. Your devices are controlled from ${HERE}, never from the cloud.`;
+// Back in Patch after Settings (screen access, permissions): show what changed.
+window.__patchResume = () => renderAll();
 // The phone's back button (the Patch app asks first): close what's open before leaving Patch.
 window.__patchBack = () => {
   if ($("#modal").classList.contains("is-open") || $("#drawer").classList.contains("is-open")) {

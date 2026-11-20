@@ -53,6 +53,11 @@ export const ACTIONS = {
   set_room: { label: "Set room", value: "text" },
   pair: { label: "Connect / pair" },
   remove_port_forward: { label: "Close a port forward", value: "choice" },
+  // The phone running Patch (with screen access on): see and use its screen, and play music.
+  read_screen: { label: "Look at the screen" },
+  tap: { label: "Tap", value: "text" },
+  scroll: { label: "Scroll", value: "choice" },
+  play_music: { label: "Play music", value: "text" },
 };
 
 export const ACTION_NAMES = Object.keys(ACTIONS);

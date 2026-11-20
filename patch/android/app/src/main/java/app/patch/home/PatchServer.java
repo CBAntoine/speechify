@@ -59,10 +59,14 @@ final class PatchServer {
             File network = new File(data, "network.json");
             PhoneNetwork.Info wifi = PhoneNetwork.write(app, network);
             PhoneNetwork.watch(app, network);
+            // What only Android can do (the screen, apps, music) Patch's server asks for through the bridge.
+            PhoneBridge bridge = PhoneBridge.start(app);
 
             setenv("PATCH_PLATFORM", "android");
             setenv("PATCH_DATA_DIR", data.getAbsolutePath());
             setenv("PATCH_NETWORK_FILE", network.getAbsolutePath());
+            setenv("PATCH_PHONE_BRIDGE", bridge.url());
+            setenv("PATCH_PHONE_TOKEN", bridge.token());
             setenv("PATCH_WIFI", wifi.wifi);
             setenv("PATCH_GATEWAY", wifi.gateway);
             setenv("PATCH_DNS", wifi.dns);

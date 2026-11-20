@@ -15,6 +15,7 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -36,6 +37,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
@@ -47,6 +49,8 @@ public class MainActivity extends Activity {
     private static final String HOME = "http://127.0.0.1:" + PatchServer.PORT + "/";
     private static final String TAG = "Patch";
     private static final int ASK_MIC = 1;
+    private static final int ASK_NOTIFY = 2;
+    private static WeakReference<MainActivity> current = new WeakReference<>(null);
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private WebView web;
@@ -62,6 +66,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        current = new WeakReference<>(this);
         PatchServer.start(this);
         WebView.setWebContentsDebuggingEnabled(getResources().getBoolean(R.bool.patch_debug_webview));
         buildViews();
@@ -74,17 +79,34 @@ public class MainActivity extends Activity {
         super.onResume();
         web.onResume();
         holdMulticast(true);
+        // Back from Settings (screen access, permissions): let the dashboard check again.
+        if (loaded) web.evaluateJavascript("window.__patchResume && window.__patchResume()", null);
     }
 
     @Override
     protected void onPause() {
-        holdMulticast(false);
-        web.onPause();
+        // While a conversation is going, keep the dashboard fully awake so Patch can hear and answer
+        // you in other apps; otherwise let it rest.
+        if (!ListeningService.isRunning()) {
+            holdMulticast(false);
+            web.onPause();
+        }
         super.onPause();
+    }
+
+    /** The notification's Stop button: end the conversation in the dashboard. */
+    static void endConversation() {
+        MainActivity a = current.get();
+        if (a == null || a.web == null) return;
+        a.main.post(() -> {
+            if (a.web != null) a.web.evaluateJavascript("window.__patchStopVoice && window.__patchStopVoice()", null);
+        });
     }
 
     @Override
     protected void onDestroy() {
+        // The conversation lives in this screen: once it's gone, stop listening in the background.
+        ListeningService.stop(this);
         if (web != null) {
             web.destroy();
             web = null;
@@ -311,14 +333,69 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Called from the dashboard: window.PatchAndroid.openUrl("https://…"). */
+    /** Called from the dashboard as window.PatchAndroid.… */
     private final class Bridge {
+        /** Opens a page outside Patch ("search the web on this phone"). */
         @JavascriptInterface
         public void openUrl(String url) {
             Uri u = Uri.parse(url == null ? "" : url);
             if (!"http".equals(u.getScheme()) && !"https".equals(u.getScheme())) return;
             main.post(() -> openOutside(u));
         }
+
+        /** A voice conversation started: keep listening if the person switches to another app. */
+        @JavascriptInterface
+        public void voiceStarted() {
+            main.post(() -> {
+                askForNotifications();
+                ListeningService.start(MainActivity.this);
+            });
+        }
+
+        @JavascriptInterface
+        public void voiceStopped() {
+            main.post(() -> ListeningService.stop(MainActivity.this));
+        }
+
+        /** Whether the person has let Patch see and use the screen (Settings → Accessibility). */
+        @JavascriptInterface
+        public boolean screenAccess() {
+            return PatchAccessibility.get() != null;
+        }
+
+        @JavascriptInterface
+        public void openScreenSettings() {
+            main.post(() -> openSettings(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        }
+
+        /** Patch's App info page, where Android 13 and later hide "Allow restricted settings". */
+        @JavascriptInterface
+        public void openAppInfo() {
+            main.post(() -> openSettings(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
+        }
+
+        @JavascriptInterface
+        public int androidVersion() {
+            return android.os.Build.VERSION.SDK_INT;
+        }
+    }
+
+    private void openSettings(Intent intent) {
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (ActivityNotFoundException e) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
+    }
+
+    /** Android 13 and later ask before an app shows notifications (the "Patch is listening" one). */
+    private void askForNotifications() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED) return;
+        SharedPreferences prefs = getSharedPreferences("patch", MODE_PRIVATE);
+        if (prefs.getBoolean("askedNotifications", false)) return;
+        prefs.edit().putBoolean("askedNotifications", true).apply();
+        requestPermissions(new String[] {"android.permission.POST_NOTIFICATIONS"}, ASK_NOTIFY);
     }
 
     // ── Microphone (for talking to Patch) ───────────────────────────────────

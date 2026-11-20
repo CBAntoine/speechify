@@ -681,6 +681,14 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+/* One or two buttons per item (e.g. "Turn on" and "App info"). */
+.todo__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .todo__item {
   display: flex;
   align-items: center;
@@ -2750,4 +2758,27 @@ details summary {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ── The phone Patch runs on (Patch app) ─────────────── */
+
+.phone-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.phone-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.phone-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
 }

@@ -109,9 +109,23 @@ Patch also runs on an Android phone by itself, with no computer needed. The app 
 
 Good to know:
 - "Search the web on my phone" or "play it here" opens the browser or the YouTube app.
-- Patch works while it's open on screen; in the background Android pauses it, so it doesn't use your battery.
+- Patch works while it's open, and while you're talking to it. When you switch to another app mid-conversation, a "Patch is listening" notification keeps it going; tap **Stop** there to end. Otherwise Android pauses it in the background, so it doesn't use your battery.
 - It needs Android 7 or newer, and it only scans WiFi (never the mobile-data network).
 - Each new version is signed afresh, so to update, uninstall Patch and install the new one. You'll add your ElevenLabs key and connect your TVs again.
+
+### Let Patch see and use your phone's screen
+
+To read web pages, tap what's on screen, open apps and pick songs, Patch needs Android's screen access. This is the same permission voice-control apps use. You turn it on once:
+
+1. In Patch, tap **Turn on** under "Let Patch see and use your screen". Android's Accessibility settings open.
+2. Tap **Patch** (it may be under "Downloaded apps" or "Installed apps"), switch it on and choose **Allow**.
+3. If Patch is greyed out (Android 13 and later do this for apps installed from a file): back in Patch, tap **App info**, then **⋮** (top right) → **Allow restricted settings**. Then do step 2 again.
+
+Then just ask:
+- "What's on my screen?" · "Open the second result." · "Scroll down." · "Type pizza near me and search." · "Go back." · "Open Maps."
+- "Play Bohemian Rhapsody on Spotify." · "Next song." · "Turn it up." · "Put it on the kitchen speaker." Patch opens Spotify's device list and picks the speaker, so any Spotify Connect speaker works.
+
+Patch never reads or types passwords, and it asks you first before tapping anything that buys, sends or deletes something. Text that apps and websites put on the screen never counts as an instruction to Patch. When you ask what's on your screen, the words on it go to the voice service (ElevenLabs and its AI model) so it can answer.
 
 ### Opening a computer's Patch from another phone or tablet
 
@@ -149,11 +163,11 @@ patch/
   test/                 node:test suites
 ```
 
-`npm test` runs 53 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes, the server's security checks, and running inside the phone app.
+`npm test` runs 54 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes, the server's security checks, and running inside the phone app.
 
 **Adding a device type:** create `src/drivers/<name>.mjs` exporting `{ id, detect(host, ctx), refresh(device, ctx), act(device, action, value, ctx) }`, use action names from `src/drivers/common.mjs`, register it in `src/drivers/index.mjs`, and add a simulated device in `sim/` with a test.
 
-**The Android app** (`android/`): a small Java app that runs Patch's own server on Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile), Node 18) and shows the dashboard in a WebView. A tiny JNI bridge (`app/src/main/cpp`) starts Node and sends its output to logcat (`adb logcat -s Patch`). The app passes in what Android hides from programs (WiFi address, router, DNS servers, the phone's name) as `PATCH_*` variables and keeps `network.json` current as the phone changes networks. Pages and videos for "this phone" reach the dashboard as an `open-url` event, and it calls `window.PatchAndroid.openUrl`. The workflow `.github/workflows/patch-android.yml` runs the tests on Node 18, builds the APK, tries it on an Android 14 emulator (server, scan, dashboard and links, through Chrome DevTools) and publishes it. To build it yourself, you need the Android SDK and NDK. Run `npm ci` and `node android/prepare-assets.mjs`, unzip nodejs-mobile's Android build into `android/app/libnode`, then run `gradle -p android :app:assembleRelease`. To let new versions install over old ones, give the workflow a signing key as the `PATCH_KEYSTORE_B64` and `PATCH_KEYSTORE_PASSWORD` repository secrets.
+**The Android app** (`android/`): a small Java app that runs Patch's own server on Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile), Node 18) and shows the dashboard in a WebView. A tiny JNI bridge (`app/src/main/cpp`) starts Node and sends its output to logcat (`adb logcat -s Patch`). The app passes in what Android hides from programs (WiFi address, router, DNS servers, the phone's name) as `PATCH_*` variables and keeps `network.json` current as the phone changes networks. What only Android can do goes through `PhoneBridge`, a tiny HTTP server on 127.0.0.1 with a secret that only Patch's server is given (`PATCH_PHONE_BRIDGE`, `PATCH_PHONE_TOKEN`; client in `src/net/phone.mjs`). It opens pages, apps and music (`MEDIA_PLAY_FROM_SEARCH`, which Spotify, YouTube Music and others accept), sends media keys and sets the volume. With the accessibility service `PatchAccessibility` switched on, it also reads the screen as numbered items and taps, scrolls, types and goes back or home. `ListeningService` is a microphone foreground service that runs while a voice conversation is on, so Patch keeps listening in other apps. The workflow `.github/workflows/patch-android.yml` runs the tests on Node 18, builds the APK, tries it on an Android 14 emulator (server, scan, dashboard and links, through Chrome DevTools) and publishes it. To build it yourself, you need the Android SDK and NDK. Run `npm ci` and `node android/prepare-assets.mjs`, unzip nodejs-mobile's Android build into `android/app/libnode`, then run `gradle -p android :app:assembleRelease`. To let new versions install over old ones, give the workflow a signing key as the `PATCH_KEYSTORE_B64` and `PATCH_KEYSTORE_PASSWORD` repository secrets.
 
 **The ElevenLabs agent:** `agent_3201m7wq24r6eq39fk3eq5w5fmf2` ("Patch - Home Network Voice Assistant"): Claude Haiku 5.5, voice "Danny – Calm, Clear & Helpful", the ten client tools above, and fourteen attached behaviour tests (including channels, YouTube search and pick, web search on this computer, TV pairing and describing devices exactly). If you change a tool's name or parameters in `public/voice.js`, change the matching tool in ElevenLabs too.
 

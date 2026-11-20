@@ -22,7 +22,7 @@ import { ddpDiscover } from "./net/ddp.mjs";
 import { wsdDiscover } from "./net/wsd.mjs";
 import { factsFor, probeIdentity } from "./identify.mjs";
 import { webUrlFor } from "./drivers/generic.mjs";
-import { SELF_ACTIONS } from "./drivers/self.mjs";
+import { PHONE_ACTIONS, SELF_ACTIONS } from "./drivers/self.mjs";
 import { onPhone, phoneIdentity } from "./platform.mjs";
 import { inCidr, isPrivateIPv4, isRandomizedMac, mapLimit, prettyHostname, settleWithin, sortIps, subnetHosts } from "./util.mjs";
 
@@ -43,6 +43,7 @@ export function selfDevice(net, { phone = onPhone(), identity = phoneIdentity() 
     return {
       ...base,
       kind: "phone",
+      actions: [...SELF_ACTIONS, ...PHONE_ACTIONS],
       name: name || [brand, model].filter(Boolean).join(" ") || "This phone",
       brand,
       model: "This phone (running Patch)",
