@@ -38,6 +38,11 @@ export const metadata: Metadata = {
   },
   twitter: { card: "summary_large_image", title: HOME_TITLE, description: SITE.description },
   alternates: { canonical: "/" },
+  // Paste the codes Google Search Console / Bing Webmaster Tools give you (HTML-tag method).
+  verification: {
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION ? { other: { "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION } } : {}),
+  },
 };
 
 export const viewport: Viewport = {

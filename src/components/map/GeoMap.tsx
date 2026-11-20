@@ -10,6 +10,7 @@ import { STREET_MAX_ZOOM, STREET_TILES_URL, addStreetLayers, buildStyle, removeS
 import { locationPopup, placePopup, regionPopup } from "./popups";
 import { bboxOf } from "@/lib/geo-utils";
 import { drawRoute, previousFocus, trackFocus } from "@/lib/spots";
+import { sharePage, shareTextFor } from "@/lib/share";
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 /** Below this zoom a click on land picks a region; above it you're reading streets. */
@@ -602,6 +603,13 @@ export default function GeoMap({ editMode = false }: Props) {
             if (container.clientWidth < 1024) popup?.remove();
           }
           else if (act === "pin" && btn.dataset.id) mapStore.selectLocation(btn.dataset.id);
+          else if (act === "share" && loc) {
+            void sharePage(`/locations/${loc.id}`, `${loc.name} (GTA 6)`, shareTextFor(loc.name)).then((r) => {
+              if (r !== "copied" && r !== "failed") return;
+              btn.textContent = r === "copied" ? "Link copied" : "Couldn't copy";
+              window.setTimeout(() => (btn.textContent = "Share"), 1800);
+            });
+          }
           else if (act === "route") {
             const from = previousFocus();
             if (from) void drawRoute(from, here);

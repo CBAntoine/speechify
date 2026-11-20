@@ -45,6 +45,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Commit changes
+        id: commit
         run: |
           git config user.name "gta6-secrets-map-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -55,3 +56,13 @@ jobs:
           fi
           git commit -m "Daily intel: $(date -u +%F)"
           git push
+          echo "pushed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Tell search engines what changed (IndexNow)
+        if: steps.commit.outputs.pushed == '1'
+        run: |
+          sleep 90 # let the new deploy go live first
+          node scripts/indexnow.mjs
+        env:
+          # Set a repository variable SITE_URL once you have your own domain.
+          SITE_URL: ${{ vars.SITE_URL || 'https://neon-atlas-one.vercel.app' }}

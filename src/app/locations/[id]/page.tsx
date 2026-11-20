@@ -8,6 +8,8 @@ import AdSlot from "@/components/AdSlot";
 import { Icon } from "@/components/icons";
 import { TipCard } from "@/components/sections";
 import { SITE } from "@/lib/site";
+import ShareButton from "@/components/ShareButton";
+import { shareTextFor } from "@/lib/share";
 
 export function generateStaticParams() {
   return LOCATIONS.map((l) => ({ id: l.id }));
@@ -124,6 +126,7 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
           <Link className="btn btn--ghost btn--block" href={`/?loc=${loc.id}&guide=1#map`}>
             <Icon name="mic" size={18} /> Ask {SITE.guideName} about it
           </Link>
+          <ShareButton path={`/locations/${loc.id}`} title={`${loc.name} (GTA 6)`} text={shareTextFor(loc.name)} className="btn btn--ghost btn--block" />
           <AdSlot variant="sidebar" />
           {related.length > 0 && (
             <div className="card">

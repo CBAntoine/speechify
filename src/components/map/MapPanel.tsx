@@ -22,6 +22,8 @@ import type { CategoryId, Confidence, MapLocation } from "@/lib/types";
 import { CategoryBadge, ConfidenceBadge } from "@/components/Badges";
 import { Icon } from "@/components/icons";
 import { SITE } from "@/lib/site";
+import ShareButton from "@/components/ShareButton";
+import { shareTextFor } from "@/lib/share";
 
 const PLACEMENT_LABEL: Record<MapLocation["placement"], string> = {
   exact: "Exact spot",
@@ -242,7 +244,6 @@ function ResultRow({ loc, highlighted }: { loc: MapLocation; highlighted: boolea
 
 function LocationDetail({ loc }: { loc: MapLocation }) {
   const [revealed, setRevealed] = useState(!loc.spoiler);
-  const [copied, setCopied] = useState(false);
   const region = regionById(loc.region);
   const tips = TIPS.filter((t) => t.locationId === loc.id);
 
@@ -322,19 +323,7 @@ function LocationDetail({ loc }: { loc: MapLocation }) {
           <Link className="btn btn--ghost btn--sm" href={`/locations/${loc.id}`}>
             Full guide
           </Link>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => {
-              const url = `${window.location.origin}/?loc=${loc.id}#map`;
-              void navigator.clipboard?.writeText(url).then(() => {
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1600);
-              });
-            }}
-          >
-            <Icon name="link" size={16} /> {copied ? "Copied" : "Share"}
-          </button>
+          <ShareButton path={`/locations/${loc.id}`} title={`${loc.name} (GTA 6)`} text={shareTextFor(loc.name)} />
         </div>
 
         {loc.sources.length > 0 ? (

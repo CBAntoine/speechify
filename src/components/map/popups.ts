@@ -53,7 +53,7 @@ export function locationPopup(loc: MapLocation & { lng: number; lat: number }, o
   ${steps.length ? `<p class="pop__sub">How to find it</p><ol class="pop__steps">${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : ""}
   ${loc.spoiler ? '<p class="pop__note">Story spoiler: open the full guide to read the steps.</p>' : ""}
   <p class="pop__note">${esc([where, region?.name, grid ? `Grid ${grid}` : null].filter(Boolean).join(" · "))}</p>
-  <div class="pop__actions"><button type="button" class="pop__btn pop__btn--primary" data-act="guide">Full guide</button>${routeButton(opts.from, loc)}</div>
+  <div class="pop__actions"><button type="button" class="pop__btn pop__btn--primary" data-act="guide">Full guide</button><button type="button" class="pop__btn" data-act="share">Share</button>${routeButton(opts.from, loc)}</div>
 </div>`;
 }
 
