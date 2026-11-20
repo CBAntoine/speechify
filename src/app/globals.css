@@ -1207,6 +1207,30 @@ code {
   background: var(--grad-sunset);
   border-color: transparent;
 }
+.map-zoom {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.map-zoom .map-tool {
+  border-radius: 0;
+  box-shadow: none;
+}
+.map-zoom .map-tool + .map-tool {
+  border-top: 0;
+}
+/* Touch screens pinch to zoom, as in the Google Maps app. */
+@media (hover: none), (pointer: coarse) {
+  .map-zoom {
+    display: none;
+  }
+}
+.map-compass svg {
+  transition: transform 0.08s linear;
+}
 .map-tool__3d {
   font-family: var(--font-display);
   font-size: 12px;
@@ -2337,6 +2361,13 @@ a.tip-card__src:hover {
   .brand__sub {
     display: none;
   }
+  .explorer.explorer--home {
+    height: calc(100svh - var(--nav-h) - 52px);
+    min-height: 440px;
+  }
+  a.scroll-cue {
+    display: flex;
+  }
   .explorer {
     min-height: 560px;
   }
@@ -2868,4 +2899,19 @@ a.tip-card__src:hover {
   .place-dot {
     animation: none;
   }
+}
+
+/* Swipe target under the home map on phones (the map itself pans with one finger). */
+.scroll-cue {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 52px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
 }

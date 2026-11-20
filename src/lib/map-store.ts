@@ -59,6 +59,8 @@ export interface MapState {
   route: RouteState | null;
   /** Bumped to reopen the popup for the current selection after it was closed. */
   popupNonce: number;
+  /** One-off camera commands from the zoom buttons and compass. */
+  nudge: { kind: "in" | "out" | "north"; nonce: number } | null;
 }
 
 const initial: MapState = {
@@ -77,6 +79,7 @@ const initial: MapState = {
   place: null,
   route: null,
   popupNonce: 0,
+  nudge: null,
 };
 
 let state: MapState = initial;
@@ -165,6 +168,20 @@ export const mapStore = {
   togglePitch() {
     set({ pitched: !state.pitched });
   },
+  zoomIn() {
+    set({ nudge: { kind: "in", nonce: ++nonce } });
+  },
+  zoomOut() {
+    set({ nudge: { kind: "out", nonce: ++nonce } });
+  },
+  /** Compass: face north and lay the map flat again. */
+  resetNorth() {
+    set(state.pitched ? { pitched: false } : { nudge: { kind: "north", nonce: ++nonce } });
+  },
+  /** The user tilted the map by hand: keep the 3D button honest without moving the camera. */
+  syncPitched(pitched: boolean) {
+    if (pitched !== state.pitched) set({ pitched });
+  },
   startPicking() {
     set({ picking: true, picked: null, sheetOpen: false });
   },
@@ -188,4 +205,31 @@ export function useMapStore<T>(selector: (s: MapState) => T): T {
     () => selector(state),
     () => selector(initial),
   );
+}
+
+/**
+ * Camera bearing and tilt for the compass. Kept apart from the main store so the
+ * per-frame updates while someone rotates the map don't re-run anything else.
+ */
+export interface Camera {
+  bearing: number;
+  pitch: number;
+}
+const FLAT: Camera = { bearing: 0, pitch: 0 };
+let camera: Camera = FLAT;
+const cameraListeners = new Set<() => void>();
+export const cameraStore = {
+  get: () => camera,
+  set(next: Camera) {
+    if (next.bearing === camera.bearing && next.pitch === camera.pitch) return;
+    camera = next;
+    cameraListeners.forEach((l) => l());
+  },
+  subscribe(listener: () => void) {
+    cameraListeners.add(listener);
+    return () => cameraListeners.delete(listener);
+  },
+};
+export function useCamera(): Camera {
+  return useSyncExternalStore(cameraStore.subscribe, cameraStore.get, () => FLAT);
 }

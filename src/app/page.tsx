@@ -14,12 +14,16 @@ import {
 } from "@/components/sections";
 import { STATS } from "@/lib/data";
 import { SITE } from "@/lib/site";
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 
 export default function Home() {
   return (
     <>
       <MapExplorer variant="home" ticker={<NewsTicker className="explorer__ticker" />} />
+      <a href="#intel-title" className="scroll-cue">
+        News, tips &amp; more <Icon name="chevronDown" size={16} />
+      </a>
       <GuideAutoOpen />
 
       <div className="stats-bar" aria-label="Map statistics">

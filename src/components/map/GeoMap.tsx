@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, Marker as MLMarker, LngLatBoundsLike, Popup as MLPopup } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { CATEGORIES, GEO, LOCATIONS, REGIONS, isPlaced, locationById, regionById, regionBounds, searchLocations } from "@/lib/data";
-import { mapStore, type MapState } from "@/lib/map-store";
+import { cameraStore, mapStore, type MapState } from "@/lib/map-store";
 import { CATEGORY_GLYPHS } from "@/components/icons";
 import { STREET_MAX_ZOOM, STREET_TILES_URL, addStreetLayers, buildStyle, removeStreetLayers } from "./map-style";
 import { locationPopup, placePopup, regionPopup } from "./popups";
@@ -16,8 +16,6 @@ const EMPTY = { type: "FeatureCollection" as const, features: [] };
 const REGION_CLICK_MAX_ZOOM = 10;
 
 interface Props {
-  /** Home page: page scroll wins; Ctrl/⌘ + scroll or two fingers move the map (MapLibre cooperative gestures). */
-  cooperative?: boolean;
   /** Curator mode (?edit=1): click anywhere to copy coordinates for data/locations.json. */
   editMode?: boolean;
 }
@@ -93,7 +91,7 @@ function pinElement(id: string): HTMLDivElement {
   return el;
 }
 
-export default function GeoMap({ cooperative = false, editMode = false }: Props) {
+export default function GeoMap({ editMode = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -121,7 +119,6 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           minZoom: 4.4,
           maxZoom: STREET_TILES_URL ? STREET_MAX_ZOOM : 12.5,
           maxPitch: 68,
-          cooperativeGestures: cooperative,
           attributionControl: { compact: true },
           canvasContextAttributes: { antialias: true },
           fadeDuration: 150,
@@ -132,6 +129,8 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         return;
       }
       mapRef.current = map;
+      // Dev builds only: lets browser tests read the camera.
+      if (process.env.NODE_ENV !== "production") (window as unknown as { __neonMap?: MLMap }).__neonMap = map;
 
       const markers = new Map<string, { marker: MLMarker; el: HTMLDivElement }>();
       let streetsOn = false;
@@ -142,11 +141,23 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
       let hoverRegion: string | null = null;
       let activeRegion: string | null = null;
       let prev: MapState | null = null;
+      let syncingPitch = false;
 
-      const stopMapEvents = (el: HTMLElement) => {
-        for (const type of ["mousedown", "touchstart", "dblclick", "wheel"] as const) {
-          el.addEventListener(type, (e) => e.stopPropagation(), { passive: true });
-        }
+      /**
+       * Pins and region labels sit on top of the map. As in Google Maps, a drag that starts on
+       * one still moves the map; only a real tap selects it, and that tap doesn't also reach
+       * the map underneath. (Keyboard Enter/Space on a button arrives as a click with no pointer.)
+       */
+      const onTap = (el: HTMLElement, handler: () => void) => {
+        let down: { x: number; y: number } | null = null;
+        el.addEventListener("pointerdown", (e) => (down = { x: e.clientX, y: e.clientY }), { passive: true });
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const moved = down ? Math.hypot(e.clientX - down.x, e.clientY - down.y) : 0;
+          down = null;
+          if (moved <= 6) handler();
+        });
+        el.addEventListener("dblclick", (e) => e.stopPropagation());
       };
 
       map.on("load", () => {
@@ -241,11 +252,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           el.className = `region-label region-label--${r.labelAnchor}`;
           el.style.setProperty("--rc", r.color);
           el.innerHTML = `<span class="region-label__name">${r.name.replace(" National Park", "")}</span><span class="region-label__tag">${r.id === "mount-kalaga" ? "National park · " : ""}${pins} ${pins === 1 ? "pin" : "pins"}</span>`;
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            mapStore.selectRegion(r.id);
-          });
-          stopMapEvents(el);
+          onTap(el, () => mapStore.selectRegion(r.id));
           new ml.Marker({ element: el, anchor: r.labelAnchor === "start" ? "left" : r.labelAnchor === "end" ? "right" : "center" })
             .setLngLat(r.label)
             .addTo(map);
@@ -274,10 +281,8 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         for (const loc of LOCATIONS) {
           if (!isPlaced(loc)) continue;
           const el = pinElement(loc.id);
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            if (mapStore.get().picking) return;
-            mapStore.selectLocation(loc.id);
+          onTap(el, () => {
+            if (!mapStore.get().picking) mapStore.selectLocation(loc.id);
           });
           el.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -285,7 +290,6 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
               mapStore.selectLocation(loc.id);
             }
           });
-          stopMapEvents(el);
           const marker = new ml.Marker({ element: el, anchor: "center" }).setLngLat([loc.lng, loc.lat]).addTo(map);
           markers.set(loc.id, { marker, el });
         }
@@ -304,10 +308,34 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           hoverRegion = null;
           map.getCanvas().style.cursor = mapStore.get().picking ? "crosshair" : "";
         });
+        // A double-click or double-tap zooms, as in Google Maps, without also selecting the
+        // region under it: a single click waits a beat and is dropped if a zoom or a second tap
+        // follows. Browsers can deliver a tap's click late, so double taps are also spotted
+        // from the touches themselves.
+        let regionClick = 0;
+        let zoomedAt = -1e9;
+        let lastTapAt = -1e9;
+        let doubleTapAt = -1e9;
+        map.on("touchend", (e) => {
+          if (e.originalEvent.touches.length) return;
+          const now = performance.now();
+          if (now - lastTapAt < 350) doubleTapAt = now;
+          lastTapAt = now;
+        });
         map.on("click", "regions-fill", (e) => {
           if (mapStore.get().picking || editMode || map.getZoom() > REGION_CLICK_MAX_ZOOM) return;
           const id = e.features?.[0]?.id as (typeof REGIONS)[number]["id"] | undefined;
-          if (id) mapStore.selectRegion(id);
+          const clickedAt = performance.now();
+          if (!id || clickedAt - zoomedAt < 400 || clickedAt - doubleTapAt < 800) return;
+          window.clearTimeout(regionClick);
+          regionClick = window.setTimeout(() => {
+            if (zoomedAt < clickedAt && doubleTapAt < clickedAt) mapStore.selectRegion(id);
+          }, 260);
+        });
+        map.on("dblclick", () => window.clearTimeout(regionClick));
+        map.on("zoomstart", () => {
+          zoomedAt = performance.now();
+          window.clearTimeout(regionClick);
         });
 
         // Picking (submissions) and curator mode.
@@ -526,8 +554,13 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
             }
           }
         }
-        if (prev && prev.pitched !== s.pitched) {
+        if (prev && prev.pitched !== s.pitched && !syncingPitch) {
           map.easeTo({ pitch: s.pitched ? 58 : 0, bearing: s.pitched ? -14 : 0, duration: 1100 });
+        }
+        if (s.nudge && s.nudge !== prev?.nudge) {
+          if (s.nudge.kind === "in") map.zoomIn({ duration: 350 });
+          else if (s.nudge.kind === "out") map.zoomOut({ duration: 350 });
+          else map.easeTo({ bearing: 0, pitch: 0, duration: 700 });
         }
         if (s.fly && s.fly !== prev?.fly) fly(s.fly);
         prev = s;
@@ -589,6 +622,23 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         const c = map.getCenter();
         mapStore.setView({ center: [c.lng, c.lat], zoom: map.getZoom() });
       });
+      // Compass needle follows rotation and tilt (once per frame at most).
+      let cameraFrame = 0;
+      const onCamera = () => {
+        if (cameraFrame) return;
+        cameraFrame = requestAnimationFrame(() => {
+          cameraFrame = 0;
+          cameraStore.set({ bearing: map.getBearing(), pitch: map.getPitch() });
+        });
+      };
+      map.on("rotate", onCamera);
+      map.on("pitch", onCamera);
+      // Tilting by hand (two fingers, or right-drag) flips the 3D button without moving the camera again.
+      map.on("pitchend", () => {
+        syncingPitch = true;
+        mapStore.syncPitched(map.getPitch() > 10);
+        syncingPitch = false;
+      });
 
       cleanup = () => {
         unsub();
@@ -601,7 +651,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
       disposed = true;
       cleanup?.();
     };
-  }, [cooperative, editMode]);
+  }, [editMode]);
 
   return (
     <div className="map-canvas">
