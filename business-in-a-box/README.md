@@ -23,9 +23,10 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 - [x] ICP, offer brief, ROI maths, style guide, UGC scripts
 - [x] Most profitable route worked out (06) and adopted: per-ticket pricing, docs updated
 - [x] Getting-started research and launch plan (07)
-- [ ] Checkpoint 2: approve 5 sample leads (pulled; waiting for your review), choose the name, choose how to widen targeting
-- [ ] Pull 15 more leads (20 total)
-- [ ] 5 static Meta ads
+- [x] Checkpoint 2: 3 of 5 sample leads kept, name changed to Doorkeep, targeting widened
+- [x] 5 static Meta ads in [`ads/`](ads/), with ad text, headlines and descriptions in `04-style-guide.md`
+- [x] Fee research on 14 other platforms ([`research/platform-fees.md`](research/platform-fees.md)): none passes, so list B was dropped
+- [ ] Leads: 15 of 20 merged into `leads/leads.csv` (9 ready, 3 need contact details, 3 on hold). Remaining email lookups and 5 more venues wait for the Firecrawl daily reset.
 - [ ] UGC videos (needs an avatar tool, or the faceless voiceover route)
 
 ## Facts used, all checked 2026-11-20

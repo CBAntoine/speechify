@@ -6,7 +6,7 @@ from pathlib import Path
 
 LEADS = Path(__file__).resolve().parent.parent / "leads"
 KEEP_FROM_SAMPLE = {"L1", "L2", "L3"}   # Speakeasy (L4) and The Maison (L5) dropped at checkpoint 2
-FIELDS = ["priority", "lead_id", "list", "pitch", "name", "metro", "type", "google_rating", "google_reviews", "phone",
+FIELDS = ["priority", "status", "lead_id", "list", "pitch", "name", "metro", "type", "google_rating", "google_reviews", "phone",
           "website", "ticketing_platform", "evidence_url", "volume_signal", "decision_maker_name", "decision_maker_title",
           "email", "email_type", "email_status", "linkedin_url", "maps_url", "address", "notes", "score"]
 PITCH = {
@@ -38,7 +38,7 @@ for f in sorted(LEADS.glob("batch2-*.csv")):
     if "screened-out" in f.name:
         continue
     for r in csv.DictReader(f.open(newline="")):
-        rows.append({k: r.get(k, "") for k in FIELDS if k not in ("priority", "pitch", "score")})
+        rows.append({k: r.get(k, "") for k in FIELDS if k not in ("priority", "status", "pitch", "score")})
 
 seen, merged = set(), []
 for r in rows:
@@ -51,9 +51,17 @@ for r in rows:
     r["list"] = lst
     r["pitch"] = PITCH.get(lst, "")
     r["score"] = LIST_WEIGHT.get(lst, 0) + EMAIL_WEIGHT.get(r.get("email_type", ""), 0) + min(first_int(r.get("volume_signal")), 20) / 10   # crude: first number in the volume note
+    # status: hold (marked "[HOLD: reason]" in notes), ready (an email or a phone to reach them), needs-contact
+    if "[HOLD" in (r.get("notes") or ""):
+        r["status"] = "hold"
+    elif r.get("email") or r.get("phone"):
+        r["status"] = "ready"
+    else:
+        r["status"] = "needs-contact"
     merged.append(r)
 
-merged.sort(key=lambda r: -r["score"])
+STATUS_ORDER = {"ready": 0, "needs-contact": 1, "hold": 2}
+merged.sort(key=lambda r: (STATUS_ORDER[r["status"]], -r["score"]))
 for i, r in enumerate(merged, 1):
     r["priority"], r["score"] = i, f"{r['score']:.1f}"
 out = LEADS / "leads.csv"
@@ -63,4 +71,4 @@ with out.open("w", newline="") as fh:
     w.writerows(merged)
 print(f"wrote {out} with {len(merged)} leads")
 for r in merged:
-    print(f"{r['priority']:>2}. [{r['list']}] {r['name']} ({r['metro']}) | {r['email_type'] or 'no email'} | {r['volume_signal'][:40]}")
+    print(f"{r['priority']:>2}. {r['status']:<13} [{r['list']}] {r['name'][:38]} ({r['metro']}) | {r['email_type'] or 'no email'} | phone: {'yes' if r.get('phone') else 'no'} | {r['volume_signal'][:30]}")
