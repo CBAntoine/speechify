@@ -18,7 +18,7 @@ What I found when I checked the plan against the real world on 2026-11-20, then 
 | List | Who | Pitch | Status |
 |---|---|---|---|
 | **A** | Venues selling mainly on Eventbrite, in **10+ metros** including mid-size music cities | The current pitch and maths (sourced) | Ready |
-| **B** | Venues on self-serve platforms with buyer fees and no contract: Turntable Tickets, SimpleTix, Showpass, ThunderTix, TicketSource, TuneHatch, VBO, Crowdwork, Opendate, Prekindle and similar | Same pitch, using that platform's fees | **Get each platform's fee schedule first.** Not checked yet. |
+| **B** | Venues on self-serve platforms with buyer fees and no contract: Turntable Tickets, SimpleTix, Showpass, ThunderTix, TicketSource, TuneHatch, VBO, Crowdwork, Opendate, Prekindle and similar | Same pitch, using that platform's fees | **Dropped (checked 2026-11-20).** None of the 14 platforms passes. Most charge fans under $2.75 on a $25 ticket, or publish a venue fee or rebate. Prekindle ($3.09) and DICE ($3.25) charge more but publish rebates or fee splits, so treat their venues like list C. See [`research/platform-fees.md`](research/platform-fees.md). |
 | **C** | TicketWeb, Etix, Ticketmaster and AXS venues | Usually under contract, and they may already get a share of fees | Ask "when does your contract end, and do you get a share of the fees?" Follow up at renewal. |
 | **D** | Venues selling through their own site (WooCommerce, Wix, Squarespace): 22% of the sites checked | Door check-in, waitlists, pixels, and a booking fee they keep | A different pitch, because fans would pay more than today |
 | **E** | High-volume **organisers** (comedy producers, promoters): Eventbrite's core users | One organiser per install fits the licence model | Find them through search engines and promoter pages, not Google Maps |
@@ -47,7 +47,7 @@ What I found when I checked the plan against the real world on 2026-11-20, then 
 
 ### Months 2–3: scale
 
-12. Pull 20+ leads a week from lists A, B and E.
+12. Pull 20+ leads a week from lists A and E, plus D where the better-tooling pitch lands. List B was dropped after the fee check.
 13. Run the 5 static ads and 2 UGC videos under the final name.
 14. Offer the "Fill the Room" upsell to venues that have been live for 30+ days.
 
