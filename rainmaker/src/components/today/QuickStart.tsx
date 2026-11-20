@@ -1,14 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Bot } from "lucide-react";
+import { PlacePicker, loadSavedPlace } from "@/components/PlacePicker";
 import { RainMark } from "@/components/ui";
 
 export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id: string; label: string }[]; defaultNiche: string; defaultCity: string }) {
   const router = useRouter();
   const [niche, setNiche] = useState(defaultNiche);
   const [city, setCity] = useState(defaultCity);
+  useEffect(() => {
+    const saved = loadSavedPlace();
+    if (saved) setCity(saved);
+  }, []);
   const label = niches.find((n) => n.id === niche)?.label.toLowerCase() ?? "businesses";
   const go = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +37,7 @@ export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id
         </span>
       </div>
       <h2>Who do you want to work with?</h2>
-      <p>Pick a niche and a city. Rainmaker finds the businesses, checks their websites, and ranks them by how much they need you.</p>
+      <p>Pick a niche, a province or state, and a city. Rainmaker finds the businesses, checks their websites, and ranks them by how much they need you.</p>
       <form className="hero-form" onSubmit={go}>
         <select className="select" value={niche} onChange={(e) => setNiche(e.target.value)} aria-label="Niche">
           {niches.map((n) => (
@@ -41,7 +46,7 @@ export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id
             </option>
           ))}
         </select>
-        <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder="City, e.g. Austin, TX" aria-label="City" required />
+        <PlacePicker value={city} onChange={setCity} labels={false} />
         <button className="btn lg" type="submit">
           Find clients <ArrowRight size={16} />
         </button>

@@ -793,7 +793,7 @@ button.chip[aria-pressed="true"] {
 
 .hero-form {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
   padding: 6px;
   border-radius: 16px;
@@ -908,11 +908,65 @@ button.list-item {
   padding: 16px;
 }
 
+/* Niche, province and city on the first row; radius and Search below. */
 .search-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 120px auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
+}
+
+.search-grid > :nth-child(5) {
+  grid-column: 3;
+  justify-self: end;
+}
+
+/* Province/state and city pickers (PlacePicker). */
+.place-city {
+  display: flex;
+  gap: 6px;
+}
+
+.place-city > .input,
+.place-city > .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.place-city > .btn {
+  flex: none;
+  height: auto;
+  align-self: stretch;
+}
+
+.place-city > .btn[aria-pressed="true"] {
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.place-city-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 .results {
@@ -2232,9 +2286,14 @@ details[open] > .niche-summary .chev {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .search-grid > :nth-child(1),
-  .search-grid > :nth-child(2) {
+  /* Niche, province and city get a row each; radius and Search share one. */
+  .search-grid > :nth-child(-n + 3) {
     grid-column: 1 / -1;
+  }
+
+  .search-grid > :nth-child(5) {
+    grid-column: auto;
+    justify-self: stretch;
   }
 
   .filters-scroll {

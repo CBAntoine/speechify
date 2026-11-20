@@ -10,6 +10,7 @@ import {
 import { api, Drawer, useToast } from "@/components/client";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
 import { DynIcon, Empty, ScoreRing, SignalChips, TierBadge } from "@/components/ui";
+import { PlacePicker, loadSavedPlace, savePlace } from "@/components/PlacePicker";
 import { DEFAULT_OVERPASS_URLS, OverpassUnavailableError, queryOverpass } from "@/lib/prospecting/overpass";
 import type { AuditResult, LeadSource, Prospect, Signal } from "@/lib/types";
 
@@ -53,7 +54,7 @@ export function ProspectFinder({
   places,
 }: {
   niches: NicheLite[];
-  initial: { niche: string; location: string; go: boolean };
+  initial: { niche: string; location: string; go: boolean; fromUrl?: boolean };
   places: boolean;
 }) {
   const router = useRouter();
@@ -117,6 +118,7 @@ export function ProspectFinder({
           res = await api<Result>("/api/prospects/search", { method: "POST", json: elements ? { ...body, center: plan.center, elements } : body });
         }
         setResult(res as Result);
+        if (!near) savePlace(location);
         const q = new URLSearchParams(near ? { niche: nicheText } : { niche: nicheText, location });
         router.replace(`/prospects?${q}`, { scroll: false });
       } catch (e) {
@@ -145,8 +147,8 @@ export function ProspectFinder({
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        // The picked city stays as it was, so turning "near me" off returns to it.
         setNear({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-        setLocation("Near me");
         setLocating(false);
       },
       (err) => {
@@ -156,6 +158,14 @@ export function ProspectFinder({
       { enableHighAccuracy: false, timeout: 12_000, maximumAge: 120_000 }
     );
   }
+
+  // Opened without a place in the address: start from the last place searched
+  // on this phone, not the agency's home city.
+  useEffect(() => {
+    if (initial.fromUrl) return;
+    const saved = loadSavedPlace();
+    if (saved) setLocation(saved);
+  }, [initial.fromUrl]);
 
   useEffect(() => {
     if (initial.go && !started.current && initial.location) {
@@ -241,33 +251,26 @@ export function ProspectFinder({
                 <option value="custom">Something else…</option>
               </select>
             </label>
-            <label className="field">
-              <span>City or area</span>
-              <span style={{ position: "relative", display: "block" }}>
-                <input
-                  className="input"
-                  style={{ paddingRight: 44 }}
-                  value={location}
-                  onChange={(e) => {
-                    setLocation(e.target.value);
-                    setNear(null);
-                  }}
-                  placeholder="e.g. Austin, TX"
-                  enterKeyHint="search"
-                  required
-                />
+            <PlacePicker
+              value={location}
+              onChange={(place) => {
+                setLocation(place);
+                setNear(null);
+              }}
+              near={Boolean(near)}
+              cityAction={
                 <button
                   type="button"
-                  className="btn ghost icon sm"
-                  style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", color: near ? "var(--brand)" : undefined }}
-                  onClick={locateMe}
-                  aria-label="Search near my location"
-                  title="Search near me"
+                  className="btn icon"
+                  onClick={() => (near ? setNear(null) : locateMe())}
+                  aria-pressed={Boolean(near)}
+                  aria-label={near ? "Stop searching near my location" : "Search near my location"}
+                  title={near ? "Pick a city instead" : "Search near me"}
                 >
                   {locating ? <LoaderCircle size={16} className="spin" /> : <Crosshair size={16} />}
                 </button>
-              </span>
-            </label>
+              }
+            />
             <label className="field">
               <span>Radius</span>
               <select className="select" value={radius} onChange={(e) => setRadius(Number(e.target.value))} disabled={places && !near}>

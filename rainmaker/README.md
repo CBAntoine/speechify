@@ -40,7 +40,7 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | Screen | What it does |
 |---|---|
 | **Today** | Greeting, a "find clients" search box, pipeline value, recurring revenue, hot leads, a "do next" list and agent activity. |
-| **Find clients** | Niche + city search. Each result shows an opportunity score (0–100) and the gaps you can sell against. Filter by "No website", "No online booking", "Not running ads", "Few reviews" and more, then add the best ones to the pipeline in one click. The side panel shows what one customer is worth in that niche, offers that convert, and sources. |
+| **Find clients** | Pick a niche, a province or state, and a city: every Canadian province and territory and every US state, each with its main cities, plus "Other city or town" and "Somewhere else" for anywhere. Places are looked up inside their country, so London, ON never lands in England. Each result shows an opportunity score (0–100) and the gaps you can sell against. Filter by "No website", "No online booking", "Not running ads", "Few reviews" and more, then add the best ones to the pipeline in one click. The side panel shows what one customer is worth in that niche, offers that convert, and sources. |
 | **Pipeline** | Drag-and-drop board (or list view). Click a lead for its website audit, Claude-written outreach (email + 3 follow-ups, text, DM, call script, 45-second video-audit script), sample ads, notes and tasks. |
 | **Inbox** | Every message an agent writes lands here. Edit, then send (Resend), open in your mail or Messages app, or mark it sent. Tasks live here too. |
 | **Ad Studio** | Brief → campaign, with live feed and search-ad previews, character counters, a creative card you can restyle and download as a PNG in 3 sizes, a Google Ads Editor CSV export, and "copy all". |
@@ -134,7 +134,7 @@ Without a database, Vercel forgets your data whenever its servers restart. The a
 ### What's built for the phone
 
 - **Tab bar** at the bottom (Today, Find, Pipeline, Inbox, More), with large tap targets and room for Android's gesture bar.
-- **Find clients near me:** tap the target icon in the city field to search around where you're standing. Good for walk-in prospecting.
+- **Find clients near me:** tap the target icon next to the city to search around where you're standing, and tap it again to go back to the city. Good for walk-in prospecting. The app remembers the last place you searched.
 - **Map search runs from your phone.** The free OpenStreetMap servers turn away requests from cloud hosts like Vercel, so Find clients asks them from your phone's own connection, and the server scores the results. Agent searches run on the server, so on Vercel they need a Google Places key.
 - **Pipeline:** one stage at a time, with swipeable stage tabs and a **Move to** menu on each card. Drag-and-drop doesn't work with touch, so this replaces it.
 - **Lead screen:** big **Call, Text, Email, Website, Directions and Share** buttons. They open your phone's dialer, Messages, Gmail and Google Maps.
@@ -173,7 +173,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 34 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing and server fallback, niches, seed data, playbook sources, concurrent storage writes
+npm test          # 40 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing and server fallback, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
 npm run build
 ```
 

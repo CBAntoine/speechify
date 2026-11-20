@@ -194,7 +194,7 @@ export function AdStudio({
               </label>
               <label className="field">
                 <span>City</span>
-                <input className="input" value={brief.location} onChange={(e) => setBrief({ ...brief, location: e.target.value })} placeholder="Austin, TX" />
+                <input className="input" value={brief.location} onChange={(e) => setBrief({ ...brief, location: e.target.value })} placeholder="e.g. Toronto, ON" />
               </label>
             </div>
             <label className="field">

@@ -39,7 +39,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
           tip: n.tip,
           evidence: n.evidence,
         }))}
-        initial={{ niche, location: one(sp.location) ?? profile.city, go: one(sp.go) === "1" }}
+        initial={{ niche, location: one(sp.location) ?? profile.city, fromUrl: Boolean(one(sp.location)), go: one(sp.go) === "1" }}
         places={i.googlePlaces}
       />
     </div>

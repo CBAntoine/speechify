@@ -98,7 +98,7 @@ export const TOOLS: Record<ToolName, ToolDef> = {
       type: "object",
       properties: {
         niche: { type: "string", description: "Niche id or plain words, e.g. 'dentist', 'med spa', 'roofer', 'hvac'" },
-        location: { type: "string", description: "City and state/country, e.g. 'Austin, TX'" },
+        location: { type: "string", description: "City and province or state, e.g. 'Toronto, ON', 'Halifax, NS' or 'Austin, TX'. Other countries: 'City, Country'." },
         limit: { type: "integer", description: "How many businesses to return, 5-40. Default 20." },
         audit_top: { type: "integer", description: "Audit the websites of this many results, 0-15. Default 10." },
         radius_km: { type: "integer", description: "Search radius for map search, 2-40 km. Default 12." },

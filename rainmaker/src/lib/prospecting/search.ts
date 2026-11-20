@@ -189,7 +189,7 @@ function usesOsm(wanted: Normalized["wanted"]): boolean {
 
 async function osmCenter(n: Normalized): Promise<Place> {
   const center = n.near ? { lat: n.near.lat, lon: n.near.lon, label: "your location" } : ((await geocode(n.location)) ?? undefined);
-  if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Try "City, State".`);
+  if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Pick a province or state and a city, or type it as "City, ON".`);
   if (n.niche.id === "custom" && !n.niche.osmName) throw new Error("Pick a niche from the list for map search");
   return center;
 }

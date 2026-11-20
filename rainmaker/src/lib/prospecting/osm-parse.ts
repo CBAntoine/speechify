@@ -42,7 +42,8 @@ export function distanceKm(aLat: number, aLon: number, bLat: number, bLon: numbe
 
 function address(t: Record<string, string>): string | undefined {
   const street = [t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" ");
-  const city = [t["addr:city"], t["addr:state"], t["addr:postcode"]].filter(Boolean).join(", ");
+  // Canadian addresses are often tagged addr:province instead of addr:state.
+  const city = [t["addr:city"], t["addr:state"] ?? t["addr:province"], t["addr:postcode"]].filter(Boolean).join(", ");
   const full = [street, city].filter(Boolean).join(", ");
   return full || undefined;
 }

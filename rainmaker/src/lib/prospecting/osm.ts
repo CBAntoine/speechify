@@ -1,5 +1,6 @@
 import "server-only";
 import { friendlyNetError } from "@/lib/net";
+import { expandPlace } from "@/lib/regions";
 import type { Niche } from "@/lib/niches";
 import type { Prospect } from "@/lib/types";
 import { buildOverpassQuery, parseOverpass } from "./osm-parse";
@@ -22,10 +23,8 @@ export interface Place {
 
 const geoCache = ((globalThis as { __rmGeoCache?: Map<string, Place> }).__rmGeoCache ??= new Map());
 
-export async function geocode(location: string): Promise<Place | null> {
-  const key = location.trim().toLowerCase();
-  if (geoCache.has(key)) return geoCache.get(key)!;
-  const url = `${NOMINATIM}/search?${new URLSearchParams({ q: location, format: "jsonv2", limit: "1" })}`;
+async function nominatim(location: string, params: Record<string, string>): Promise<{ lat: string; lon: string; display_name: string }[]> {
+  const url = `${NOMINATIM}/search?${new URLSearchParams({ format: "jsonv2", limit: "1", ...params })}`;
   let res: Response;
   try {
     res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "en" }, signal: AbortSignal.timeout(12_000) });
@@ -33,7 +32,29 @@ export async function geocode(location: string): Promise<Place | null> {
     throw new Error(`Couldn't reach OpenStreetMap to look up "${location}" (${friendlyNetError(err, 12_000)}). Check this server's internet connection, or try sample data.`);
   }
   if (!res.ok) throw new Error(`Location lookup failed (HTTP ${res.status})`);
-  const rows = (await res.json()) as { lat: string; lon: string; display_name: string }[];
+  return (await res.json()) as { lat: string; lon: string; display_name: string }[];
+}
+
+/**
+ * "London, ON" → coordinates. A known province or state is looked up as a
+ * city in that province, kept inside its country (so not London, England).
+ * Anything else is looked up as typed.
+ */
+export async function geocode(location: string): Promise<Place | null> {
+  const p = expandPlace(location);
+  const key = `${p.query.toLowerCase()}|${p.countryCode ?? ""}`;
+  if (geoCache.has(key)) return geoCache.get(key)!;
+  const within: Record<string, string> = p.countryCode ? { countrycodes: p.countryCode } : {};
+  let rows =
+    p.city && p.state && p.country
+      ? await nominatim(location, { city: p.city, state: p.state, country: p.country, ...within })
+      : await nominatim(location, { q: p.query });
+  if (!rows.length && p.city) {
+    // Not filed as a city (a neighbourhood, say): try plain text, still
+    // inside the country. Nominatim allows one request per second.
+    await new Promise((r) => setTimeout(r, 1_100));
+    rows = await nominatim(location, { q: p.query, ...within });
+  }
   if (!rows.length) return null;
   const place = { lat: Number(rows[0].lat), lon: Number(rows[0].lon), label: rows[0].display_name };
   geoCache.set(key, place);

@@ -100,7 +100,7 @@ export function SettingsForm({
             </label>
             <label className="field">
               <span>Home city</span>
-              <input className="input" value={p.city} onChange={set("city")} placeholder="Austin, TX" />
+              <input className="input" value={p.city} onChange={set("city")} placeholder="e.g. Toronto, ON" />
             </label>
             <label className="field">
               <span>Website</span>

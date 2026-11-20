@@ -1,5 +1,6 @@
 import "server-only";
 import type { Niche } from "@/lib/niches";
+import { expandPlace } from "@/lib/regions";
 import type { Prospect } from "@/lib/types";
 
 // Google Places API (New), Text Search. Needs GOOGLE_PLACES_API_KEY with the
@@ -52,6 +53,9 @@ export async function searchPlaces(params: {
 }): Promise<Prospect[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) throw new Error("GOOGLE_PLACES_API_KEY is not set");
+  // "London, ON" → "London, Ontario, Canada", with Canada as the region, so
+  // Google doesn't pick another country's London.
+  const place = expandPlace(params.location);
   const out: Prospect[] = [];
   let pageToken: string | undefined;
   for (let page = 0; page < 3 && out.length < params.limit; page++) {
@@ -63,8 +67,9 @@ export async function searchPlaces(params: {
         "X-Goog-FieldMask": FIELDS,
       },
       body: JSON.stringify({
-        textQuery: params.near ? params.niche.query : `${params.niche.query} in ${params.location}`,
+        textQuery: params.near ? params.niche.query : `${params.niche.query} in ${place.query}`,
         pageSize: 20,
+        ...(place.countryCode && !params.near ? { regionCode: place.countryCode.toUpperCase() } : {}),
         ...(params.near
           ? { locationBias: { circle: { center: { latitude: params.near.lat, longitude: params.near.lon }, radius: Math.min(50_000, params.near.radiusKm * 1000) } } }
           : {}),

@@ -1,4 +1,5 @@
 import "server-only";
+import { placeInText } from "@/lib/regions";
 import { createHash } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
 import { agentRuntime, runBudgetCents } from "@/lib/config";
@@ -522,8 +523,7 @@ async function runMessages(l: Live, message: string, first: boolean) {
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function parseCity(goal: string): string | undefined {
-  const m = goal.match(/\b(?:in|near|around)\s+([A-Z][A-Za-z.' -]+?,\s*[A-Z]{2})\b/) ?? goal.match(/\b(?:in|near|around)\s+([A-Z][A-Za-z.' -]{2,30})(?:\s+(?:that|with|who|which)\b|[.!?]|$)/);
-  return m?.[1]?.trim();
+  return placeInText(goal);
 }
 
 async function runDemo(l: Live, goal: string) {
