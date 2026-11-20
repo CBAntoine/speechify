@@ -35,6 +35,10 @@ jobs:
           java-version: 21
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes the retired "tools" package, which the
+          # current SDK manager no longer has.
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install
         run: npm ci
