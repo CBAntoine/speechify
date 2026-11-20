@@ -124,7 +124,7 @@ before(async () => {
   Object.assign(process.env, PHONE_ENV);
   sim = await startSimulator({ prefix: "127.0.13" });
   app = await startApp({ port: 0, demo: true, dataDir, overrides: sim.overrides, autoScan: false, log: () => {} });
-  base = `http://localhost:${app.port}`;
+  base = `http://127.0.0.1:${app.port}`; // not "localhost": Node 18 may try IPv6 first
   await api("POST", "/api/scan");
 });
 

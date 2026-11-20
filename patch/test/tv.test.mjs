@@ -26,7 +26,7 @@ const named = async (n) => (await devices()).find((d) => d.name === n);
 before(async () => {
   sim = await startSimulator({ prefix: "127.0.12" });
   app = await startApp({ port: 0, demo: true, dataDir, overrides: { ...sim.overrides, openUrl: async (u) => opened.push(u) }, autoScan: false, log: () => {} });
-  base = `http://localhost:${app.port}`;
+  base = `http://127.0.0.1:${app.port}`; // not "localhost": Node 18 may try IPv6 first
   await api("POST", "/api/scan");
 });
 

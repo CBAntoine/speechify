@@ -34,7 +34,7 @@ before(async () => {
   sim = await startSimulator({ prefix: "127.0.10" });
   app = await startApp({ port: 0, demo: true, dataDir, overrides: sim.overrides, autoScan: false, log: () => {} });
   app.store.data.homeAssistant = { url: "http://127.0.10.14:8123", token: "demo-token" };
-  base = `http://localhost:${app.port}`;
+  base = `http://127.0.0.1:${app.port}`; // not "localhost": Node 18 may try IPv6 first
   const r = await api("POST", "/api/scan");
   assert.equal(r.status, 200);
 });
