@@ -1,0 +1,5 @@
+# Your settings, saved passwords, API keys and device list stay on your computer.
+.data/
+.data-demo/
+.env
+node_modules/

@@ -1,0 +1,21 @@
+{
+  "name": "patch-home-network",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Talk to the devices on your WiFi: see what's connected, control lights, TVs, speakers and plugs, and tune up your network, by voice with an ElevenLabs agent.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.mjs",
+    "demo": "node server.mjs --demo",
+    "lan": "node server.mjs --lan",
+    "sim": "node sim/simulator.mjs",
+    "test": "node --test --test-concurrency=1"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "1.35.0"
+  }
+}

@@ -1,0 +1,484 @@
+// Talking to Patch: an ElevenLabs agent whose "client tools" run here in the browser and call
+// Patch's local API, so the cloud agent decides what to do and this computer does it.
+import { icon } from "./icons.js";
+
+const QUICK = ["What's on my WiFi?", "Turn the living room lights to warm white", "Is anything on my network unsafe?", "Run a tune-up and fix what you can", "Why is my internet slow?"];
+
+const json = (v) => JSON.stringify(v);
+const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const SKIP_ACTIONS = new Set(["rename", "set_room"]);
+
+function loadSdk() {
+  if (window.ElevenLabsClient) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "/vendor/elevenlabs-client.js";
+    s.onload = () => (window.ElevenLabsClient ? resolve() : reject(new Error("The voice library didn't load. Run npm install in the Patch folder.")));
+    s.onerror = () => reject(new Error("The voice library is missing. Run npm install in the Patch folder."));
+    document.head.appendChild(s);
+  });
+}
+
+function friendlyError(msg) {
+  const m = String(msg || "");
+  if (/permission|NotAllowed|denied/i.test(m)) return "Microphone access was blocked. Allow the microphone for this page in your browser, or type instead.";
+  if (/NotFound|no.*device|Requested device not found/i.test(m)) return "No microphone found. You can still type to Patch.";
+  if (/secure context|getUserMedia/i.test(m)) return "Your browser only allows the microphone on this computer (localhost). On other devices, type instead.";
+  if (/401|403|auth/i.test(m)) return "ElevenLabs didn't accept the session. Check your API key in Settings.";
+  return m.length < 160 ? m : "Couldn't reach the voice service. Check the internet connection and try again.";
+}
+
+export function createVoice(ui) {
+  const $ = (s) => document.querySelector(s);
+  const els = {
+    panel: $("#voice"), log: $("#voiceLog"), status: $("#voiceStatus"), orb: $("#orb"), notice: $("#voiceNotice"),
+    form: $("#voiceForm"), text: $("#voiceText"), send: $("#voiceSend"), controls: $("#voiceControls"), fab: $("#voiceFab"), close: $("#voiceClose"),
+  };
+  let conv = null;
+  let mode = null; // "voice" | "text"
+  let status = "idle"; // idle | connecting | connected
+  let speaking = false;
+  let muted = false;
+  let lines = 0;
+  let lastUserAt = 0;
+  let pendingText = null;
+  let lastIds = "";
+  const pending = new Map();
+
+  // ── transcript ──
+  function add(role, html, { raw = false } = {}) {
+    if (!lines) els.log.innerHTML = "";
+    lines++;
+    const el = document.createElement("div");
+    el.className = `msg msg--${role}`;
+    if (raw) el.innerHTML = html;
+    else el.textContent = html;
+    els.log.appendChild(el);
+    els.log.scrollTo({ top: els.log.scrollHeight, behavior: "smooth" });
+    return el;
+  }
+  const toolLine = (ic, text) => add("tool", `${icon(ic, 14)}<span>${ui.esc(text)}</span>`, { raw: true });
+
+  function intro() {
+    lines = 0;
+    els.log.innerHTML = `<div class="voice__intro"><p>I'm Patch. I can see everything on your WiFi. Ask me to switch things on and off, change colours and volume, find what's slowing things down, or check that nothing's unsafe.</p><div class="prompts">${QUICK.map((q) => `<button class="prompt" type="button" data-prompt="${ui.esc(q)}">${ui.esc(q)}</button>`).join("")}</div></div>`;
+  }
+
+  function notice(text, { settings = false } = {}) {
+    if (!text) {
+      els.notice.hidden = true;
+      return;
+    }
+    els.notice.hidden = false;
+    els.notice.innerHTML = `${ui.esc(text)}${settings ? `<br><button class="btn btn--sm btn--voice" data-ui="settings" data-focus="el">Open settings</button>` : ""}`;
+  }
+
+  // ── controls & status ──
+  function render() {
+    const live = status === "connected";
+    const connecting = status === "connecting";
+    els.orb.classList.toggle("is-live", live);
+    els.orb.classList.toggle("is-connecting", connecting);
+    els.status.textContent = connecting ? "Connecting…" : live ? (mode === "voice" ? (speaking ? "Talking…" : muted ? "Mic muted" : "Listening…") : "Text chat") : "Ready when you are";
+    els.send.innerHTML = icon("send", 18);
+    els.close.innerHTML = icon("close", 18);
+    if (live) {
+      els.controls.innerHTML = `${mode === "voice" ? `<button class="btn round ${muted ? "is-off" : ""}" type="button" data-voice="mute" aria-label="${muted ? "Unmute" : "Mute"} microphone">${icon(muted ? "micOff" : "mic", 20)}</button>` : `<button class="btn round" type="button" data-voice="talk" aria-label="Switch to voice">${icon("mic", 20)}</button>`}<button class="btn round round--end" type="button" data-voice="end" aria-label="End conversation">${icon("end", 22)}</button>`;
+    } else {
+      els.controls.innerHTML = `<button class="btn btn--voice mic-btn" type="button" data-voice="talk" ${connecting ? "disabled" : ""}>${icon("mic", 20)} ${connecting ? "Connecting…" : "Talk to Patch"}</button>`;
+    }
+    els.fab.classList.toggle("is-hidden", els.panel.classList.contains("is-open"));
+  }
+
+  let raf = 0;
+  function animate() {
+    cancelAnimationFrame(raf);
+    let smooth = 0;
+    const tick = () => {
+      if (!conv || status !== "connected" || mode !== "voice") {
+        els.orb.style.setProperty("--level", "0");
+        return;
+      }
+      let level = 0;
+      try {
+        level = Math.max(conv.getOutputVolume?.() ?? 0, (conv.getInputVolume?.() ?? 0) * 0.8);
+      } catch {
+        level = 0;
+      }
+      smooth = smooth * 0.75 + Math.min(1, level * 1.6) * 0.25;
+      els.orb.style.setProperty("--level", smooth.toFixed(3));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  // ── what the agent knows at the start ──
+  function directory() {
+    const devs = ui.state.devices.filter((d) => !d.hidden);
+    const lines = devs.slice(0, 110).map((d) => {
+      const acts = (d.actions || []).filter((a) => !SKIP_ACTIONS.has(a));
+      const st = d.online === false ? "offline" : ui.stateLine(d);
+      return `- ${d.name} | ${d.kindLabel}${d.room ? ` | room: ${d.room}` : ""}${st ? ` | ${st}` : ""}${acts.length ? ` | can: ${acts.join(", ")}` : ""}${d.setup ? ` | NEEDS SETUP: ${d.setup.message}` : ""}`;
+    });
+    return lines.join("\n");
+  }
+
+  function sendContext() {
+    if (!conv) return;
+    const s = ui.state;
+    const now = new Date();
+    const intro = [
+      `Context: it is ${now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}, ${now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}.`,
+      s.app?.demo ? "Patch is running in DEMO mode on a simulated home network (say so if asked; it's for trying things out)." : "Patch is running on the person's computer on their home network.",
+      s.network ? `Network ${s.network.cidr}, router at ${s.network.gateway}.` : "",
+      s.tuneup ? `Last tune-up score: ${s.tuneup.score} (${s.tuneup.grade}).` : "No tune-up has been run yet.",
+      mode === "text" ? "This is a typed chat: keep answers short and skimmable." : "",
+    ].filter(Boolean);
+    conv.sendContextualUpdate(intro.join(" "));
+    conv.sendContextualUpdate(`Devices on the network right now (${s.devices.length}). Use these names with the tools:\n${directory() || "(none found yet: offer to scan)"}`);
+  }
+
+  // ── client tools ──
+  const compact = (d) => ({
+    name: d.name,
+    type: d.kindLabel,
+    room: d.room || undefined,
+    online: d.online !== false,
+    status: d.online === false ? "offline" : ui.stateLine(d) || undefined,
+    can: (d.actions || []).filter((a) => !SKIP_ACTIONS.has(a)),
+    needs_setup: d.setup ? d.setup.message : undefined,
+    new_on_network: d.isNew || undefined,
+  });
+
+  async function resolve(name) {
+    const r = await ui.api("POST", "/api/resolve", { query: name });
+    if (r.device) {
+      ui.mergeDevice(r.device);
+      return { device: r.device };
+    }
+    if (r.ambiguous) return { error: json({ ok: false, ambiguous: true, message: `More than one device matches "${name}". Ask which one.`, options: r.ambiguous.map((d) => d.name) }) };
+    return { error: json({ ok: false, not_found: true, message: `No device called "${name}".`, suggestions: r.suggestions }) };
+  }
+
+  function confirmCard(message, onYes) {
+    const el = add("confirm", `<strong>Waiting for your OK</strong><div>${ui.esc(message)}</div><div class="btns"><button class="btn btn--sm btn--primary" type="button" data-yes>Yes, go ahead</button><button class="btn btn--sm" type="button" data-no>No</button></div>`, { raw: true });
+    el.querySelector("[data-yes]").addEventListener("click", () => {
+      el.querySelector(".btns").remove();
+      onYes(true);
+    });
+    el.querySelector("[data-no]").addEventListener("click", () => {
+      el.querySelector(".btns").remove();
+      onYes(false);
+    });
+  }
+
+  function reply(text) {
+    lastUserAt = Date.now();
+    add("user", text);
+    conv?.sendUserMessage(text);
+  }
+
+  /** A confirmation only counts if the person spoke after Patch asked. The agent can't confirm on its own. */
+  function takeConfirmation(key, action) {
+    const p = pending.get(key) || [...pending.values()].filter((x) => x.action === action && Date.now() - x.at < 180_000).sort((a, b) => b.at - a.at)[0];
+    if (!p) return { token: undefined };
+    if (lastUserAt <= p.at) return { wait: true };
+    pending.delete(p.key);
+    return { token: p.token };
+  }
+
+  const ICON_FOR = { turn_on: "power", turn_off: "power", toggle: "power", set_brightness: "light", set_color: "sparkle", set_color_temperature: "light", set_volume: "volume", mute: "mute", unmute: "volume", play: "play", pause: "pause", launch_app: "tv", reboot: "refresh", update_firmware: "refresh", remove_port_forward: "shield" };
+
+  const tools = {
+    list_devices: async ({ kind, room, query, include_offline } = {}) => {
+      const r = await ui.api("GET", "/api/devices");
+      ui.setDevices(r.devices);
+      let list = r.devices.filter((d) => !d.hidden && !d.self);
+      if (kind) list = list.filter((d) => norm(`${d.kind} ${d.kindLabel}`).includes(norm(kind).replace(/s$/, "")));
+      if (room) list = list.filter((d) => norm(d.room).includes(norm(room).replace(/\broom\b/, "").trim()));
+      if (query) list = list.filter((d) => norm(`${d.name} ${d.brand} ${d.model} ${d.room}`).includes(norm(query)));
+      if (include_offline === false) list = list.filter((d) => d.online !== false);
+      toolLine("search", `Looked through ${list.length} devices`);
+      const counts = {};
+      for (const d of list) counts[d.kindLabel] = (counts[d.kindLabel] || 0) + 1;
+      return json({ total: list.length, by_type: counts, devices: list.slice(0, 60).map(compact), truncated: list.length > 60 || undefined });
+    },
+
+    scan_network: async ({ deep } = {}) => {
+      toolLine("scan", "Scanning the network…");
+      const r = await ui.api("POST", "/api/scan", { deep: !!deep });
+      if (r.devices) ui.setDevices(r.devices);
+      const s = r.summary || {};
+      toolLine("check", `Found ${s.devices ?? "?"} devices`);
+      return json({ ok: r.ok !== false, devices: s.devices, online: s.online, identified: s.identified, new_devices: s.newDevices, needs_setup: s.needsSetup, seconds: s.durationMs ? Math.round(s.durationMs / 1000) : undefined, message: r.message });
+    },
+
+    get_device_status: async ({ device } = {}) => {
+      const { device: d, error } = await resolve(device);
+      if (error) return error;
+      ui.flashDevice(d.id);
+      if (window.matchMedia("(min-width: 1081px)").matches) ui.openDevice(d.id);
+      return json({ ...compact(d), brand: d.brand || undefined, model: d.model || undefined, state: d.state, firmware: d.info?.firmware, wifi_signal_dbm: d.info?.rssi ?? undefined, update_available: d.info?.updateAvailable || d.state?.updateAvailable || undefined, has_web_page: !!d.webUrl, last_seen: d.online === false && d.lastSeen ? new Date(d.lastSeen).toISOString() : undefined });
+    },
+
+    control_device: async ({ device, action, value, room, kind, confirmed } = {}) => {
+      const body = { device: device || undefined, action, value: value == null ? undefined : String(value), room: room || undefined, kind: kind || undefined };
+      const key = json([norm(body.device), norm(body.room), norm(body.kind), body.action, norm(body.value)]);
+      if (confirmed === true || confirmed === "true") {
+        const c = takeConfirmation(key, action);
+        if (c.wait) return json({ ok: false, waiting_for_person: true, message: "The person hasn't answered yet. Ask them, then wait for a clear yes before calling again with confirmed true." });
+        body.confirmToken = c.token;
+      }
+      const r = await ui.api("POST", "/api/control", body);
+      if (r.needsConfirmation) {
+        pending.set(key, { key, token: r.confirmToken, at: Date.now(), action });
+        const msg = r.message.replace(/\s*Ask the person to confirm.*$/, "");
+        confirmCard(msg, (yes) => reply(yes ? "Yes, go ahead." : "No, leave it."));
+        return json({ ok: false, needs_confirmation: true, reason: msg, instruction: "Tell the person what will happen in one short sentence and ask if they want to go ahead. Only after they clearly say yes, call control_device again with the same arguments plus confirmed: true." });
+      }
+      if (r.device) {
+        ui.mergeDevice(r.device);
+        ui.flashDevice(r.device.id);
+      }
+      if (r.results) r.results.forEach((x) => ui.flashDevice(x.id));
+      if (r.ok) toolLine(ICON_FOR[action] || "check", r.message);
+      else toolLine("alert", r.message);
+      return json({ ok: !!r.ok, message: r.message, error: r.error || undefined, options: r.candidates?.map((c) => c.name), hint: r.hint || undefined, status: r.device ? ui.stateLine(r.device) : undefined });
+    },
+
+    diagnose_device: async ({ device } = {}) => {
+      const { device: d, error } = await resolve(device);
+      if (error) return error;
+      toolLine("info", `Testing ${d.name}…`);
+      ui.flashDevice(d.id);
+      const r = await ui.api("POST", `/api/devices/${encodeURIComponent(d.id)}/diagnose`, {});
+      return json({ device: d.name, reachable: r.reachable, findings: r.findings, average_ms: r.ping?.avg ?? undefined, loss_percent: r.ping?.loss ?? undefined });
+    },
+
+    run_tuneup: async ({ focus } = {}) => {
+      toolLine("tune", "Running a tune-up…");
+      const t = await ui.api("POST", "/api/tuneup", { focus: focus || "all" });
+      ui.openTuneup(t);
+      toolLine("check", `Score ${t.score} (${t.grade})`);
+      // Everything Patch can fix, plus the most serious of the rest.
+      const issues = t.findings.filter((f) => f.severity !== "good");
+      const top = issues.filter((f) => f.fix || issues.indexOf(f) < 12).slice(0, 20);
+      return json({
+        score: t.score,
+        grade: t.grade,
+        counts: t.counts,
+        findings: top.map((f) => ({ fix_id: f.fix ? f.id : undefined, severity: f.severity, title: f.title, detail: (f.detail || "").slice(0, 220), fix: f.fix?.label })),
+        all_good: t.findings.filter((f) => f.severity === "good").map((f) => f.title),
+        internet: t.internet ? { online: t.internet.online, latency_ms: t.internet.latencyMs } : undefined,
+      });
+    },
+
+    apply_fix: async ({ fix_id, confirmed } = {}) => {
+      const key = json(["fix", fix_id]);
+      let confirmToken;
+      if (confirmed === true || confirmed === "true") {
+        const c = takeConfirmation(key, `fix:${fix_id}`);
+        if (c.wait) return json({ ok: false, waiting_for_person: true, message: "Ask the person first and wait for a clear yes." });
+        confirmToken = c.token;
+      }
+      const r = await ui.api("POST", `/api/fixes/${encodeURIComponent(fix_id)}`, { confirmToken });
+      if (r.needsConfirmation) {
+        pending.set(key, { key, token: r.confirmToken, at: Date.now(), action: `fix:${fix_id}` });
+        const msg = r.message.replace(/\s*Ask the person to confirm.*$/, "");
+        confirmCard(msg, (yes) => reply(yes ? "Yes, go ahead." : "No, leave it."));
+        return json({ ok: false, needs_confirmation: true, reason: msg, instruction: "Explain in one sentence and ask. Only after a clear yes, call apply_fix again with confirmed: true." });
+      }
+      toolLine(r.ok ? "check" : "alert", r.message);
+      if (r.device) ui.mergeDevice(r.device);
+      const t = ui.state.tuneup;
+      if (r.ok && t) {
+        const f = t.findings.find((x) => x.id === fix_id);
+        if (f) f.fixed = true;
+      }
+      return json({ ok: !!r.ok, message: r.message });
+    },
+
+    run_speed_test: async () => {
+      toolLine("speed", "Testing internet speed (about 15 seconds)…");
+      const r = await ui.api("POST", "/api/speedtest", {});
+      ui.setSpeed(r);
+      if (r.ok) toolLine("check", `${r.downloadMbps} Mbps down, ${r.uploadMbps} Mbps up, ${r.latencyMs} ms`);
+      return json(r.ok ? { download_mbps: r.downloadMbps, upload_mbps: r.uploadMbps, latency_ms: r.latencyMs, jitter_ms: r.jitterMs } : { ok: false, message: r.message });
+    },
+
+    network_info: async () => {
+      const r = await ui.api("GET", "/api/network?fresh=1");
+      const router = ui.state.devices.find((d) => d.kind === "router");
+      return json({
+        network: r.network ? { range: r.network.cidr, router_address: r.network.gateway, this_computer: r.network.address } : null,
+        this_computers_wifi: r.wifi ? { network_name: r.wifi.ssid, signal_percent: r.wifi.signalPct, band: r.wifi.band, channel: r.wifi.channel, link_mbps: r.wifi.rateMbps } : "not on WiFi, or the system didn't say",
+        internet: r.internet ? { online: r.internet.online, latency_ms: r.internet.latencyMs } : null,
+        router: router ? { name: router.name, connection: router.state?.connection, uptime: router.state?.uptime, open_port_forwards: router.info?.portForwards?.length ?? undefined, line_speed_mbps: router.info?.linkDownMbps ? `${router.info.linkDownMbps} down / ${router.info.linkUpMbps} up` : undefined, double_nat_or_cgnat: router.info?.externalIsPrivate || undefined } : null,
+        last_speed_test: r.speed?.ok ? { download_mbps: r.speed.downloadMbps, upload_mbps: r.speed.uploadMbps, latency_ms: r.speed.latencyMs } : undefined,
+        note: "Don't read out IP addresses unless asked.",
+      });
+    },
+
+    open_device_page: async ({ device } = {}) => {
+      const { device: d, error } = await resolve(device);
+      if (error) return error;
+      if (!d.webUrl) return json({ ok: false, message: `${d.name} doesn't have a settings web page.` });
+      const el = add("link", `<strong>${ui.esc(d.name)}</strong><div>Its settings page is ready.</div><div class="btns"><a class="btn btn--sm btn--primary" href="${ui.esc(d.webUrl)}" target="_blank" rel="noopener noreferrer">${icon("external", 14)} Open settings page</a></div>`, { raw: true });
+      el.scrollIntoView({ block: "nearest" });
+      return json({ ok: true, message: "A button to open the page is on screen now (browsers block pages from opening by themselves). Tell the person to tap it." });
+    },
+  };
+
+  // ── sessions ──
+  async function begin(nextMode) {
+    if (status !== "idle") return;
+    notice(null);
+    status = "connecting";
+    render();
+    try {
+      await loadSdk();
+      const r = await ui.api("POST", "/api/voice/session", { mode: nextMode });
+      if (!r.ok) {
+        status = "idle";
+        render();
+        notice(r.message, { settings: ["nokey", "auth", "agent"].includes(r.error) });
+        if (pendingText) {
+          add("system", "Not sent: voice isn't set up yet.");
+          pendingText = null;
+        }
+        return;
+      }
+      mode = nextMode;
+      const auth = r.auth.conversationToken ? { conversationToken: r.auth.conversationToken, connectionType: "webrtc" } : { signedUrl: r.auth.signedUrl, connectionType: "websocket" };
+      await window.ElevenLabsClient.Conversation.startSession({
+        ...auth,
+        textOnly: nextMode === "text",
+        clientTools: tools,
+        onConversationCreated: (c) => {
+          conv = c;
+        },
+        onConnect: () => {
+          status = "connected";
+          render();
+          add("system", nextMode === "voice" ? "Connected. Start talking." : "Connected.");
+          sendContext();
+          lastIds = ui.state.devices.map((d) => d.id).sort().join();
+          if (pendingText) {
+            const t = pendingText;
+            pendingText = null;
+            lastUserAt = Date.now();
+            conv.sendUserMessage(t);
+          }
+          animate();
+        },
+        onDisconnect: () => {
+          status = "idle";
+          conv = null;
+          mode = null;
+          speaking = false;
+          muted = false;
+          pending.clear();
+          add("system", "Conversation ended.");
+          render();
+        },
+        onMessage: ({ message, role }) => {
+          if (!message?.trim()) return;
+          if (role === "user") {
+            lastUserAt = Date.now();
+            const last = els.log.lastElementChild;
+            if (last?.classList.contains("msg--user") && last.textContent === message) return;
+            add("user", message);
+          } else add("agent", message);
+        },
+        onModeChange: ({ mode: m }) => {
+          speaking = m === "speaking";
+          render();
+        },
+        onError: (msg) => {
+          console.warn("[patch voice]", msg);
+          notice(friendlyError(msg));
+        },
+      });
+    } catch (err) {
+      status = "idle";
+      conv = null;
+      render();
+      notice(friendlyError(err?.message || err));
+    }
+  }
+
+  async function say(text) {
+    const t = text.trim();
+    if (!t) return;
+    openPanel();
+    if (status === "connected" && conv) {
+      reply(t);
+      return;
+    }
+    add("user", t);
+    pendingText = t;
+    await begin("text");
+  }
+
+  function openPanel() {
+    els.panel.classList.add("is-open");
+    render();
+  }
+
+  // ── wiring ──
+  els.form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const t = els.text.value;
+    els.text.value = "";
+    say(t);
+  });
+  els.controls.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-voice]");
+    if (!b) return;
+    const what = b.dataset.voice;
+    if (what === "talk") {
+      if (status === "connected") {
+        await conv?.endSession();
+        setTimeout(() => begin("voice"), 300);
+      } else begin("voice");
+    } else if (what === "end") conv?.endSession();
+    else if (what === "mute" && conv) {
+      muted = !muted;
+      conv.setMicMuted(muted);
+      render();
+    }
+  });
+  els.log.addEventListener("click", (e) => {
+    const p = e.target.closest("[data-prompt]");
+    if (p) say(p.dataset.prompt);
+  });
+  els.fab.addEventListener("click", openPanel);
+  els.close.addEventListener("click", () => {
+    els.panel.classList.remove("is-open");
+    render();
+  });
+
+  intro();
+  render();
+
+  return {
+    refresh: render,
+    /** Keep the agent's picture of the network current while it's listening. */
+    devicesChanged(list) {
+      if (!conv || status !== "connected") return;
+      const ids = list.map((d) => d.id).sort().join();
+      if (ids === lastIds) return;
+      const before = new Set(lastIds.split(","));
+      const now = new Set(ids.split(","));
+      lastIds = ids;
+      const added = list.filter((d) => !before.has(d.id)).map((d) => d.name);
+      const gone = [...before].filter((id) => id && !now.has(id)).length;
+      conv.sendContextualUpdate(`The device list changed${added.length ? `. New: ${added.slice(0, 15).join(", ")}` : ""}${gone ? `. ${gone} removed` : ""}. Full list:\n${directory()}`);
+    },
+    uiActivity(text) {
+      if (conv && status === "connected") conv.sendContextualUpdate(text);
+    },
+    /** Exposed for automated checks in development. */
+    tools,
+  };
+}

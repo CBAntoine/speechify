@@ -51,3 +51,7 @@ At connect time the page sends Sol the date, the player's tier, what they're vie
 ## Data and credits
 
 Map data © OpenStreetMap contributors (ODbL) via OpenFreeMap and OpenMapTiles. Natural Earth (public domain). AWS Terrain Tiles. News headlines link to the original publishers; the site never republishes articles. Pins carry confidence labels: **Confirmed**, **Reported** or **Theory**. Theories are the site's own inferences and are labelled as such.
+
+## Also in this repo: Patch, a voice assistant for your home WiFi
+
+[`patch/`](patch/README.md) is a separate app you run on your own computer. It finds every device on your home network, controls lights, TVs, speakers, plugs, printers and more, and runs a network tune-up, all by talking to an ElevenLabs agent called Patch. It has its own `package.json` and is not part of the website build. Start with `cd patch && npm install && npm start`, or try it on a simulated home with `npm run demo`.
