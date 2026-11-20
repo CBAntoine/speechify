@@ -11,3 +11,4 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 scripts/.cache/
 public/vendor/
+microsites/dist/

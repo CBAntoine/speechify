@@ -16,7 +16,9 @@
     "postinstall": "node scripts/copy-vendor.mjs",
     "predev": "node scripts/copy-vendor.mjs",
     "prebuild": "node scripts/copy-vendor.mjs",
-    "test": "node --test scripts/test/*.test.mjs"
+    "test": "node --test scripts/test/*.test.mjs",
+    "sites:build": "node microsites/build.mjs",
+    "sites:test": "node --test microsites/test/*.test.mjs"
   },
   "engines": {
     "node": ">=20.9"
