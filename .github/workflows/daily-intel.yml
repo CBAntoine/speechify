@@ -1,0 +1,55 @@
+name: Daily intel
+
+# Refreshes the news feed + daily brief and publishes approved community pins.
+# Each commit to the default branch redeploys the site (e.g. on Vercel).
+on:
+  schedule:
+    - cron: "17 10 * * *" # every day at 10:17 UTC (≈ 5:17 a.m. ET)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: daily-intel
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Publish approved community pins
+        run: node scripts/ingest-submissions.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Update news + daily brief
+        run: node scripts/update-intel.mjs
+        env:
+          # Optional: set this repository secret for AI-written daily briefs.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit changes
+        run: |
+          git config user.name "neon-atlas-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "Nothing new today."
+            exit 0
+          fi
+          git commit -m "Daily intel: $(date -u +%F)"
+          git push

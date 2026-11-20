@@ -10,7 +10,7 @@ import {
   useConversationStatus,
 } from "@elevenlabs/react";
 import { Icon } from "@/components/icons";
-import { CATEGORIES, locationById, regionById } from "@/lib/data";
+import { CATEGORIES, LOCATIONS, isPlaced, locationById, regionById } from "@/lib/data";
 import { mapStore, useMapStore } from "@/lib/map-store";
 import { longDate } from "@/lib/format";
 import { SITE } from "@/lib/site";
@@ -86,6 +86,8 @@ function VoiceDock() {
   useConversationClientTool("get_latest_news", tools.get_latest_news);
   useConversationClientTool("get_tips", tools.get_tips);
   useConversationClientTool("reset_map", tools.reset_map);
+  useConversationClientTool("go_to_place", tools.go_to_place);
+  useConversationClientTool("plan_route", tools.plan_route);
 
   // Keep the agent aware of what the user is looking at.
   useEffect(() => {
@@ -166,6 +168,12 @@ function VoiceDock() {
           const loc = locationById(mapStore.get().selectedId);
           sendContextualUpdate(
             `Context: today is ${longDate(new Date().toISOString())}. The user is on the ${data.tier === "crew" ? "Crew Pass (paid)" : "free"} tier and is using ${SITE.name}${loc ? `, currently viewing "${loc.name}" (id ${loc.id})` : ""}.`,
+          );
+          // Today's pins (new ones land daily), so the agent can pass exact ids.
+          sendContextualUpdate(
+            `Current pin directory (id: name). Pass these ids to show_location, go_to_place and plan_route.\n${LOCATIONS.slice(0, 150)
+              .map((l) => `${l.id}: ${l.name}${isPlaced(l) ? "" : " (not on the map yet)"}`)
+              .join("\n")}`,
           );
           if (pendingText.current) {
             const t = pendingText.current;

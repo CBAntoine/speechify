@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import GeoMap from "./GeoMap";
 import MapPanel from "./MapPanel";
 import SubmitFind from "./SubmitFind";
+import RouteCard from "./RouteCard";
 import VoiceGuide from "@/components/voice/VoiceGuide";
 import { locationById, regionById } from "@/lib/data";
 import { mapStore, useMapStore } from "@/lib/map-store";
@@ -69,6 +70,7 @@ export default function MapExplorer({
           <Icon name="pinPlus" size={18} />
         </button>
       </div>
+      <RouteCard />
       <p className="map-credit">Real-world Florida as Leonida&apos;s stand-in · in-game layout differs · zones approximate</p>
       {editMode && <p className="edit-flag">Curator mode: click the map to copy coordinates</p>}
       <VoiceGuide />

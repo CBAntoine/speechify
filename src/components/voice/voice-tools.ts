@@ -11,6 +11,7 @@ import {
   gridRef,
   isPlaced,
   latestNews,
+  locationById,
   regionById,
   resolveLocation,
   resolveRegion,
@@ -18,6 +19,8 @@ import {
   searchTips,
 } from "@/lib/data";
 import { mapStore } from "@/lib/map-store";
+import { formatDistance, haversineM, type TravelMode } from "@/lib/geo-utils";
+import { planRoute, resolveSpot, showSpot, type Spot } from "@/lib/spots";
 import type { CategoryId, Confidence, MapLocation } from "@/lib/types";
 
 export type ToolLog = (text: string) => void;
@@ -52,6 +55,16 @@ function brief(l: MapLocation) {
 }
 
 const json = (v: unknown) => JSON.stringify(v);
+
+function problem(p: Exclude<Spot, { ok: true }>) {
+  if (p.reason === "unplaced") {
+    return { found: true, ...brief(p.loc), on_map: false, message: `${p.loc.name} isn't placed on the map yet, so there's nothing to fly to.` };
+  }
+  if (p.reason === "unavailable") return { found: false, message: "Street search is offline right now. Try a pin or region name." };
+  return { found: false, message: `Couldn't find "${p.query}" on the map.` };
+}
+
+const asMode = (v: unknown): TravelMode => (v === "walking" || v === "cycling" ? v : "driving");
 
 export function makeVoiceTools(log: ToolLog) {
   return {
@@ -134,9 +147,56 @@ export function makeVoiceTools(log: ToolLog) {
       });
     },
 
+    go_to_place: async (params: { place?: string; query?: string; name?: string }) => {
+      const q = String(params.place || params.query || params.name || "");
+      const spot = await resolveSpot(q);
+      if (!spot.ok) return json(problem(spot));
+      showSpot(spot);
+      if (spot.kind === "pin") {
+        log(`📍 Showing ${spot.loc.name}`);
+        return json({ found: true, type: "pin", ...brief(spot.loc), steps: spot.loc.steps ?? [], note: CONFIDENCE[spot.loc.confidence].help });
+      }
+      if (spot.kind === "region") {
+        log(`🗺️ Flying to ${spot.region.name}`);
+        return json({ found: true, type: "region", name: spot.region.name, tagline: spot.region.tagline });
+      }
+      if (spot.kind === "place") {
+        const p = spot.place;
+        log(`📍 ${p.name}`);
+        return json({
+          found: true,
+          type: "real_world_place",
+          name: p.name,
+          where: p.label,
+          kind: p.kind,
+          leonida_region: regionById(p.region)?.name ?? null,
+          nearby_pins: p.nearby.slice(0, 5).map((id) => {
+            const l = locationById(id)!;
+            return { id, name: l.name, distance: isPlaced(l) ? formatDistance(haversineM([p.lng, p.lat], [l.lng, l.lat])) : null };
+          }),
+          note: "A real-world spot on the stand-in map; the in-game layout differs.",
+        });
+      }
+      return json({ found: true, type: "current_view", name: spot.end.name });
+    },
+
+    plan_route: async (params: { destination?: string; to?: string; origin?: string; from?: string; mode?: string }) => {
+      const dest = String(params.destination || params.to || "");
+      if (!dest) return json({ ok: false, message: "Which destination?" });
+      log("🧭 Planning a route…");
+      const res = await planRoute(dest, params.origin || params.from, asMode(params.mode));
+      if (!res.ok) {
+        if ("needOrigin" in res) return json({ ok: false, message: `Ask where they're starting from; the map is already on ${res.to}.` });
+        return json({ ok: false, ...problem(res.problem) });
+      }
+      log(`🧭 ${res.summary.distance} to ${res.summary.to}`);
+      return json({ ok: true, ...res.summary });
+    },
+
     reset_map: () => {
       mapStore.resetFilters();
       mapStore.back();
+      mapStore.clearRoute();
       mapStore.home();
       log("↺ Reset the map");
       return json({ ok: true });

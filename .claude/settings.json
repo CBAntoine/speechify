@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ElevenLabs__agents_get",
+      "mcp__ElevenLabs__agents_get_config_summary",
+      "mcp__ElevenLabs__agents_get_settings",
+      "mcp__ElevenLabs__agents_get_link",
+      "mcp__ElevenLabs__agents_read_string_field",
+      "mcp__ElevenLabs__agents_edit_string_field",
+      "mcp__ElevenLabs__agents_update_prompt_settings",
+      "mcp__ElevenLabs__agents_update_agent_behavior",
+      "mcp__ElevenLabs__agents_update_conversation",
+      "mcp__ElevenLabs__agents_update_client_overrides",
+      "mcp__ElevenLabs__agents_update_operations",
+      "mcp__ElevenLabs__agents_update_settings",
+      "mcp__ElevenLabs__agents_update_guardrails",
+      "mcp__ElevenLabs__agents_update_voice",
+      "mcp__ElevenLabs__agents_update_turn_taking",
+      "mcp__ElevenLabs__agents_update_speech_recognition",
+      "mcp__ElevenLabs__agents_update_analysis",
+      "mcp__ElevenLabs__agents_publish_draft",
+      "mcp__ElevenLabs__agents_list_tools",
+      "mcp__ElevenLabs__agents_get_tool",
+      "mcp__ElevenLabs__agents_create_tool",
+      "mcp__ElevenLabs__agents_update_tool",
+      "mcp__ElevenLabs__agents_attach_tool",
+      "mcp__ElevenLabs__agents_detach_tool",
+      "mcp__ElevenLabs__agents_list_tests",
+      "mcp__ElevenLabs__agents_get_test",
+      "mcp__ElevenLabs__agents_create_test",
+      "mcp__ElevenLabs__agents_update_test",
+      "mcp__ElevenLabs__agents_attach_test",
+      "mcp__ElevenLabs__agents_run_tests",
+      "mcp__ElevenLabs__agents_run_attached_tests",
+      "mcp__ElevenLabs__agents_list_test_runs",
+      "mcp__ElevenLabs__agents_get_test_run",
+      "mcp__ElevenLabs__agents_get_test_run_summary",
+      "mcp__ElevenLabs__agents_get_test_run_failures"
+    ]
+  }
+}

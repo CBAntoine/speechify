@@ -2,12 +2,41 @@
 
 import { useSyncExternalStore } from "react";
 import type { CategoryId, Confidence, RegionId } from "./types";
+import type { LngLat, RouteResult } from "./geo-utils";
 
 export type FlyRequest =
   | { kind: "location"; id: string; nonce: number }
   | { kind: "region"; id: RegionId; nonce: number }
   | { kind: "fit"; ids: string[]; nonce: number }
-  | { kind: "home"; nonce: number };
+  | { kind: "home"; nonce: number }
+  | { kind: "place"; nonce: number }
+  | { kind: "route"; nonce: number }
+  | { kind: "point"; center: LngLat; zoom: number; nonce: number };
+
+/** A spot that isn't a pin: a real-world street, landmark or neighbourhood. */
+export interface PlaceFocus {
+  name: string;
+  label: string;
+  lng: number;
+  lat: number;
+  kind: string;
+  bbox: [number, number, number, number] | null;
+  region: RegionId | null;
+  /** Nearby pins (ids), closest first. */
+  nearby: string[];
+}
+
+export interface RouteEnd {
+  name: string;
+  lng: number;
+  lat: number;
+  locationId?: string;
+}
+
+export interface RouteState extends RouteResult {
+  from: RouteEnd;
+  to: RouteEnd;
+}
 
 export interface MapState {
   selectedId: string | null;
@@ -25,6 +54,11 @@ export interface MapState {
   voiceOpen: boolean;
   /** 3D tilt of the camera. */
   pitched: boolean;
+  /** Street/landmark the guide or search flew to (shows a popup). */
+  place: PlaceFocus | null;
+  route: RouteState | null;
+  /** Bumped to reopen the popup for the current selection after it was closed. */
+  popupNonce: number;
 }
 
 const initial: MapState = {
@@ -40,11 +74,16 @@ const initial: MapState = {
   sheetOpen: false,
   voiceOpen: false,
   pitched: false,
+  place: null,
+  route: null,
+  popupNonce: 0,
 };
 
 let state: MapState = initial;
 const listeners = new Set<() => void>();
 let nonce = 0;
+/** Camera centre, kept outside the store so panning doesn't re-render anything. */
+let view: { center: LngLat; zoom: number } = { center: [-81.2, 27.4], zoom: 6 };
 
 function set(patch: Partial<MapState>) {
   state = { ...state, ...patch };
@@ -61,6 +100,8 @@ export const mapStore = {
     set({
       selectedId: id,
       selectedRegion: null,
+      place: id ? null : state.place,
+      popupNonce: ++nonce,
       sheetOpen: id ? true : state.sheetOpen,
       fly: id && opts.fly !== false ? { kind: "location", id, nonce: ++nonce } : state.fly,
     });
@@ -69,12 +110,38 @@ export const mapStore = {
     set({
       selectedRegion: id,
       selectedId: null,
+      place: id ? null : state.place,
       sheetOpen: id ? true : state.sheetOpen,
       fly: id && opts.fly !== false ? { kind: "region", id, nonce: ++nonce } : state.fly,
     });
   },
   back() {
-    set({ selectedId: null, selectedRegion: null });
+    set({ selectedId: null, selectedRegion: null, place: null });
+  },
+  focusPlace(place: PlaceFocus, opts: { fly?: boolean } = {}) {
+    set({
+      place,
+      selectedId: null,
+      selectedRegion: null,
+      popupNonce: ++nonce,
+      fly: opts.fly !== false ? { kind: "place", nonce: ++nonce } : state.fly,
+    });
+  },
+  flyTo(center: LngLat, zoom: number) {
+    set({ fly: { kind: "point", center, zoom, nonce: ++nonce } });
+  },
+  clearPlace() {
+    set({ place: null });
+  },
+  setRoute(route: RouteState) {
+    set({ route, fly: { kind: "route", nonce: ++nonce } });
+  },
+  clearRoute() {
+    set({ route: null });
+  },
+  view: () => view,
+  setView(v: { center: LngLat; zoom: number }) {
+    view = v;
   },
   toggleCategory(id: CategoryId) {
     const has = state.categories.includes(id);

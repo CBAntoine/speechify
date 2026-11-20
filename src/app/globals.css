@@ -2513,3 +2513,328 @@ a.tip-card__src:hover {
     animation: none;
   }
 }
+
+/* ---------- Street-level map: popups, places, routes ---------- */
+.is-street .region-label,
+.is-street .grid-label {
+  opacity: 0;
+  pointer-events: none;
+}
+.na-popup--rich .maplibregl-popup-content {
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  padding: 14px 16px 12px;
+  font-family: var(--font-body);
+}
+.na-popup--rich .maplibregl-popup-close-button {
+  color: var(--text-3);
+  font-size: 20px;
+  line-height: 1;
+  right: 6px;
+  top: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.na-popup--rich .maplibregl-popup-close-button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.pop {
+  width: min(296px, 72vw);
+}
+.pop__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 22px 6px 0;
+}
+.pop__cat {
+  font: 600 11px/1 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c);
+}
+.pop__conf {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--cc);
+  border: 1px solid color-mix(in srgb, var(--cc) 45%, transparent);
+}
+.pop__title {
+  font: 600 16px/1.25 var(--font-display);
+  margin: 0 0 6px;
+}
+.pop__text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin: 0 0 8px;
+}
+.pop__sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  margin: 10px 0 4px;
+}
+.pop__steps {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.pop__list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.pop__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.pop__link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--sky);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.pop__note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
+.pop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pop__actions:empty {
+  display: none;
+}
+.pop__btn {
+  font: 600 12px/1 var(--font-body);
+  padding: 8px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+}
+.pop__btn--primary {
+  background: var(--grad-sunset);
+  border-color: transparent;
+  color: #14070d;
+}
+.pop__btn:hover {
+  filter: brightness(1.12);
+}
+.place-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sky);
+  border: 3px solid #fff;
+  box-shadow: 0 0 22px rgba(77, 178, 255, 0.85);
+  animation: place-pulse 2.2s ease-out infinite;
+}
+@keyframes place-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(77, 178, 255, 0.55), 0 0 22px rgba(77, 178, 255, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 20px rgba(77, 178, 255, 0), 0 0 22px rgba(77, 178, 255, 0.85);
+  }
+}
+.route-end {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  font: 700 12px/1 var(--font-display);
+  color: #05060d;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+}
+.route-end::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 14px;
+  background: #fff;
+  transform: translateX(-50%);
+}
+.route-end--a {
+  background: var(--teal);
+}
+.route-end--b {
+  background: var(--pink);
+  color: #fff;
+}
+.route-card {
+  position: absolute;
+  z-index: 640;
+  left: calc(var(--panel-w) + var(--gutter) * 2);
+  top: var(--gutter);
+  width: min(400px, calc(100% - var(--panel-w) - 140px));
+  background: var(--surface-strong);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  padding: 12px 14px;
+}
+.explorer:has(.route-card) .map-credit {
+  display: none;
+}
+.route-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.route-card__ends {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.route-card__ends b {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  border-radius: 50%;
+  font: 700 10px/1 var(--font-display);
+  vertical-align: 1px;
+}
+.route-card__a {
+  background: var(--teal);
+  color: #05060d;
+}
+.route-card__b {
+  background: var(--pink);
+  color: #fff;
+  margin-left: 2px;
+}
+.route-card__close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.route-card__stats {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.route-card__stats strong {
+  font: 600 18px/1 var(--font-display);
+  color: var(--text);
+}
+.route-card__modes {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.route-card__modes button {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 12px/1 var(--font-body);
+  cursor: pointer;
+}
+.route-card__modes button.is-on {
+  background: var(--grad-lagoon);
+  border-color: transparent;
+  color: #04121a;
+}
+.route-card__warn,
+.route-card__note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.route-card__warn {
+  color: var(--gold);
+}
+.route-card__toggle {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sky);
+  font: 600 12px/1.4 var(--font-body);
+  cursor: pointer;
+}
+.route-card__steps {
+  max-height: 34vh;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 0 4px 0 20px;
+  display: grid;
+  gap: 7px;
+  font-size: 12.5px;
+}
+.route-card__steps button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.route-card__steps span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+}
+@media (max-width: 1023px) {
+  .route-card {
+    left: 12px;
+    right: 66px;
+    top: 12px;
+    width: auto;
+  }
+  .route-card__steps {
+    max-height: 26vh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .place-dot {
+    animation: none;
+  }
+}

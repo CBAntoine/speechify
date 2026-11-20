@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MLMap, Marker as MLMarker, LngLatBoundsLike } from "maplibre-gl";
+import type { GeoJSONSource, Map as MLMap, Marker as MLMarker, LngLatBoundsLike, Popup as MLPopup } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { CATEGORIES, GEO, LOCATIONS, REGIONS, isPlaced, locationById, regionById, regionBounds, searchLocations } from "@/lib/data";
 import { mapStore, type MapState } from "@/lib/map-store";
 import { CATEGORY_GLYPHS } from "@/components/icons";
-import { STREET_TILES_URL, addStreetLayers, buildStyle } from "./map-style";
+import { STREET_MAX_ZOOM, STREET_TILES_URL, addStreetLayers, buildStyle, removeStreetLayers } from "./map-style";
+import { locationPopup, placePopup } from "./popups";
+import { bboxOf } from "@/lib/geo-utils";
+import { drawRoute, previousFocus, trackFocus } from "@/lib/spots";
+
+const EMPTY = { type: "FeatureCollection" as const, features: [] };
+/** Below this zoom a click on land picks a region; above it you're reading streets. */
+const REGION_CLICK_MAX_ZOOM = 10;
 
 interface Props {
   /** Home page: page scroll wins; Ctrl/⌘ + scroll or two fingers move the map (MapLibre cooperative gestures). */
@@ -88,7 +95,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           fitBoundsOptions: { padding: layoutInsets(container) },
           maxBounds: MAX_BOUNDS,
           minZoom: 4.4,
-          maxZoom: STREET_TILES_URL ? 16.5 : 12.5,
+          maxZoom: STREET_TILES_URL ? STREET_MAX_ZOOM : 12.5,
           maxPitch: 68,
           cooperativeGestures: cooperative,
           attributionControl: { compact: true },
@@ -105,6 +112,9 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
       const markers = new Map<string, { marker: MLMarker; el: HTMLDivElement }>();
       let streetsOn = false;
       let pickMarker: MLMarker | null = null;
+      let placeMarker: MLMarker | null = null;
+      let routeMarkers: MLMarker[] = [];
+      let popup: MLPopup | null = null;
       let hoverRegion: string | null = null;
       let activeRegion: string | null = null;
       let prev: MapState | null = null;
@@ -128,11 +138,69 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           if (sourceId === "streets" && streetsOn) {
             streetsOn = false;
             container.classList.remove("has-streets");
-            for (const id of ["streets-buildings", "streets-roads", "streets-water"]) if (map.getLayer(id)) map.removeLayer(id);
+            removeStreetLayers(map);
             map.setMaxZoom(12.5);
             console.warn("[map] street tiles failed to load; continuing without street detail");
           }
         });
+
+        // Route line (cyan → pink), drawn under street labels so names stay readable.
+        map.addSource("route", { type: "geojson", data: EMPTY, lineMetrics: true });
+        const beforeLabels = map.getLayer("streets-water-name") ? "streets-water-name" : undefined;
+        const round = { "line-cap": "round", "line-join": "round" } as const;
+        map.addLayer(
+          {
+            id: "route-glow",
+            type: "line",
+            source: "route",
+            layout: round,
+            paint: {
+              "line-color": "#ff4f9a",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 8, 12, 16, 28],
+              "line-blur": 10,
+              "line-opacity": 0.4,
+            },
+          },
+          beforeLabels,
+        );
+        map.addLayer(
+          {
+            id: "route-casing",
+            type: "line",
+            source: "route",
+            layout: round,
+            paint: { "line-color": "#05060d", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 7, 16, 15] },
+          },
+          beforeLabels,
+        );
+        map.addLayer(
+          {
+            id: "route-line",
+            type: "line",
+            source: "route",
+            filter: ["!", ["get", "approx"]],
+            layout: round,
+            paint: {
+              "line-width": ["interpolate", ["linear"], ["zoom"], 8, 4, 16, 9],
+              "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, "#25e2d0", 0.45, "#4db2ff", 1, "#ff4f9a"],
+            },
+          },
+          beforeLabels,
+        );
+        map.addLayer(
+          {
+            id: "route-dashed",
+            type: "line",
+            source: "route",
+            filter: ["get", "approx"],
+            paint: {
+              "line-color": "#ffd166",
+              "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 16, 7],
+              "line-dasharray": [1.4, 1.2],
+            },
+          },
+          beforeLabels,
+        );
 
         // Region labels.
         for (const r of REGIONS) {
@@ -193,12 +261,12 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
 
         // Region hover / click (feature-state driven styling).
         map.on("mousemove", "regions-fill", (e) => {
-          const id = (e.features?.[0]?.id as string | undefined) ?? null;
+          const id = map.getZoom() > REGION_CLICK_MAX_ZOOM ? null : ((e.features?.[0]?.id as string | undefined) ?? null);
           if (id === hoverRegion) return;
           if (hoverRegion) map.setFeatureState({ source: "regions", id: hoverRegion }, { hover: false });
           hoverRegion = id;
           if (id) map.setFeatureState({ source: "regions", id }, { hover: true });
-          map.getCanvas().style.cursor = mapStore.get().picking || editMode ? "crosshair" : "pointer";
+          map.getCanvas().style.cursor = mapStore.get().picking || editMode ? "crosshair" : id ? "pointer" : "";
         });
         map.on("mouseleave", "regions-fill", () => {
           if (hoverRegion) map.setFeatureState({ source: "regions", id: hoverRegion }, { hover: false });
@@ -206,7 +274,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           map.getCanvas().style.cursor = mapStore.get().picking ? "crosshair" : "";
         });
         map.on("click", "regions-fill", (e) => {
-          if (mapStore.get().picking || editMode) return;
+          if (mapStore.get().picking || editMode || map.getZoom() > REGION_CLICK_MAX_ZOOM) return;
           const id = e.features?.[0]?.id as (typeof REGIONS)[number]["id"] | undefined;
           if (id) mapStore.selectRegion(id);
         });
@@ -245,6 +313,10 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         if (req.kind === "location") {
           const loc = locationById(req.id);
           if (!loc || !isPlaced(loc)) return;
+          if (loc.placement === "exact" || !loc.radiusKm) {
+            map.flyTo({ center: [loc.lng, loc.lat], zoom: streetsOn ? 16.5 : 10.5, padding: layoutInsets(container), duration: 1600, essential: true });
+            return;
+          }
           const km = Math.max(loc.radiusKm ?? 1.5, 1.2);
           const dLat = (km * 1.35) / 110.574;
           const dLng = (km * 1.35) / (111.32 * Math.cos((loc.lat * Math.PI) / 180));
@@ -253,8 +325,43 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
               [loc.lng - dLng, loc.lat - dLat],
               [loc.lng + dLng, loc.lat + dLat],
             ],
-            { ...fitOptions(), maxZoom: streetsOn ? 13.5 : 10.5 },
+            { ...fitOptions(), maxZoom: streetsOn ? 15 : 10.5 },
           );
+          return;
+        }
+        if (req.kind === "place") {
+          const p = mapStore.get().place;
+          if (!p) return;
+          const b = p.bbox;
+          if (b && b[2] - b[0] > 0.0005 && b[3] - b[1] > 0.0005) {
+            const big = b[2] - b[0] > 0.08 || b[3] - b[1] > 0.08;
+            map.fitBounds(
+              [
+                [b[0], b[1]],
+                [b[2], b[3]],
+              ],
+              { ...fitOptions(), maxZoom: streetsOn ? (big ? 14 : 17) : 11 },
+            );
+          } else {
+            map.flyTo({ center: [p.lng, p.lat], zoom: streetsOn ? 16.5 : 11, padding: layoutInsets(container), duration: 1600, essential: true });
+          }
+          return;
+        }
+        if (req.kind === "route") {
+          const r = mapStore.get().route;
+          if (!r) return;
+          const [w, s, e, n] = bboxOf(r.coords);
+          map.fitBounds(
+            [
+              [w, s],
+              [e, n],
+            ],
+            { ...fitOptions(), maxZoom: streetsOn ? 16 : 11 },
+          );
+          return;
+        }
+        if (req.kind === "point") {
+          map.flyTo({ center: req.center, zoom: Math.min(req.zoom, streetsOn ? 18 : 12), padding: layoutInsets(container), essential: true });
           return;
         }
         if (req.kind === "region") {
@@ -333,6 +440,45 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
             });
           }
         }
+        if (!prev || prev.selectedId !== s.selectedId || prev.place !== s.place || prev.popupNonce !== s.popupNonce) {
+          trackFocus(s);
+          showPopup(s);
+        }
+        if (!prev || prev.place !== s.place) {
+          placeMarker?.remove();
+          placeMarker = null;
+          if (s.place) {
+            const el = document.createElement("div");
+            el.className = "place-dot";
+            el.setAttribute("aria-label", s.place.name);
+            placeMarker = new ml.Marker({ element: el, anchor: "center" }).setLngLat([s.place.lng, s.place.lat]).addTo(map);
+          }
+        }
+        if (!prev || prev.route !== s.route) {
+          const r = s.route;
+          (map.getSource("route") as GeoJSONSource | undefined)?.setData(
+            r
+              ? {
+                  type: "FeatureCollection",
+                  features: [{ type: "Feature", properties: { approx: r.approximate }, geometry: { type: "LineString", coordinates: r.coords } }],
+                }
+              : EMPTY,
+          );
+          routeMarkers.forEach((m) => m.remove());
+          routeMarkers = [];
+          if (r) {
+            for (const [end, tag] of [
+              [r.from, "A"],
+              [r.to, "B"],
+            ] as const) {
+              const el = document.createElement("div");
+              el.className = `route-end route-end--${tag.toLowerCase()}`;
+              el.textContent = tag;
+              el.title = end.name;
+              routeMarkers.push(new ml.Marker({ element: el, anchor: "bottom", offset: [0, -16] }).setLngLat([end.lng, end.lat]).addTo(map));
+            }
+          }
+        }
         if (prev && prev.pitched !== s.pitched) {
           map.easeTo({ pitch: s.pitched ? 58 : 0, bearing: s.pitched ? -14 : 0, duration: 1100 });
         }
@@ -340,11 +486,51 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         prev = s;
       };
 
+      const showPopup = (s: MapState) => {
+        popup?.remove();
+        popup = null;
+        let at: [number, number] | null = null;
+        let html = "";
+        const loc = s.selectedId ? locationById(s.selectedId) : undefined;
+        if (loc && isPlaced(loc)) {
+          at = [loc.lng, loc.lat];
+          html = locationPopup(loc, { narrow: container.clientWidth < 700, from: previousFocus() });
+        } else if (s.place) {
+          at = [s.place.lng, s.place.lat];
+          html = placePopup(s.place, { from: previousFocus() });
+        }
+        if (!at) return;
+        const here = { name: loc?.name ?? s.place!.name, lng: at[0], lat: at[1], locationId: loc?.id };
+        popup = new ml.Popup({ className: "na-popup na-popup--rich", offset: 26, maxWidth: "330px", focusAfterOpen: false })
+          .setLngLat(at)
+          .setHTML(html)
+          .addTo(map);
+        popup.getElement().addEventListener("click", (e) => {
+          const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
+          if (!btn) return;
+          const act = btn.dataset.act;
+          if (act === "guide") mapStore.setSheet(true);
+          else if (act === "pin" && btn.dataset.id) mapStore.selectLocation(btn.dataset.id);
+          else if (act === "route") {
+            const from = previousFocus();
+            if (from) void drawRoute(from, here);
+          }
+        });
+      };
+
       const unsub = mapStore.subscribe(() => {
         if (markers.size) apply(mapStore.get());
       });
-      const onZoom = () => container.classList.toggle("is-zoomed", map.getZoom() > 7.2);
+      const onZoom = () => {
+        const z = map.getZoom();
+        container.classList.toggle("is-zoomed", z > 7.2);
+        container.classList.toggle("is-street", z > 11.5);
+      };
       map.on("zoom", onZoom);
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        mapStore.setView({ center: [c.lng, c.lat], zoom: map.getZoom() });
+      });
 
       cleanup = () => {
         unsub();

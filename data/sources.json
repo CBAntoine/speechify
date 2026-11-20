@@ -1,0 +1,14 @@
+[
+  { "name": "IGN", "url": "https://feeds.feedburner.com/ign/games-all" },
+  { "name": "GameSpot", "url": "https://www.gamespot.com/feeds/news/" },
+  { "name": "Eurogamer", "url": "https://www.eurogamer.net/feed" },
+  { "name": "PC Gamer", "url": "https://www.pcgamer.com/rss/" },
+  { "name": "Polygon", "url": "https://www.polygon.com/rss/index.xml" },
+  { "name": "Kotaku", "url": "https://kotaku.com/rss" },
+  { "name": "VGC", "url": "https://www.videogameschronicle.com/feed/" },
+  { "name": "GamesRadar+", "url": "https://www.gamesradar.com/feeds/all/" },
+  { "name": "The Verge", "url": "https://www.theverge.com/rss/games/index.xml" },
+  { "name": "Push Square", "url": "https://www.pushsquare.com/feeds/latest" },
+  { "name": "Pure Xbox", "url": "https://www.purexbox.com/feeds/latest" },
+  { "name": "Insider Gaming", "url": "https://insider-gaming.com/feed/" }
+]
