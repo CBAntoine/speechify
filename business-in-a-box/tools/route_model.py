@@ -19,7 +19,7 @@ def flat(tw):
     ours = price * 12
     return dict(fan=P + fan_fee, ours=ours, venue_net=kept - ours)
 
-def per_ticket(tw, fee, minimum=99):
+def per_ticket(tw, fee, minimum=0):   # no monthly minimum (decision 2026-11-20); volume is qualified instead
     mo_tickets = tw * 52 / 12
     fan_fee = 2.00 + fee                       # the venue's ~$1.07 is preserved; our fee sits on top
     ours_mo = max(minimum, fee * mo_tickets)

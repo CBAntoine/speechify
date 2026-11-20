@@ -45,14 +45,14 @@ Photography and video b-roll: real empty rooms in the afternoon (stage, bar, doo
 ## Copy rules
 
 **Do**
-- **Lead with a number, and source every number.** Any dollar figure in an ad carries a fine-print line with its assumptions, e.g. *"$25 ticket, 2 per order, $2 venue fee, Stripe 2.9% + 30¢."*
+- **Lead with a number, and source every number.** Any dollar figure in an ad carries a fine-print line with its assumptions, e.g. *"$25 ticket, 2 per order, $2.75 booking fee incl. Marquee's 75¢, Stripe 2.9% + 30¢."*
 - **Talk like the venue talks:** the door, the room, capacity, doors at 7, on-sale, settlement. Use sparingly and correctly.
 - **Use honest-price language:** "one all-in price", "the fee stays with the house".
 - **Keep the reading level at grade 6–8:** short sentences, contractions fine.
 - **Use outcome CTAs:** "See what you'd keep", "Run my fee maths", "Book a 10-minute fee check".
 
 **Don't**
-- Don't say "free ticketing", "zero fees" or "commission-free" without saying **"no cut from us"**. Stripe's 2.9% + 30¢ still applies, and owners know it.
+- Don't say "free ticketing", "zero fees" or "commission-free". Marquee earns 75¢ a ticket and Stripe charges 2.9% + 30¢, and owners know it. Say **"no monthly fee"** instead, which is true: there is no subscription, minimum or setup fee.
 - Don't name competitors or use their logos or colours in public ads. Say "ticketing platforms" or "the big ticket sites". Naming Eventbrite with sourced rates is fine in one-to-one sales emails and calls.
 - **No fake testimonials, reviews or invented case studies**, including AI avatars posing as venue owners (FTC rule on consumer reviews and testimonials). Presenters speak as Marquee.
 - No hype words: revolutionary, game-changer, AI-powered, skyrocket, unlock.
@@ -74,11 +74,11 @@ Photography and video b-roll: real empty rooms in the afternoon (stage, bar, doo
 
 | # | Name | Motif | Headline | Payload |
 |---|---|---|---|---|
-| 1 | The Receipt | Receipt | YOUR FANS PAID A FEE. YOU KEPT $0. | Platform receipt: service fee $2.72 + processing $0.73 = $3.44, venue kept $0.00, struck through. Marquee receipt: your fee $2.00, you keep $1.07. |
-| 2 | Keep the Fee | Letterboard | KEEP THE FEE | "Your box office. Your Stripe. Your fans." Bulbs, CTA "See what you'd keep". |
-| 3 | The Big Number | House lights | $16,645 | "What a 300-ticket-a-week room keeps in a year with its own box office." Assumptions line. |
-| 4 | Same Ticket | Torn ticket | SAME TICKET. DIFFERENT WINNER. | Left stub: $3.44 to the platform. Right stub: $1.07 to you, and fans pay $1.45 less. |
-| 5 | Seven Days | Letterboard as run-of-show | YOUR BOX OFFICE. LIVE IN 7 DAYS. | MON kickoff → TUE build → WED shows loaded → THU website → FRI door drill → SAT list → SUN on sale. |
+| 1 | The Receipt | Receipt | YOUR FANS PAID A FEE. YOU KEPT $0. | Platform receipt: ticket $25.00, platform fees $3.54, total $28.54, "to the venue: $0.00" struck through in red. Marquee receipt: ticket $25.00, booking fee $2.75, total $27.75, "venue keeps $1.05" in green. |
+| 2 | Keep the Fee | Letterboard | KEEP THE FEE | "Your box office. Your Stripe. Your fans." + "No monthly fee." Bulbs, CTA "See what you'd keep". |
+| 3 | The Big Number | House lights | $16,306 | "What a 300-ticket-a-week room keeps in a year with its own box office. No monthly fee." Assumptions line. |
+| 4 | Same Ticket | Torn ticket | SAME TICKET. DIFFERENT WINNER. | Left stub: $3.54 to the platform. Right stub: $1.05 to you, and fans pay 79¢ less. |
+| 5 | Seven Days | Letterboard as run-of-show | YOUR BOX OFFICE. LIVE IN 7 DAYS. | MON kickoff → TUE build → WED shows loaded → THU website → FRI door drill → SAT list → SUN on sale. Footer: "No monthly fee. No setup fee." |
 
 ## Video (UGC) look
 

@@ -1,6 +1,6 @@
 # Business in a box: Marquee
 
-A done-for-you ticketing business for independent US venues, built on the open-source [Hi.Events](https://github.com/HiEventsDev/Hi.Events) platform. Marquee gives a venue its own branded box office, so it stops sending fans through Eventbrite and keeps its own booking fee. It's a flat $249/mo with no per-ticket cut.
+A done-for-you ticketing business for independent US venues, built on the open-source [Hi.Events](https://github.com/HiEventsDev/Hi.Events) platform. Marquee gives a venue its own branded box office, so it stops sending fans through Eventbrite and keeps its own booking fee. There's no monthly fee: Marquee earns 75¢ per paid ticket (50¢ under $20), built into an all-in price that's still lower for fans.
 
 This follows the "business in a box" process: offer ideas → niche and ICP → offer brief and style guide → verified leads → creatives, with an approval checkpoint between stages.
 
@@ -20,7 +20,7 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 
 - [x] Checkpoint 1: offer chosen (venue ticketing, US)
 - [x] ICP, offer brief, ROI maths, style guide, UGC scripts
-- [x] Most profitable route worked out (06). The switch to per-ticket pricing is waiting for your decision.
+- [x] Most profitable route worked out (06) and adopted: per-ticket pricing, docs updated
 - [ ] Checkpoint 2: approve 5 sample leads
 - [ ] Pull 15 more leads (20 total)
 - [ ] 5 static Meta ads

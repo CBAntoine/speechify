@@ -1,7 +1,7 @@
 # 03 · Offer brief: Marquee
 
 > **Marquee: own the door.**
-> A branded box office on your own website. Your Stripe account, your customer list, one honest all-in price, and a booking fee you keep. Live in 7 days for a flat monthly fee, with no cut from us on any ticket.
+> A branded box office on your own website. Your Stripe account, your customer list, one honest all-in price, and a booking fee you keep. **No monthly fee:** we earn 75¢ only when you sell, and your fans still pay less than on the big ticket sites. Live in 7 days.
 
 *"Marquee" is a working brand name. Run a USPTO trademark search before buying a domain or printing anything.*
 
@@ -18,46 +18,50 @@
 9. **Launch help:** we rebuild your upcoming shows, train your door staff, and send your list a "new box office" announcement.
 10. **Ongoing support:** monitoring, nightly backups, updates, and a Friday-night response plan.
 
-## Plans
+## Pricing
 
-| | Club | Hall |
-|---|---|---|
-| Tickets per month | Up to 2,000 | Unlimited |
-| Monthly | **$249** | **$449** |
-| Setup | $750, waived for founding venues and annual plans | Same |
-| Per-ticket cut from us | None | None |
-| Contract | Month to month | Month to month |
+| | |
+|---|---|
+| **Per paid ticket** | **75¢** on tickets of $20 and up, **50¢** under $20. Free tickets are free. |
+| Monthly fee | **None** |
+| Setup | **None.** The 7-day launch is included. |
+| Contract | Month to month. Cancel any time and take your events and customer list with you (CSV/XLSX). |
+| Billing | Invoiced monthly in arrears from your box office's sales report, charged to a card on file |
 
-**Founding-venue offer (first 10 venues):** setup waived, price locked for 12 months.
+How the fan's price is built for a $25 show: face value $25.00, plus a booking fee of $2.75 (your $2.00 plus our 75¢), so **$27.75 all-in**. That's the one price the fan sees.
 
-**Guarantee:** if the booking fees you keep in your first 60 days don't cover your subscription for those 60 days, we refund the difference.
+**Who we onboard:** venues selling **400+ paid tickets a month** (about 2+ ticketed shows a week). This is a qualification rule, not a fee. It keeps every account worth its setup time without adding a monthly minimum.
 
-**Add-ons, passed through at cost:** reserved seating and a door box office need the Hi.Events commercial licence (from €249/yr for your own events).
+**Negotiation lever, not advertised:** for very high-volume venues that push back, a monthly cap starting at $1,500/mo.
+
+**Add-on: "Fill the Room"** (proposed): weekly show emails to your list for $199/mo, plus retargeting ads for $399/mo + ad spend. Every extra ticket sold also earns our 75¢.
+
+**Passed through at cost:** reserved seating and a door box office need the Hi.Events commercial licence.
 
 ## The ROI maths (per venue)
 
-Assumptions: $25 average ticket, 2 tickets per order, a venue booking fee of $2.00 per ticket inside a $27 all-in price, and Stripe's US rate of 2.9% + 30¢ per order. Source rates: Eventbrite US 3.7% + $1.79 per ticket plus 2.9% processing; Stripe 2.9% + 30¢. Both checked 2026-11-20.
+Assumptions: $25 average ticket, 2 tickets per order, a $2.75 booking fee ($2.00 venue + 75¢ Marquee) inside a $27.75 all-in price, and Stripe US at 2.9% + 30¢ per order. Source rates: Eventbrite US 3.7% + $1.79 per ticket plus 2.9% processing; Stripe 2.9% + 30¢. Both checked 2026-11-20.
 
-**Per ticket today (Eventbrite):** $3.44 if the venue absorbs fees, or $3.54 if fees are passed to the buyer (buyer pays $28.54). The venue keeps **$0** of it.
+**Per ticket today (Eventbrite, fees passed to the fan):** the fan pays $28.54, of which **$3.54 is fees**. The venue keeps **$0** of it.
 
 **Per ticket with Marquee:**
-- Fan pays $27.00 all-in, about **$1.45 less** than an Eventbrite checkout.
-- Stripe takes about $0.93 per ticket.
-- Venue keeps **$1.07 per ticket**.
+- Fan pays $27.75 all-in, **79¢ less** than on Eventbrite.
+- Stripe takes about 95¢ and Marquee takes 75¢.
+- Venue keeps **$1.05 per ticket**, with no monthly fee.
 
-| Tickets/week | Tickets/yr | Fees kept/yr | Plan | Plan cost/yr | Net gain/yr | Return |
-|---|---|---|---|---|---|---|
-| 100 | 5,200 | $5,548 | Club | $2,988 | $2,560 | 1.9× |
-| 200 | 10,400 | $11,097 | Club | $2,988 | $8,109 | 3.7× |
-| **300** | **15,600** | **$16,645** | **Club** | **$2,988** | **$13,657** | **5.6×** |
-| 500 | 26,000 | $27,742 | Hall | $5,388 | $22,354 | 5.1× |
-| 800 | 41,600 | $44,387 | Hall | $5,388 | $38,999 | 8.2× |
+| Tickets/week | Tickets/yr | Venue keeps/yr | Marquee earns/yr |
+|---|---|---|---|
+| 100 | 5,200 | $5,435 | $3,900 |
+| 200 | 10,400 | $10,871 | $7,800 |
+| **300** | **15,600** | **$16,306** | **$11,700** |
+| 500 | 26,000 | $27,177 | $19,500 |
+| 800 | 41,600 | $43,482 | $31,200 |
 
-**Break-even:** about 233 tickets a month on Club.
+**Fans pay less than on Eventbrite at every price checked:** $12, $15, $20, $25 and $40 tickets. At $40+ the venue should raise its own fee to $3 (see `06-most-profitable-route.md`).
 
-**If the venue absorbs Eventbrite's fees today:** at 300 tickets/week it pays about $53.7k/yr. With Marquee and no added fee it pays about $13.7k in Stripe fees plus $3.0k for Club, **saving about $37k/yr**.
+**If the venue absorbs Eventbrite's fees today:** at 300 tickets/week it pays about $53.7k/yr. With Marquee and no fee added for fans, it pays only Stripe plus our 75¢, about $25.4k/yr, **saving about $28.3k/yr**.
 
-Recompute with each venue's own average price and volume before quoting: edit the inputs at the top of `tools/roi.py` and run `python3 tools/roi.py`.
+Recompute with each venue's own prices and volume before quoting: `python3 tools/roi.py` (inputs at the top of the file).
 
 ## The 7-day launch
 
@@ -73,16 +77,17 @@ Recompute with each venue's own average price and volume before quoting: edit th
 
 ## Delivery stack and unit economics
 
-- **Hi.Events** all-in-one Docker image on a small dedicated server per venue, so one venue's Friday never touches another's.
+- **One Hi.Events install per venue** (all-in-one Docker image) on a small dedicated server, so one venue's Friday never touches another's. Keeping one install per venue also avoids Hi.Events' platform licence for multi-organiser installs (see `06-most-profitable-route.md`).
 - **Transactional email** through an email provider (a Resend connector is already available in this workspace).
 - **Nightly off-server backups** and **uptime monitoring** with alerts to the operator's phone.
-- **Estimated cost per venue:** $30–60/mo in server, email and backups, about 75–88% gross margin on Club. Price the real stack before launch.
+- **Usage billing:** a monthly job reads paid-ticket counts from each install (reports or REST API) and invoices through Stripe Billing on Marquee's own account.
+- **Estimated cost per venue:** $30–60/mo in server, email and backups. At 300 tickets/week Marquee earns about $975/mo per venue, so **about 95% gross margin**. Price the real stack before launch.
 
 ## Compliance and licence obligations
 
-- **FTC Rule on Unfair or Deceptive Fees** (in force since May 12, 2025): live-event ticket prices must show the total price, mandatory fees included, upfront. Configure every venue for all-in display.
-- **Hi.Events AGPL-3.0 extra terms:** keep the "Powered by Hi.Events" link on public pages and emails, and offer any code changes to users. Or buy the commercial licence for a venue that wants it removed.
-- **Payments:** card payments run through Stripe on the venue's own account. The venue is the merchant of record and handles its own refunds and disputes.
+- **FTC Rule on Unfair or Deceptive Fees** (in force since May 12, 2025): live-event ticket prices must show the total price, mandatory fees included, upfront. Configure every venue for all-in display. Our 75¢ is part of the booking fee inside that price.
+- **Hi.Events AGPL-3.0 extra terms:** keep the "Powered by Hi.Events" link on public pages and emails, and publish any code changes. One organiser per install. **Get written confirmation from licence@hi.events that managed single-venue installs are fine on the free edition before the first paid venue.**
+- **Payments:** card payments run through Stripe on the venue's own account. The venue is the merchant of record and handles its own refunds and disputes. Marquee invoices only its own per-ticket fee.
 - **No fake social proof:** testimonials and case studies only from real, consenting venues (FTC rule on consumer reviews and testimonials).
 
 ## Risks to manage
@@ -92,4 +97,6 @@ Recompute with each venue's own average price and volume before quoting: edit th
 | Outage during a Friday on-sale | Server per venue, monitoring, a runbook, and a fallback "sold at the door" plan |
 | Venue loses Eventbrite marketplace discovery | Keep 1–2 discovery listings on Eventbrite; move regulars and own promotion to Marquee |
 | Chargebacks surprise the venue | Explain at kickoff; turn on Stripe Radar and clear refund-policy text |
+| Unpaid usage invoices | Card on file, charged automatically on the 1st; pause new on-sales after a failed payment |
+| Big venues prefer to raise their own fee and pay us flat | The monthly-cap lever, used only when pushed |
 | Founder becomes on-call for every venue | Standard set-up, a written runbook, and a cap on founding venues (10) |

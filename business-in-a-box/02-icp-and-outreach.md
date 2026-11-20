@@ -10,7 +10,7 @@ An independent, owner-run, general-admission venue in Austin, Nashville, Chicago
 |---|---|---|---|
 | 1 | Sells tickets through **Eventbrite** | This is the proof of pain. Self-serve Eventbrite venues get no fee rebates, so every buyer fee leaves the building. | An eventbrite.com link on the venue's own site (saved as evidence) |
 | 2 | **4.4+ stars and 300+ Google reviews** | Shows there are regulars and a real crowd, not a hobby room | Google Maps data |
-| 3 | **2+ ticketed shows a week** | Break-even is about 233 tickets/month. We target 800+ so the ROI is obvious. | Upcoming events on their calendar or Eventbrite organiser page |
+| 3 | **2+ ticketed shows a week** | Marquee earns per ticket. We only onboard venues selling 400+ tickets a month, and target 800+. | Upcoming events on their calendar or Eventbrite organiser page |
 | 4 | **General admission** | Reserved seating needs the paid Hi.Events Enterprise licence | Seat maps on their ticket pages |
 | 5 | **Independent, owner-operated** | One person can say yes. No corporate procurement and no exclusive ticketing contract. | Not a chain or group with 3+ locations |
 
@@ -38,27 +38,27 @@ All four are on **Central Time**, so one calling block covers the whole territor
 | **Talent buyer / booker** | Influences | Getting shows on sale fast, promo codes, tracking links for promoters |
 | **Marketing lead** | Influences | Owning the customer list, Meta/TikTok pixels, all-in prices that convert |
 
-## Pricing ceilings
+## Pricing and negotiation limits
 
-| | Price | Ceiling logic |
+| | Price | Logic |
 |---|---|---|
-| **Club** (up to 2,000 tickets/mo) | $249/mo | About 18% of what a 300-tickets/week venue keeps. Owners get more than 5× back. |
-| **Hall** (over 2,000 tickets/mo) | $449/mo | Still under 20% of kept fees at 500+ tickets/week |
-| Setup | $750, **waived** for founding venues and annual plans | Venues will pay a one-time fee for a migration done for them, but more than about $1k needs a CFO conversation they don't have |
-| Hard ceiling | About $500/mo | Above this, venues compare against enterprise ticketing companies that offer rebates |
+| **Per paid ticket** | 75¢ ($20+ tickets), 50¢ (under $20) | Sits inside the fan's booking fee. The venue keeps about $1.05 a ticket and fans still pay less than on Eventbrite. |
+| Monthly fee and setup | **None** | Zero fixed cost is the easiest yes in nightlife. Volume is qualified instead (400+ tickets/month). |
+| Hard ceiling | **$1.00 per ticket** | Above that, fans would pay more than on Eventbrite on tickets under about $17 |
+| Big-venue lever | Monthly cap from $1,500/mo | Only when a high-volume venue works out that "my own higher fee + a flat price" beats us |
 
-**Never** take a cut per ticket. "Flat fee, your fee stays yours" is the whole positioning.
+**Positioning:** "No monthly fee. We earn 75¢ only when you sell, and your fans still pay less." Never charge setup, and never take a percentage.
 
 ## Objections and answers
 
 | Objection | Answer |
 |---|---|
 | "Eventbrite brings us discovery." | Check the data: most of your buyers come from your own Instagram, mailing list and posters. Keep Eventbrite for a couple of discovery shows if you like, and put your regulars and your own promotion through your box office. |
-| "Fans hate fees." | So show one honest all-in price. Yours can be about $1.45 lower than an Eventbrite checkout and you still keep about $1.07 a ticket. |
+| "Fans hate fees." | So show one honest all-in price. On a $25 show it's 79¢ lower than an Eventbrite checkout, and you still keep about $1.05 a ticket. |
 | "Switching sounds like a hassle." | We do it: rebuild your upcoming shows, embed the box office on your site, set up door check-in on staff phones, and launch in 7 days. Shows already on sale stay where they are. |
 | "What if it goes down on a Friday night?" | It's monitored around the clock, backed up nightly, and has a written Friday-night runbook. Check-in runs from any phone browser. (Promise only what the support plan really covers.) |
 | "Who handles refunds and chargebacks?" | You, in your own Stripe dashboard. Money lands in your own Stripe account on Stripe's standard payout schedule, instead of waiting for a platform payout after the show. Be upfront that disputes now come to you, not Eventbrite. |
-| "Do you take a percentage?" | No. Flat monthly fee. Stripe's standard 2.9% + 30¢ is the only per-order cost, and your booking fee covers it. |
+| "Do you take a percentage?" | No percentage and no monthly fee. We earn a flat 75¢ per paid ticket (50¢ under $20), built into your all-in price. Stripe's 2.9% + 30¢ is the only other cost, and your booking fee covers both. |
 | "What about door sales and reserved seats?" | Keep your bar POS for walk-ups. Hi.Events' paid licence adds a door box office and seat maps if you need them, and we pass that cost through without markup. |
 | "Is this legal, adding our own fee?" | Yes, if the fee is in the price people see first. The FTC's fee rule (in force since May 12, 2025) requires all-in pricing for live-event tickets, and we set your box office up that way. |
 
@@ -80,14 +80,14 @@ These are starting assumptions to test. Log every dial with its hour and adjust 
 >
 > Hi [First name] — fans who bought tickets to [Show] on [date] paid about $3.50 each in Eventbrite fees, and none of it reached [Venue].
 >
-> I set up branded box offices for independent venues: your domain, your Stripe account, one all-in price. You add your own booking fee and keep it. At your volume that's roughly $[X]k a year. Flat $249/mo, live in 7 days.
+> I set up branded box offices for independent venues: your domain, your Stripe account, one all-in price that's still lower for your fans. You keep about $1.05 a ticket, roughly $[X]k a year at your volume. No monthly fee: I earn 75¢ only when you sell. Live in 7 days.
 >
 > Want me to run the maths on your last month of shows? Takes 10 minutes.
 >
 > — [Name], Marquee
 
 **Cold-call opener (under 20 seconds)**
-> "Hi [First name], it's [Name] with Marquee. I'll be quick because I know doors are later. I help rooms like [Venue] sell tickets on their own site and keep the booking fee Eventbrite is collecting now. For a room your size that's usually five figures a year. Worth ten minutes on Thursday to see your own numbers?"
+> "Hi [First name], it's [Name] with Marquee. I'll be quick because I know doors are later. I help rooms like [Venue] sell tickets on their own site and keep the booking fee Eventbrite is collecting now. No monthly fee, and for a room your size it's usually five figures a year. Worth ten minutes on Thursday to see your own numbers?"
 
 **Instagram DM**
 > "Love what you're booking at [Venue]. Sent [First name] a quick email about keeping your ticket fees instead of Eventbrite. Happy to share the maths here if that's easier."

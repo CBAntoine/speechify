@@ -44,3 +44,5 @@ Repo stats were pulled from GitHub on 2026-11-20.
 - **Open WebUI.** Its custom licence carries branding conditions. AnythingLLM's MIT licence is cleaner.
 
 **Decision:** #1, own-your-box-office ticketing, US market, sold first in Central-time metros.
+
+**Later change:** pricing moved from $249/mo flat to 75¢ per paid ticket (50¢ under $20) with no monthly fee, because it earns about 3.9× more per venue. See [`06-most-profitable-route.md`](06-most-profitable-route.md).

@@ -6,7 +6,7 @@
 
 | Lever | Current plan (03) | Most profitable route |
 |---|---|---|
-| Price | $249/mo flat, no cut | **75¢ per paid ticket** (50¢ under $20), $99/mo minimum, no setup fee, month to month |
+| Price | $249/mo flat, no cut | **75¢ per paid ticket** (50¢ under $20), no monthly fee, no setup fee, month to month |
 | Who pays | The venue, out of its kept fees | The fan. Our fee sits inside the all-in price, which is still below Eventbrite's at every price checked. |
 | Delivery | One install per venue | Same: **one install per venue** on the free AGPL edition. A shared platform triggers Hi.Events' platform licence. |
 | Billing | Monthly subscription | Monthly usage invoice from each install's sales report, card on file |
@@ -90,14 +90,13 @@ Weekly show emails to the venue's own list, plus retargeting ads built on the pi
 | Risk | Handling |
 |---|---|
 | Big venues work out they'd keep more on flat + a higher fee of their own | Offer a monthly cap (start at $1,500/mo) only when a high-volume venue pushes back |
-| Quiet months (holidays, summer) | The $99/mo minimum |
+| Quiet months (holidays, summer) | Qualify on volume (400+ tickets/month) instead of a monthly minimum, so "no monthly fee" stays true |
 | Unpaid usage invoices | Card on file, charged automatically on the 1st, pause on failed payment |
 | A venue self-hosts the open-source code and drops us | Keep the value in service: updates, Friday-night support and the "Fill the Room" marketing |
 | The licence grey zone | Written confirmation from Hi.Events before the first paid venue |
 
-## If you adopt it, these change
+## Adopted 2026-11-20
 
-- `03-offer-brief.md`: plans table, guarantee (moot with no monthly fee) and ROI table switch to per-ticket
-- `02-icp-and-outreach.md`: "Do you take a percentage?" answer, email 1 and the call opener
-- `04-style-guide.md` and the five ads: "no cut from us" becomes "no monthly fee". Kept per ticket becomes $1.05 and fan savings $0.79.
-- `05-ugc-scripts.md`: the "$249 a month flat" lines
+Per-ticket pricing is now the offer in `02`–`05`.
+
+One change from the version first proposed: **no $99/mo minimum.** A minimum would make "no monthly fee" untrue, and it would only apply below 132 tickets a month. Volume is protected by only onboarding venues that sell 400+ tickets a month.
