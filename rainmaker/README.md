@@ -116,6 +116,7 @@ Rainmaker installs on Android as an app: Chrome adds it to your home screen and 
   - `ANTHROPIC_API_KEY`: switches on Claude for ads, emails and agents. Optional.
   - `GOOGLE_PLACES_API_KEY`: adds ratings and review counts to search. Optional.
 - Tap **Deploy**.
+- If opening the site shows a Vercel sign-in page instead of Rainmaker's, Vercel's own login wall is on. New projects put it in front of `.vercel.app` addresses too. In the project, open **Settings → Deployment Protection** and limit **Vercel Authentication** to preview deployments, or turn it off. `APP_PASSWORD` still locks the app.
 
 Your GTA site is a separate Vercel project and isn't affected.
 
@@ -171,7 +172,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 29 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing, niches, seed data, playbook sources, concurrent storage writes
+npm test          # 34 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing and server fallback, niches, seed data, playbook sources, concurrent storage writes
 npm run build
 ```
 

@@ -10,7 +10,11 @@ test("Overpass query covers tags and business-only name matches", () => {
   const q = buildOverpassQuery(getNiche("roofer")!, 39.7392, -104.9903, 12000);
   assert.ok(q.startsWith("[out:json]"));
   assert.ok(q.includes('nwr["craft"="roofer"]["name"](around:12000,39.73920,-104.99030);'));
-  assert.ok(q.includes('nwr["name"~"roof",i]["shop"]'));
+  assert.ok(
+    q.includes('nwr["name"~"roof",i][~"^(shop|office|craft|amenity|healthcare|leisure)$"~"."](around:12000,39.73920,-104.99030);'),
+    "name matches run once, limited to business keys",
+  );
+  assert.equal(q.split('["name"~').length - 1, 1, "a single name-regex statement");
   assert.ok(!q.includes('nwr["name"~"roof",i](around'), "never matches names without a business key");
   assert.ok(q.endsWith("out center 250;"), "body verbosity, so nodes keep their coordinates");
 });

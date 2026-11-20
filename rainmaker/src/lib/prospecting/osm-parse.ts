@@ -21,10 +21,10 @@ export function buildOverpassQuery(niche: Pick<Niche, "osmTags" | "osmName">, la
   }
   if (niche.osmName) {
     // Name matches only count on things that are businesses, never streets.
+    // One statement with a key regex instead of six, so the server scans the
+    // area once.
     const re = niche.osmName.replace(/["\\]/g, "");
-    for (const key of ["shop", "office", "craft", "amenity", "healthcare", "leisure"]) {
-      parts.push(`nwr["name"~"${re}",i]["${key}"]${around};`);
-    }
+    parts.push(`nwr["name"~"${re}",i][~"^(shop|office|craft|amenity|healthcare|leisure)$"~"."]${around};`);
   }
   // Plain `out center` (body verbosity): Overpass documents coordinates for
   // nodes there and a center for ways. The `tags` level documents "not

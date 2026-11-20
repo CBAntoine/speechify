@@ -2,7 +2,8 @@ import "server-only";
 import { friendlyNetError } from "@/lib/net";
 import type { Niche } from "@/lib/niches";
 import type { Prospect } from "@/lib/types";
-import { buildOverpassQuery, parseOverpass, type OsmElement } from "./osm-parse";
+import { buildOverpassQuery, parseOverpass } from "./osm-parse";
+import { OverpassUnavailableError, overpassUrls, queryOverpass } from "./overpass";
 
 // OpenStreetMap: free, no key. Nominatim turns "Austin, TX" into coordinates,
 // Overpass finds tagged businesses around them. Both public servers ask for an
@@ -10,7 +11,7 @@ import { buildOverpassQuery, parseOverpass, type OsmElement } from "./osm-parse"
 
 const UA = "Rainmaker/0.1 (self-hosted agency CRM)";
 const NOMINATIM = (process.env.NOMINATIM_URL || "https://nominatim.openstreetmap.org").replace(/\/$/, "");
-const OVERPASS = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
+const OVERPASS = overpassUrls(process.env.OVERPASS_URL);
 
 export interface Place {
   lat: number;
@@ -45,19 +46,24 @@ export async function searchOsm(params: {
   limit: number;
 }): Promise<Prospect[]> {
   const { niche, center, radiusKm, limit } = params;
-  const body = new URLSearchParams({ data: buildOverpassQuery(niche, center.lat, center.lon, radiusKm * 1000) });
-  let res: Response;
+  const query = buildOverpassQuery(niche, center.lat, center.lon, radiusKm * 1000);
   try {
-    res = await fetch(OVERPASS, {
-      method: "POST",
-      headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
-      body,
-      signal: AbortSignal.timeout(35_000),
+    const { elements } = await queryOverpass(OVERPASS, query, {
+      userAgent: UA,
+      describeError: friendlyNetError,
+      // One line per server tried, so the host's logs show which one answered.
+      onAttempt: (a) =>
+        (a.ok ? console.info : console.warn)(
+          `[overpass] ${a.host} ${a.ok ? `ok, ${a.elements} elements` : `failed: ${a.problem}`} in ${a.ms}ms`,
+        ),
     });
+    return parseOverpass(elements, niche, center, limit);
   } catch (err) {
-    throw new Error(`Couldn't reach OpenStreetMap (${friendlyNetError(err, 35_000)}). Check this server's internet connection, or try sample data.`);
+    if (err instanceof OverpassUnavailableError) {
+      throw new Error(
+        `OpenStreetMap's free search servers are overloaded right now (tried ${err.attempts.length}). Try again in a few minutes, or search sample data. A Google Places key (GOOGLE_PLACES_API_KEY) makes search faster and steadier.`,
+      );
+    }
+    throw err;
   }
-  if (!res.ok) throw new Error(`OpenStreetMap search failed (HTTP ${res.status}). The public server may be busy; try again in a minute.`);
-  const data = (await res.json()) as { elements?: OsmElement[] };
-  return parseOverpass(data.elements ?? [], niche, center, limit);
 }
