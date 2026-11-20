@@ -3,7 +3,8 @@
 // 429/502/504, hangs, or a JSON "remark" saying the query ran out of time),
 // so one failure moves on to the next server instead of failing the search.
 // Servers are tried one at a time, never in parallel, to keep load on these
-// volunteer-run services low. No server-only imports, so it's unit tested.
+// volunteer-run services low. No server-only imports: it runs on the server
+// and in the browser (Find clients asks from the phone), and is unit tested.
 
 import type { OsmElement } from "./osm-parse.ts";
 
@@ -55,7 +56,8 @@ export async function queryOverpass(
   urls: string[],
   query: string,
   opts: {
-    userAgent: string;
+    /** Servers ask for an identifying User-Agent. Browsers can't set one, so leave it out there. */
+    userAgent?: string;
     fetchImpl?: typeof fetch;
     /** Total time for all servers together. */
     budgetMs?: number;
@@ -84,7 +86,13 @@ export async function queryOverpass(
     try {
       const res = await doFetch(url, {
         method: "POST",
-        headers: { "user-agent": opts.userAgent, "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+        // Only CORS-safelisted headers (plus User-Agent on servers), so a
+        // browser sends this as a simple request with no preflight.
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "application/json",
+          ...(opts.userAgent ? { "user-agent": opts.userAgent } : {}),
+        },
         body: new URLSearchParams({ data: query }),
         signal: AbortSignal.timeout(timeoutMs),
       });

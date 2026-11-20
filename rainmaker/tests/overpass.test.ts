@@ -81,3 +81,13 @@ test("the total time budget caps how many servers are tried", async () => {
   await assert.rejects(() => queryOverpass(urls, "q", { userAgent: UA, fetchImpl: impl, budgetMs: 3_050 }), OverpassUnavailableError);
   assert.deepEqual(calls.map((c) => c.host), ["a.example"]);
 });
+
+test("in the browser it sends no User-Agent, so the request needs no CORS preflight", async () => {
+  const { impl, calls } = fakeFetch({
+    "a.example": () => Promise.resolve(json({ elements: [] })),
+    "b.example": () => assert.fail("not reached"),
+    "c.example": () => assert.fail("not reached"),
+  });
+  await queryOverpass(urls, "q", { fetchImpl: impl });
+  assert.equal(calls[0].ua, null);
+});

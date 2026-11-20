@@ -10,6 +10,7 @@ import {
 import { api, Drawer, useToast } from "@/components/client";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
 import { DynIcon, Empty, ScoreRing, SignalChips, TierBadge } from "@/components/ui";
+import { DEFAULT_OVERPASS_URLS, OverpassUnavailableError, queryOverpass } from "@/lib/prospecting/overpass";
 import type { AuditResult, LeadSource, Prospect, Signal } from "@/lib/types";
 
 export interface NicheLite {
@@ -27,6 +28,8 @@ export interface NicheLite {
 }
 
 type Result = { prospects: Prospect[]; source: LeadSource; note?: string; niche: { id: string; label: string; plural: string }; location: string };
+/** A map search the phone runs itself (see search below). */
+type Plan = { query: string; center: { lat: number; lon: number; label: string }; urls?: string[] };
 
 const FILTERS: { id: string; label: string; test: (p: Prospect) => boolean }[] = [
   { id: "no_website", label: "No website", test: (p) => has(p.signals, "no_website") || has(p.signals, "site_down") },
@@ -84,23 +87,49 @@ export function ProspectFinder({
       setLoading(true);
       setError(null);
       setSelected(new Set());
-      setPhase(places ? "Searching Google Places…" : "Searching OpenStreetMap…");
-      const t1 = setTimeout(() => setPhase("Checking their websites for gaps…"), 3500);
-      const t2 = setTimeout(() => setPhase("Scoring who needs you most…"), 11000);
+      const timers: ReturnType<typeof setTimeout>[] = [];
+      const later = (ms: number, text: string) => timers.push(setTimeout(() => setPhase(text), ms));
+      const body = { niche: nicheText, location: near ? "" : location, ...(near ? { lat: near.lat, lon: near.lon } : {}), radiusKm: radius, limit: 24, audit: 10, source };
       try {
-        const res = await api<Result>("/api/prospects/search", {
-          method: "POST",
-          json: { niche: nicheText, location: near ? "" : location, ...(near ? { lat: near.lat, lon: near.lon } : {}), radiusKm: radius, limit: 24, audit: 10, source },
-        });
-        setResult(res);
+        setPhase(source === "sample" ? "Loading sample businesses…" : places ? "Searching Google Places…" : "Finding the area on the map…");
+        if (places || source === "sample") {
+          later(3500, "Checking their websites for gaps…");
+          later(11000, "Scoring who needs you most…");
+        }
+        let res = await api<Result | { plan: Plan }>("/api/prospects/search", { method: "POST", json: { ...body, mode: "plan" } });
+        if ("plan" in res) {
+          // Map search: the phone asks OpenStreetMap itself, from its own
+          // connection. The free servers throttle the shared cloud addresses
+          // that hosts like Vercel use. The server then scores the results.
+          const plan = res.plan;
+          setPhase("Searching OpenStreetMap…");
+          let elements: unknown[] | undefined;
+          try {
+            elements = (await queryOverpass(plan.urls?.length ? plan.urls : DEFAULT_OVERPASS_URLS, plan.query, { budgetMs: 50_000 })).elements;
+          } catch (e) {
+            // Every server failed without answering at all (blocked by the
+            // network or an extension, not busy): let the server try instead.
+            const unreachable = e instanceof OverpassUnavailableError && e.attempts.length > 0 && e.attempts.every((a) => a.status === undefined && !/timed out/.test(a.problem ?? ""));
+            if (!unreachable) throw e;
+          }
+          setPhase("Checking their websites for gaps…");
+          later(8000, "Scoring who needs you most…");
+          res = await api<Result>("/api/prospects/search", { method: "POST", json: elements ? { ...body, center: plan.center, elements } : body });
+        }
+        setResult(res as Result);
         const q = new URLSearchParams(near ? { niche: nicheText } : { niche: nicheText, location });
         router.replace(`/prospects?${q}`, { scroll: false });
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(
+          e instanceof OverpassUnavailableError
+            ? "OpenStreetMap's free search servers are busy right now. Wait a minute and tap Try again, or use sample businesses to try the workflow."
+            : e instanceof Error
+              ? e.message
+              : String(e)
+        );
         setResult(null);
       } finally {
-        clearTimeout(t1);
-        clearTimeout(t2);
+        timers.forEach(clearTimeout);
         setLoading(false);
         setPhase("");
       }

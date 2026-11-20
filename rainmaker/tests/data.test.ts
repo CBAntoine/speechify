@@ -85,3 +85,28 @@ test("formatting helpers", () => {
   assert.equal(dueLabel("2026-11-19T17:00:00", new Date("2026-11-20T09:00:00")).overdue, true);
   assert.equal(dueLabel("2026-11-20T17:00:00", new Date("2026-11-20T09:00:00")).text, "Today");
 });
+
+test("map results sent back by the browser are checked before use", async () => {
+  const { sanitizeElements, parseCenter } = await import("../src/lib/prospecting/osm-parse.ts");
+  const els = sanitizeElements([
+    { type: "node", id: 1, lat: 30.1, lon: -97.7, tags: { name: "Good Roofing", phone: "+1 512", junk: 42, nested: { a: 1 } } },
+    { type: "way", id: 2, center: { lat: 30.2, lon: -97.8 }, tags: { name: "Way Roofing" } },
+    { type: "bogus", id: 3, lat: 1, lon: 1 },
+    { type: "node", id: "4", lat: 1, lon: 1 },
+    null,
+    "text",
+    { type: "node", id: 5, lat: "30", lon: Infinity, tags: { name: "x".repeat(2000) } },
+  ]);
+  assert.deepEqual(els.map((e) => e.id), [1, 2, 5]);
+  assert.deepEqual(els[0].tags, { name: "Good Roofing", phone: "+1 512" }, "only string tags survive");
+  assert.deepEqual(els[1].center, { lat: 30.2, lon: -97.8 });
+  assert.equal(els[2].lat, undefined, "non-numeric coordinates are dropped (the parser then skips it)");
+  assert.equal(els[2].tags?.name.length, 600, "long values are capped");
+  assert.deepEqual(sanitizeElements({ elements: [] }), []);
+  assert.equal(sanitizeElements(Array.from({ length: 900 }, (_, i) => ({ type: "node", id: i, lat: 0, lon: 0 }))).length, 800);
+
+  assert.deepEqual(parseCenter({ lat: 30.26, lon: -97.74, label: "Austin" }), { lat: 30.26, lon: -97.74, label: "Austin" });
+  assert.equal(parseCenter({ lat: 91, lon: 0 }), undefined);
+  assert.equal(parseCenter({ lat: "30", lon: -97 }), undefined);
+  assert.equal(parseCenter(null), undefined);
+});

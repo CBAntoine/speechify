@@ -11,7 +11,8 @@ import { OverpassUnavailableError, overpassUrls, queryOverpass } from "./overpas
 
 const UA = "Rainmaker/0.1 (self-hosted agency CRM)";
 const NOMINATIM = (process.env.NOMINATIM_URL || "https://nominatim.openstreetmap.org").replace(/\/$/, "");
-const OVERPASS = overpassUrls(process.env.OVERPASS_URL);
+/** Overpass servers to try, in order (`OVERPASS_URL`, comma-separated). */
+export const OVERPASS_URLS = overpassUrls(process.env.OVERPASS_URL);
 
 export interface Place {
   lat: number;
@@ -48,7 +49,7 @@ export async function searchOsm(params: {
   const { niche, center, radiusKm, limit } = params;
   const query = buildOverpassQuery(niche, center.lat, center.lon, radiusKm * 1000);
   try {
-    const { elements } = await queryOverpass(OVERPASS, query, {
+    const { elements } = await queryOverpass(OVERPASS_URLS, query, {
       userAgent: UA,
       describeError: friendlyNetError,
       // One line per server tried, so the host's logs show which one answered.
