@@ -6,15 +6,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { buildAll, DEFAULT_SITES_DIR } from '../lib/build.mjs';
 
-const PILOT = 'houston-water-heater-replacement';
+const PILOT = 'mississauga-backwater-valve';
+const DOMAIN = 'backwatervalvemississauga.ca';
 const NOW = Date.parse('2026-11-20T12:00:00Z');
-const OPERATOR = { name: 'Lone Star Referrals LLC', email: 'hello@lonestarreferrals.net' };
+// .test is a reserved top-level domain, so this address can't belong to anyone.
+const OPERATOR = { name: 'Test Referrals Inc.', email: 'owner@referrals.test' };
 const PARTNER = {
-  company: 'Bayou City Plumbing LLC',
-  license: { holder: 'Jordan Reyes', number: 'M-41235', label: 'Responsible Master Plumber' },
+  company: 'Test Plumbing Ltd.',
+  license: { holder: 'Jordan Reyes', label: 'Licensed plumber', credential: 'Certificate of Qualification', number: '123456789' },
 };
 // A 555 number outside the 0100-0199 fiction block passes validation but rings nobody.
-const TEST_PHONE = '+17135551234';
+const TEST_PHONE = '+19055551234';
 
 async function workspace(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'microsites-test-'));
@@ -61,18 +63,20 @@ test('guide preview builds every page as noindex, with one h1 and the guide disc
   assert.equal(result.production, false);
 
   const files = await readSite(result.outDir);
-  assert.equal(htmlPages(files).length, 7);
+  assert.equal(htmlPages(files).length, 8);
   for (const [rel, html] of htmlPages(files)) {
+    assert.match(html, /<html lang="en-CA">/, rel);
     assert.match(html, /<meta name="robots" content="noindex, nofollow">/, rel);
     assert.match(html, /class="preview-ribbon"/, rel);
     assert.match(html, /is an independent guide, not a plumbing company/, rel);
+    assert.match(html, /Not affiliated with the City of Mississauga, the Region of Peel or any manufacturer/, rel);
     assert.equal(html.match(/<h1[\s>]/g)?.length, 1, `${rel} should have one h1`);
   }
   assert.equal(files.get('robots.txt'), 'User-agent: *\nDisallow: /\n');
   assert.match(files.get('_headers'), /X-Robots-Tag: noindex/);
 });
 
-test('guide mode never shows a call number, only the gas-leak safety lines', async (t) => {
+test('guide mode never shows a call number, only the safety lines', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
   const result = assertBuilt(await buildAll({ sitesDir, outDir, now: NOW }));
   const site = JSON.parse(await readFile(path.join(sitesDir, PILOT, 'site.json'), 'utf8'));
@@ -84,18 +88,19 @@ test('guide mode never shows a call number, only the gas-leak safety lines', asy
   }
 });
 
-test('call-mode preview shows the number and the partner license statement on every page', async (t) => {
+test('call-mode preview shows the number and the partner licence statement on every page', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
   const result = assertBuilt(await buildAll({ sitesDir, outDir, now: NOW, forceLive: true }));
   assert.equal(result.mode, 'call');
 
   const files = await readSite(result.outDir);
   for (const [rel, html] of htmlPages(files)) {
-    assert.match(html, /Responsible Master Plumber: Pat Sample, Texas license M-00000/, rel);
-    assert.match(html, /Regulated by the Texas State Board of Plumbing Examiners, 7915 Cameron Rd\./, rel);
-    assert.ok(telLinks(html).includes('+17135550142'), `${rel} should link the tracking number`);
+    assert.match(html, /Work is performed by <strong>Sample Plumbing Co\.<\/strong> \(Licensed plumber: Pat Sample, Certificate of Qualification 000000000\)/, rel);
+    assert.match(html, /Skilled Trades Ontario public register: <a href="https:\/\/skilledtradesontario\.ca\/public-register\/">/, rel);
+    assert.ok(telLinks(html).includes('+19055550142'), `${rel} should link the tracking number`);
   }
   assert.match(files.get('index.html'), /"@type":"Service"/);
+  assert.match(files.get('index.html'), /"containedInPlace":\{"@type":"AdministrativeArea","name":"Ontario"\}/);
   assert.match(files.get('index.html'), /Referral disclosure:/);
 });
 
@@ -110,36 +115,36 @@ test('production guide build is indexable and lists its pages in the sitemap', a
   const { sitesDir, outDir } = await workspace(t);
   await editConfig(sitesDir, PILOT, (c) => (c.operator = OPERATOR));
   const result = assertBuilt(await buildAll({ sitesDir, outDir, now: NOW, production: true }));
-  assert.equal(result.outDir, path.join(outDir, 'houstonwaterheaterreplacement.com'));
+  assert.equal(result.outDir, path.join(outDir, DOMAIN));
 
   const files = await readSite(result.outDir);
   for (const [rel, html] of htmlPages(files)) {
     assert.doesNotMatch(html, /class="preview-ribbon"/, rel);
     const robots = rel === '404.html' ? 'noindex, nofollow' : 'index, follow';
     assert.match(html, new RegExp(`<meta name="robots" content="${robots}">`), rel);
-    assert.match(html, /© 2026 Lone Star Referrals LLC/, rel);
+    assert.match(html, /© 2026 Test Referrals Inc\./, rel);
   }
-  assert.match(files.get('robots.txt'), /Sitemap: https:\/\/houstonwaterheaterreplacement\.com\/sitemap\.xml/);
-  assert.equal(files.get('sitemap.xml').match(/<loc>/g).length, 6);
+  assert.match(files.get('robots.txt'), /Sitemap: https:\/\/backwatervalvemississauga\.ca\/sitemap\.xml/);
+  assert.equal(files.get('sitemap.xml').match(/<loc>/g).length, 7);
   assert.doesNotMatch(files.get('sitemap.xml'), /404/);
   assert.doesNotMatch(files.get('_headers'), /X-Robots-Tag/);
 });
 
-test('production refuses a phone number until a licensed partner is set (Texas RMP rule)', async (t) => {
+test('production refuses a phone number until a licensed partner is set', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
   await editConfig(sitesDir, PILOT, (c) => {
     c.operator = OPERATOR;
     c.phone = TEST_PHONE;
   });
-  assert.match(problemsOf(await buildAll({ sitesDir, outDir, now: NOW, production: true })), /§1301\.351\(a-2\)/);
+  assert.match(problemsOf(await buildAll({ sitesDir, outDir, now: NOW, production: true })), /phone is set but partner is empty/);
 });
 
-test('production call mode needs the license number and a real tracking number', async (t) => {
+test('production call mode needs the licence number and a real tracking number', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
   await editConfig(sitesDir, PILOT, (c) => {
     c.operator = OPERATOR;
     c.partner = { company: PARTNER.company, license: { holder: PARTNER.license.holder } };
-    c.phone = '+17135550142';
+    c.phone = '+19055550142';
   });
   const problems = problemsOf(await buildAll({ sitesDir, outDir, now: NOW, production: true }));
   assert.match(problems, /partner\.license\.number is missing/);
@@ -152,9 +157,9 @@ test('production call mode needs the license number and a real tracking number',
   const result = assertBuilt(await buildAll({ sitesDir, outDir, now: NOW, production: true }));
   assert.equal(result.mode, 'call');
   const home = (await readSite(result.outDir)).get('index.html');
-  assert.match(home, /Plumbing work is performed by <strong>Bayou City Plumbing LLC<\/strong> \(Responsible Master Plumber: Jordan Reyes, Texas license M-41235\)/);
-  assert.match(home, /href="tel:\+17135551234"/);
-  assert.match(home, /\(713\) 555-1234/);
+  assert.match(home, /Work is performed by <strong>Test Plumbing Ltd\.<\/strong> \(Licensed plumber: Jordan Reyes, Certificate of Qualification 123456789\)/);
+  assert.match(home, /href="tel:\+19055551234"/);
+  assert.match(home, /\(905\) 555-1234/);
 });
 
 test('--live cannot be combined with a production build', async (t) => {
@@ -166,13 +171,13 @@ test('--live cannot be combined with a production build', async (t) => {
 
 test('microsites in the network never link to each other', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
-  const other = path.join(sitesDir, 'pearland-water-heater');
+  const other = path.join(sitesDir, 'brampton-backwater-valve');
   await cp(path.join(sitesDir, PILOT), other, { recursive: true });
-  await editConfig(sitesDir, 'pearland-water-heater', (c) => (c.domain = 'waterheaterpearlandtx.com'));
-  await appendFile(path.join(other, 'pages', 'home.html'), '<p><a href="https://www.houstonwaterheaterreplacement.com/">Our Houston site</a></p>\n');
+  await editConfig(sitesDir, 'brampton-backwater-valve', (c) => (c.domain = 'backwatervalvebrampton.ca'));
+  await appendFile(path.join(other, 'pages', 'home.html'), '<p><a href="https://www.backwatervalvemississauga.ca/">Our Mississauga site</a></p>\n');
 
   const outcome = await buildAll({ sitesDir, outDir, now: NOW });
-  assert.match(problemsOf(outcome, 'pearland-water-heater'), /another site in this network/);
+  assert.match(problemsOf(outcome, 'brampton-backwater-valve'), /another site in this network/);
   assert.ok(outcome.results.some((r) => r.slug === PILOT), 'the untouched site still builds');
 });
 
@@ -181,7 +186,7 @@ test('two site folders cannot claim the same domain', async (t) => {
   // Folders are read in name order, so the later one is reported.
   await cp(path.join(sitesDir, PILOT), path.join(sitesDir, 'zz-copy'), { recursive: true });
   const outcome = await buildAll({ sitesDir, outDir, now: NOW });
-  assert.match(problemsOf(outcome, 'zz-copy'), /also used by sites\/houston-water-heater-replacement/);
+  assert.match(problemsOf(outcome, 'zz-copy'), /also used by sites\/mississauga-backwater-valve/);
   assert.equal(outcome.results.length, 0, 'nothing is built while the network config is inconsistent');
 });
 
@@ -189,7 +194,7 @@ test('broken internal links and anchors fail the build', async (t) => {
   const { sitesDir, outDir } = await workspace(t);
   await appendFile(
     path.join(sitesDir, PILOT, 'pages', 'home.html'),
-    '<p><a href="/no-such-page/">a</a> <a href="/tankless-water-heater-installation">b</a> <a href="/#nowhere">c</a></p>\n',
+    '<p><a href="/no-such-page/">a</a> <a href="/basement-flooding-rebates">b</a> <a href="/#nowhere">c</a></p>\n',
   );
   const problems = problemsOf(await buildAll({ sitesDir, outDir, now: NOW }));
   assert.match(problems, /\/no-such-page\/ points to a page that doesn't exist/);
@@ -212,4 +217,10 @@ test('facts older than a year warn in preview and block production', async (t) =
   const preview = assertBuilt(await buildAll({ sitesDir, outDir, now: NOW }));
   assert.ok(preview.warnings.some((w) => /over a year old/.test(w)));
   assert.match(problemsOf(await buildAll({ sitesDir, outDir, now: NOW, production: true })), /over a year old/);
+});
+
+test('safety numbers must be N11 codes or North American numbers', async (t) => {
+  const { sitesDir, outDir } = await workspace(t);
+  await editConfig(sitesDir, PILOT, (c) => c.safetyPhones.push('1-866-763-5427'));
+  assert.match(problemsOf(await buildAll({ sitesDir, outDir, now: NOW })), /safetyPhones entry "1-866-763-5427"/);
 });

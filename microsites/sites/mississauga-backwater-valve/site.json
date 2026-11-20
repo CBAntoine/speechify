@@ -1,0 +1,111 @@
+{
+  "$comment": "Pilot site. Keep partner and phone null until a licensed plumbing company has signed on: see microsites/README.md. Facts on the pages were checked against the official sources linked on each page on lastReviewed.",
+  "domain": "backwatervalvemississauga.ca",
+  "brand": "Backwater Valve Mississauga",
+  "service": "Backwater valve and sump pump installation",
+  "trade": "plumbing",
+  "city": "Mississauga",
+  "region": "ON",
+  "regionName": "Ontario",
+  "locale": "en-CA",
+  "lastReviewed": "2026-11-20",
+  "operator": {
+    "name": null,
+    "email": null
+  },
+  "phone": null,
+  "partner": null,
+  "retentionDays": 90,
+  "regulator": {
+    "name": "Skilled Trades Ontario",
+    "statement": "Check any Ontario plumber's certificate on the Skilled Trades Ontario public register",
+    "url": "https://skilledtradesontario.ca/public-register/"
+  },
+  "notAffiliatedWith": ["the City of Mississauga", "the Region of Peel"],
+  "safetyPhones": ["911", "311", "+18667635427", "+18332532872"],
+  "pages": [
+    {
+      "id": "home",
+      "role": "home",
+      "file": "home.html",
+      "path": "/",
+      "nav": "Backwater valves",
+      "title": "Backwater Valve Installation in Mississauga: Rebates & Permit",
+      "description": "How a backwater valve protects a Mississauga basement, the Peel and City rebates, the $50 permit, and how to hire a licensed plumber for the job.",
+      "live": {
+        "description": "Backwater valve installation in Mississauga, answered 24/7. A free referral to a licensed plumber, with the permit, inspection and rebate paperwork."
+      }
+    },
+    {
+      "id": "rebates",
+      "file": "rebates.html",
+      "path": "/basement-flooding-rebates/",
+      "nav": "Rebates",
+      "title": "Mississauga Basement Flooding Rebates (2026): Peel & City",
+      "description": "Peel Region pays 60% of a sanitary backwater valve, up to $1,500. The City pays up to $7,500 for sump pumps and storm work. Rules, steps and pitfalls."
+    },
+    {
+      "id": "sump-pump",
+      "file": "sump-pump.html",
+      "path": "/sump-pump-installation/",
+      "nav": "Sump pumps",
+      "title": "Sump Pump Installation in Mississauga: City Rebate Rules",
+      "description": "What a rebate-eligible sump pump install in Mississauga involves: weeping tile, capping the storm connection, downspouts, discharge and backup power."
+    },
+    {
+      "id": "flooded",
+      "file": "flooded.html",
+      "path": "/basement-flooded/",
+      "nav": "Flooded now?",
+      "title": "Basement Flooded? What to Do Right Now | Mississauga",
+      "description": "Stay safe around floodwater and electricity, stop a sewer backup from getting worse, and know who to call in Mississauga and Peel before you clean up."
+    },
+    {
+      "id": "about",
+      "role": "about",
+      "file": "how-it-works.html",
+      "path": "/how-it-works/",
+      "guide": {
+        "nav": "About",
+        "title": "About This Guide | Backwater Valve Mississauga",
+        "description": "Who runs this independent guide to basement flooding protection in Mississauga, how it's funded, and how we check our facts."
+      },
+      "live": {
+        "nav": "How it works",
+        "title": "How Our Backwater Valve Referral Service Works",
+        "description": "Who runs this referral service, which licensed company does the work, how we're paid, and what happens when you call."
+      }
+    },
+    {
+      "id": "privacy",
+      "role": "privacy",
+      "file": "privacy.html",
+      "path": "/privacy/",
+      "footer": "Privacy",
+      "title": "Privacy Policy | Backwater Valve Mississauga",
+      "description": "How we handle information from website visits.",
+      "live": {
+        "description": "What we collect when you visit or call, who we share it with, where it's stored and how long we keep it."
+      }
+    },
+    {
+      "id": "terms",
+      "role": "terms",
+      "file": "terms.html",
+      "path": "/terms/",
+      "footer": "Terms",
+      "title": "Terms of Use | Backwater Valve Mississauga",
+      "description": "The terms for using this website."
+    },
+    {
+      "id": "not-found",
+      "role": "notFound",
+      "file": "404.html",
+      "path": "/404.html",
+      "noindex": true,
+      "sitemap": false,
+      "title": "Page Not Found | Backwater Valve Mississauga",
+      "description": "This page doesn't exist."
+    }
+  ]
+}

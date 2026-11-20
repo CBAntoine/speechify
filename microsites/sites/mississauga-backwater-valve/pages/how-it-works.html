@@ -1,0 +1,50 @@
+<section class="page-head">
+  <div class="wrap prose">
+    <p class="eyebrow">About this site</p>
+    <!-- if:live -->
+    <h1>How our referral service works</h1>
+    <!-- /if:live -->
+    <!-- if:guide -->
+    <h1>About this guide</h1>
+    <!-- /if:guide -->
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap prose">
+    <!-- if:live -->
+    <h2>Who we are</h2>
+    <p>{{brand}} ({{domain}}) is an independent referral service run by {{operatorName}}. <strong>We are not a plumbing company, and we don't do plumbing work.</strong> We help Mississauga homeowners reach a licensed plumber for backwater valves, sump pumps and flooded basements.</p>
+
+    <h2>Who does the work</h2>
+    [[license]]
+    <p>{{partnerCompany}} sets its own prices and schedule and is responsible for the work, including the building permit, the inspection and any warranty. Ask for an itemized written quote before work begins.</p>
+
+    <h2>How we're paid</h2>
+    <p>{{partnerCompany}} pays us for marketing and referrals. You don't pay us anything, and the call is free.</p>
+
+    <h2>What happens when you call</h2>
+    <ul>
+      <li>An automated assistant answers. It uses AI to understand what you say and asks about your address, what's happening and your home's flooding history.</li>
+      <li>Calls are recorded and transcribed. With your permission, we share your name, phone number, address and the details of the problem with {{partnerCompany}} so they can help you. See our <a href="/privacy/">privacy policy</a>.</li>
+      <li>If you smell gas, if water is near electricity, or if anyone is in danger, the assistant will tell you to get to safety and who to call.</li>
+    </ul>
+    <!-- /if:live -->
+    <!-- if:guide -->
+    <h2>Who we are</h2>
+    <p>{{brand}} ({{domain}}) is an independent guide run by {{operatorName}}. <strong>We are not a plumbing company, and we don't do plumbing work.</strong> We write plain-English guides to protecting a Mississauga basement from flooding, and we link to the official sources so you can check the facts yourself.</p>
+
+    <h2>No paid recommendations</h2>
+    <p>We don't recommend or refer anyone to a plumbing company right now. If that changes, this page will name the company and its licensed plumber, and explain how we're paid.</p>
+    <!-- /if:guide -->
+
+    <h2>Not the City or the Region</h2>
+    <p>We aren't affiliated with the City of Mississauga, the Region of Peel, Alectra Utilities, Enbridge Gas or Skilled Trades Ontario. The rebate programs belong to the City and the Region, which decide who qualifies. Peel says it doesn't sell, partner with or endorse any contractors.</p>
+
+    <h2>How we check facts</h2>
+    <p>Rebate rules, permit steps and emergency numbers come from the City of Mississauga, the Region of Peel, the Electrical Safety Authority and Skilled Trades Ontario. We link to them wherever we use them. Facts were last checked {{lastReviewed}}. If you spot something out of date, email <a href="mailto:{{operatorEmail}}">{{operatorEmail}}</a>.</p>
+
+    <h2>Contact</h2>
+    <p>{{operatorName}} · <a href="mailto:{{operatorEmail}}">{{operatorEmail}}</a><!-- if:live --> · [[call-link]]<!-- /if:live --></p>
+  </div>
+</section>

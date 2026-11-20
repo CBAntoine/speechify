@@ -529,7 +529,7 @@ details > :last-child {
   margin: 0;
 }
 
-/* Texas asks for license details in at least 12-point type. 1rem = 16px = 12pt. */
+/* Licence details stay at full body size (16px = 12pt) so nobody has to squint at them. */
 .license {
   font-size: 1rem;
 }

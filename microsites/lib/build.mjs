@@ -6,13 +6,12 @@
 //
 // Two modes, picked by site.json:
 //   guide mode  partner is null. No phone number anywhere. Safe to publish while
-//               the domain ages and you look for a plumbing company.
+//               the domain ages and you look for a licensed company.
 //   call mode   partner is set. Call buttons, the tracking number, and the
-//               partner's license statement on every page.
+//               partner's licence statement on every page.
 //
-// Texas only lets you advertise plumbing once a Responsible Master Plumber is
-// secured (Occupations Code §1301.351(a-2)), which is why the phone number never
-// appears without a partner.
+// The phone number never appears without a partner: every caller is a real
+// person with a real problem, and someone licensed has to be there to call back.
 
 import { readFile, writeFile, mkdir, rm, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,16 +34,24 @@ export class BuildError extends Error {
 // details exist. 555-0100 to 555-0199 is reserved for fiction, so the sample
 // number can't ring a real person. Production builds refuse every one of them.
 export const SAMPLE = Object.freeze({
-  phone: '+17135550142',
-  operator: { name: 'Your Name or LLC', email: 'you@example.com' },
+  phone: '+19055550142',
+  operator: { name: 'Your Name or Company', email: 'you@example.com' },
   partner: {
     company: 'Sample Plumbing Co.',
-    license: { holder: 'Pat Sample', number: 'M-00000', label: 'Responsible Master Plumber' },
+    license: { holder: 'Pat Sample', label: 'Licensed plumber', credential: 'Certificate of Qualification', number: '000000000' },
   },
 });
 
 const PLACEHOLDER = /\b(sample|todo|tbd|lorem)\b|example\.(com|org|net)\b/i;
-const LIVE_TOKENS = new Set(['phone', 'phoneE164', 'partnerCompany', 'licenseHolder', 'licenseNumber', 'licenseLabel']);
+const LIVE_TOKENS = new Set([
+  'phone',
+  'phoneE164',
+  'partnerCompany',
+  'licenseHolder',
+  'licenseLabel',
+  'licenseCredential',
+  'licenseNumber',
+]);
 
 const PHONE_ICON =
   '<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>';
@@ -63,11 +70,12 @@ export function formatPhone(e164) {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : String(e164);
 }
 
-const isUsPhone = (v) => /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(v);
+// Canada and the US share the North American Numbering Plan, so one check covers both.
+const isNanpPhone = (v) => /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(v);
 const isFictionalPhone = (v) => /^\+1\d{3}55501\d{2}$/.test(v);
 
-function formatDate(iso) {
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', {
+function formatDate(iso, locale = 'en-US') {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -138,7 +146,7 @@ function resolveConfig(site, { production, forceLive, now }) {
   const c = structuredClone(site.config);
   const strictly = (message) => (production ? problems : warnings).push(message);
 
-  for (const key of ['domain', 'brand', 'service', 'city', 'state', 'stateName', 'lastReviewed']) {
+  for (const key of ['domain', 'brand', 'service', 'city', 'region', 'regionName', 'lastReviewed']) {
     if (typeof c[key] !== 'string' || !c[key].trim()) problems.push(`${key} is required`);
   }
   if (c.domain && !/^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(c.domain)) {
@@ -169,7 +177,7 @@ function resolveConfig(site, { production, forceLive, now }) {
     c.partner = { ...c.partner, license: { ...(c.partner.license ?? {}) } };
     const fill = (obj, key, sample, label) => {
       if (obj[key]) return;
-      if (production) problems.push(`${label} is missing. Call mode has to name the licensed company and its license.`);
+      if (production) problems.push(`${label} is missing. Call mode has to name the licensed company and its licence.`);
       else {
         obj[key] = sample;
         samples.push(label);
@@ -179,30 +187,35 @@ function resolveConfig(site, { production, forceLive, now }) {
     fill(c.partner.license, 'holder', SAMPLE.partner.license.holder, 'partner.license.holder');
     fill(c.partner.license, 'number', SAMPLE.partner.license.number, 'partner.license.number');
     c.partner.license.label ||= SAMPLE.partner.license.label;
+    c.partner.license.credential ||= SAMPLE.partner.license.credential;
+    c.partner.description ||= 'a licensed plumbing company';
     if (!c.phone) {
-      if (production) problems.push('phone is missing. Call mode needs the tracking number in E.164 form, like +17135550123.');
+      if (production) problems.push('phone is missing. Call mode needs the tracking number in E.164 form, like +19055550123.');
       else {
         c.phone = SAMPLE.phone;
         samples.push('phone');
       }
     }
-    for (const key of ['name', 'statement', 'address', 'phone', 'url']) {
-      if (!c.regulator?.[key]) problems.push(`regulator.${key} is required in call mode (the license statement names the licensing board)`);
+    for (const key of ['name', 'statement', 'url']) {
+      if (!c.regulator?.[key]) problems.push(`regulator.${key} is required in call mode (the licence statement says where to check the licence)`);
     }
   } else if (c.phone) {
     strictly(
-      'phone is set but partner is empty, so the number stays off the site. Texas only lets you advertise plumbing ' +
-        'once a Responsible Master Plumber is secured (Occupations Code §1301.351(a-2)). Add the partner to switch to call mode.',
+      'phone is set but partner is empty, so the number stays off the site. Every caller is a real person with a real ' +
+        'problem: only publish the number once a licensed company has agreed to take the calls. Add the partner to switch to call mode.',
     );
     c.phone = null;
   }
 
   if (c.phone) {
-    if (!isUsPhone(c.phone)) problems.push(`phone "${c.phone}" must be a US number in E.164 form, like +17135550123`);
+    if (!isNanpPhone(c.phone)) problems.push(`phone "${c.phone}" must be a North American number in E.164 form, like +19055550123`);
     else if (production && isFictionalPhone(c.phone)) problems.push(`phone ${c.phone} is a 555-01xx number reserved for fiction. Use the real tracking number.`);
   }
   for (const number of c.safetyPhones ?? []) {
-    if (number !== '911' && !isUsPhone(number)) problems.push(`safetyPhones entry "${number}" must be 911 or a US number in E.164 form`);
+    // N11 service codes (311, 911) are dialled as-is.
+    if (!/^[2-9]11$/.test(number) && !isNanpPhone(number)) {
+      problems.push(`safetyPhones entry "${number}" must be an N11 code like 911 or a North American number in E.164 form`);
+    }
   }
 
   if (production) {
@@ -237,15 +250,16 @@ function makeContext(site, resolved, { production, now, css, networkDomains }) {
   });
   const byRole = (role) => pages.find((p) => p.role === role);
   const year = String(new Date(now).getUTCFullYear());
+  const locale = c.locale ?? 'en-US';
   const tokens = {
     brand: c.brand,
     domain: c.domain,
     service: c.service,
     city: c.city,
-    state: c.state,
-    stateName: c.stateName,
+    region: c.region,
+    regionName: c.regionName,
     year,
-    lastReviewed: formatDate(c.lastReviewed),
+    lastReviewed: formatDate(c.lastReviewed, locale),
     lastReviewedIso: c.lastReviewed,
     operatorName: c.operator.name,
     operatorEmail: c.operator.email,
@@ -255,10 +269,8 @@ function makeContext(site, resolved, { production, now, css, networkDomains }) {
     Object.assign(tokens, {
       regulatorName: c.regulator.name,
       regulatorStatement: c.regulator.statement,
-      regulatorAddress: c.regulator.address,
-      regulatorPhone: c.regulator.phone,
       regulatorUrl: c.regulator.url,
-      regulatorHost: c.regulator.url ? new URL(c.regulator.url).host : '',
+      regulatorLink: c.regulator.url ? displayUrl(c.regulator.url) : '',
     });
   }
   if (live) {
@@ -267,11 +279,23 @@ function makeContext(site, resolved, { production, now, css, networkDomains }) {
       phoneE164: c.phone,
       partnerCompany: c.partner.company,
       licenseHolder: c.partner.license.holder,
-      licenseNumber: c.partner.license.number,
       licenseLabel: c.partner.license.label,
+      licenseCredential: c.partner.license.credential,
+      licenseNumber: c.partner.license.number,
     });
   }
-  return { site, c, live, production, samples, pages, byRole, tokens, css, networkDomains, now };
+  return { site, c, live, production, samples, pages, byRole, tokens, locale, css, networkDomains, now };
+}
+
+// "https://example.org/public-register/" -> "example.org/public-register"
+function displayUrl(url) {
+  const u = new URL(url);
+  return `${u.host}${u.pathname.replace(/\/$/, '')}`;
+}
+
+// ["the City", "the Region"] -> "the City, the Region or any manufacturer"
+function notAffiliatedList(c) {
+  return [...(c.notAffiliatedWith ?? [`the City of ${c.city}`]), 'any manufacturer'].join(', ').replace(/, ([^,]*)$/, ' or $1');
 }
 
 function components(ctx) {
@@ -282,34 +306,36 @@ function components(ctx) {
     if (!live) throw new Error(`[[${name}]] only works in call mode. Wrap it in <!-- if:live --> ... <!-- /if:live -->.`);
     return render();
   };
+  const trade = c.trade ?? 'plumbing';
   return {
     cta: callModeOnly('cta', () =>
       `<div class="cta-block"><a class="cta" href="tel:${e(c.phone)}">${PHONE_ICON}<span>Call ${e(formatPhone(c.phone))}</span></a>` +
         `<p class="cta-note">Free call, answered 24/7 by an automated assistant. We're a referral service: ` +
-        `the work is done by ${e(c.partner.company)}, a licensed plumbing company. <a href="${about}">How it works</a></p></div>`,
+        `the work is done by ${e(c.partner.company)}, ${e(c.partner.description)}. <a href="${about}">How it works</a></p></div>`,
     ),
     'call-link': callModeOnly('call-link', () => `<a href="tel:${e(c.phone)}">${e(formatPhone(c.phone))}</a>`),
     license: callModeOnly('license', () => licenseHtml(c)),
     disclosure: () =>
       live
         ? `<aside class="disclosure" aria-label="Referral disclosure"><p><strong>Referral disclosure:</strong> ${e(c.brand)} is an ` +
-          `independent referral service, not a plumbing company. Calls are answered by an automated assistant and passed to ` +
-          `${e(c.partner.company)}, which does the work under ${e(c.stateName)} license ${e(c.partner.license.number)} and pays us ` +
-          `for referrals. <a href="${about}">Details</a></p></aside>`
+          `independent referral service, not a ${e(trade)} company. Calls are answered by an automated assistant and passed to ` +
+          `${e(c.partner.company)}, which does the work and pays us for referrals. <a href="${about}">Details</a></p></aside>`
         : `<aside class="disclosure" aria-label="About this site"><p><strong>About this site:</strong> ${e(c.brand)} is an ` +
-          `independent guide. We don't do plumbing work, and we don't refer you to any company. <a href="${about}">Details</a></p></aside>`,
+          `independent guide. We don't do ${e(trade)} work, and we don't refer you to any company. <a href="${about}">Details</a></p></aside>`,
   };
 }
 
 function licenseHtml(c) {
   const e = escapeHtml;
   const p = c.partner;
+  const l = p.license;
   const r = c.regulator;
+  const contact = [r.address, r.phone].filter(Boolean).map(e).join(', ');
   // Company names often end in "Co." or "Inc.", so no sentence ends right after one.
   return (
-    `<p class="license">Plumbing work is performed by <strong>${e(p.company)}</strong> (${e(p.license.label)}: ` +
-    `${e(p.license.holder)}, ${e(c.stateName)} license ${e(p.license.number)}). ${e(r.statement)}, ${e(r.address)}, ` +
-    `${e(r.phone)}, <a href="${e(r.url)}">${e(new URL(r.url).host)}</a>.</p>`
+    `<p class="license">Work is performed by <strong>${e(p.company)}</strong> (${e(l.label)}: ${e(l.holder)}, ` +
+    `${e(l.credential)} ${e(l.number)}). ${e(r.statement)}${contact ? ` (${contact})` : ''}: ` +
+    `<a href="${e(r.url)}">${e(displayUrl(r.url))}</a>.</p>`
   );
 }
 
@@ -352,7 +378,7 @@ function jsonLd(ctx, page) {
         '@type': 'Service',
         name: `${c.brand} referral line`,
         serviceType: c.service,
-        areaServed: { '@type': 'City', name: c.city, containedInPlace: { '@type': 'State', name: c.stateName } },
+        areaServed: { '@type': 'City', name: c.city, containedInPlace: { '@type': 'AdministrativeArea', name: c.regionName } },
         provider: { '@type': 'Organization', name: c.partner.company },
         broker: { '@type': 'Organization', name: c.brand, url: `${origin}/`, telephone: c.phone },
         availableChannel: {
@@ -407,13 +433,14 @@ function layout(ctx, page, body) {
   const callbar = live
     ? `<div class="callbar"><a class="cta" href="tel:${e(c.phone)}">${PHONE_ICON}<span>Call ${e(formatPhone(c.phone))} · 24/7</span></a></div>`
     : '';
+  const trade = e(c.trade ?? 'plumbing');
   const footerText = live
-    ? `${e(c.brand)} is an independent referral service, not a plumbing company. Calls are answered by an automated assistant and recorded.`
-    : `${e(c.brand)} is an independent guide, not a plumbing company.`;
+    ? `${e(c.brand)} is an independent referral service, not a ${trade} company. Calls are answered by an automated assistant and recorded.`
+    : `${e(c.brand)} is an independent guide, not a ${trade} company.`;
   const themeColor = c.theme?.light?.['--accent'] ?? '#0b5cad';
 
   return `<!doctype html>
-<html lang="en-US">
+<html lang="${e(ctx.locale)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -440,7 +467,7 @@ ${body.trim()}
 <p>${footerText}</p>
 ${live ? licenseHtml(c) : ''}
 <nav class="footer-nav" aria-label="Site information">${footerNav}</nav>
-<p>© ${e(ctx.tokens.year)} ${e(c.operator.name)}. Facts last checked ${e(ctx.tokens.lastReviewed)}. Not affiliated with the City of ${e(c.city)} or any manufacturer.</p>
+<p>© ${e(ctx.tokens.year)} ${e(c.operator.name)}. Facts last checked ${e(ctx.tokens.lastReviewed)}. Not affiliated with ${e(notAffiliatedList(c))}.</p>
 </div></footer>
 ${callbar}
 </body>
