@@ -1,0 +1,23 @@
+// Fetch Maven Central artifacts from repo1.maven.org. Some build machines get
+// throttled or empty answers from repo.maven.apache.org (the default host),
+// which breaks dependency resolution even for common libraries.
+//
+//   ./gradlew assembleDebug --init-script ci/maven-central.gradle
+
+def useRepo1 = { RepositoryHandler repos ->
+  repos.all { r ->
+    if (r instanceof MavenArtifactRepository && r.url.toString().startsWith('https://repo.maven.apache.org')) {
+      r.url = 'https://repo1.maven.org/maven2/'
+    }
+  }
+}
+
+beforeSettings { settings ->
+  useRepo1(settings.pluginManagement.repositories)
+  useRepo1(settings.dependencyResolutionManagement.repositories)
+}
+
+allprojects {
+  useRepo1(buildscript.repositories)
+  useRepo1(repositories)
+}
