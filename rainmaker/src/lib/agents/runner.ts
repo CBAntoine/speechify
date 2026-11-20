@@ -275,28 +275,55 @@ export async function ensureManagedAgent(def: AgentDef): Promise<{ agentId: stri
     const db = await readDb();
     let environmentId = db.managed.environmentId;
     if (!environmentId) {
+      // Reuse the account's Rainmaker environment if one exists (another
+      // install, or a reset database) so agents don't pile up as duplicates.
+      let found: string | undefined;
+      for await (const env of c.beta.environments.list()) {
+        if (!env.archived_at && env.metadata?.app === "rainmaker") {
+          found = env.id;
+          break;
+        }
+      }
       // The agents only call Rainmaker's own tools, so the sandbox gets no
       // network access at all.
-      const env = await c.beta.environments.create({
-        name: "rainmaker",
-        description: "Rainmaker CRM agents (custom tools only)",
-        config: { type: "cloud", networking: { type: "limited" } },
-      });
-      environmentId = env.id;
+      found ??= (
+        await c.beta.environments.create({
+          name: "rainmaker",
+          description: "Rainmaker CRM agents (custom tools only)",
+          config: { type: "cloud", networking: { type: "limited" } },
+          metadata: { app: "rainmaker" },
+        })
+      ).id;
+      environmentId = found;
       await update((d) => {
-        d.managed.environmentId = env.id;
+        d.managed.environmentId = found;
       });
     }
     const config = agentConfig(def);
     const hash = agentHash(def);
-    const rec = db.managed.agents[def.id];
-    if (rec && rec.hash === hash) return { agentId: rec.id, version: rec.version, environmentId };
-    const agent = rec
-      ? await c.beta.agents.update(rec.id, { ...config, version: rec.version })
-      : await c.beta.agents.create({ ...config, description: def.description, metadata: { app: "rainmaker", role: def.id } });
-    await update((d) => {
-      d.managed.agents[def.id] = { id: agent.id, version: agent.version, hash };
-    });
+    let rec = db.managed.agents[def.id];
+    if (!rec) {
+      for await (const a of c.beta.agents.list()) {
+        if (!a.archived_at && a.metadata?.app === "rainmaker" && a.metadata?.role === def.id) {
+          rec = { id: a.id, version: a.version, hash: a.metadata?.hash ?? "" };
+          break;
+        }
+      }
+    }
+    const meta = { app: "rainmaker", role: def.id, hash };
+    const agent =
+      rec && rec.hash === hash
+        ? { id: rec.id, version: rec.version }
+        : rec
+          ? // No `version`: the config comes from code, so last write wins and a
+            // second server instance can't fail this with a version conflict.
+            await c.beta.agents.update(rec.id, { ...config, metadata: meta })
+          : await c.beta.agents.create({ ...config, description: def.description, metadata: meta });
+    if (!db.managed.agents[def.id] || db.managed.agents[def.id].version !== agent.version || db.managed.agents[def.id].hash !== hash) {
+      await update((d) => {
+        d.managed.agents[def.id] = { id: agent.id, version: agent.version, hash };
+      });
+    }
     return { agentId: agent.id, version: agent.version, environmentId };
   })();
   ensuring.set(def.id, p);
