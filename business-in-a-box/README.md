@@ -11,13 +11,16 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 | [`03-offer-brief.md`](03-offer-brief.md) | The offer, plans, guarantee, ROI maths, 7-day launch, unit economics, compliance |
 | [`04-style-guide.md`](04-style-guide.md) | Palette hex codes with contrast ratios, type, motifs, copy rules, ad specs, the five planned statics |
 | [`05-ugc-scripts.md`](05-ugc-scripts.md) | Two 9:16 UGC scripts with timings and on-screen text |
+| [`06-most-profitable-route.md`](06-most-profitable-route.md) | Most profitable route: per-ticket pricing, one install per venue, busiest rooms first, plus the routes that lost |
 | [`tools/roi.py`](tools/roi.py) | Per-venue fee and ROI calculator |
+| [`tools/route_model.py`](tools/route_model.py) | Pricing route model: flat vs per-ticket, fan-price check, licence downside, 12-month scenario |
 | `leads/` | Lead lists. **Git-ignored on purpose:** they hold named people's contact details and this repo is public. |
 
 ## Status
 
 - [x] Checkpoint 1: offer chosen (venue ticketing, US)
 - [x] ICP, offer brief, ROI maths, style guide, UGC scripts
+- [x] Most profitable route worked out (06). The switch to per-ticket pricing is waiting for your decision.
 - [ ] Checkpoint 2: approve 5 sample leads
 - [ ] Pull 15 more leads (20 total)
 - [ ] 5 static Meta ads
