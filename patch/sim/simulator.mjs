@@ -11,6 +11,7 @@ import { TYPE, decode, encodeResponse, joinName, reverseName } from "../src/net/
 import { parseSsdpMessage } from "../src/net/ssdp.mjs";
 import * as H from "./http-devices.mjs";
 import * as S from "./socket-devices.mjs";
+import * as T from "./tv-devices.mjs";
 
 export async function startSimulator({ prefix = "127.0.10", multicast = false } = {}) {
   const ip = (n) => `${prefix}.${n}`;
@@ -32,6 +33,9 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     yeelight: S.yeelightState(),
     cast: S.castState(),
     printer: S.printerState(),
+    samsung: T.samsungState(),
+    lg: T.lgState(),
+    firetv: T.fireTvState(),
   };
   // Port forwards point at the simulated camera and Raspberry Pi.
   state.router.mappings[0].NewInternalClient = ip(23);
@@ -57,12 +61,26 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
   add(await S.openPorts(ip(21), [62078]));
   add(await S.openPorts(ip(22), [23, 80, 554], "IPCAM Web Client"));
   add(await S.openPorts(ip(23), [22, 32400]));
+  // TVs and other devices that say exactly what they are.
+  add(await T.samsungTv(ip(15), state.samsung));
+  add(await T.lgTv(ip(16), state.lg));
+  add(await T.fireTv(ip(17), state.firetv));
+  add(await T.playStation(ip(18)));
+  add(await S.openPorts(ip(19), [7000, 49152]));
+  add(await S.openPorts(ip(24), [62078]));
+  add(await S.openPorts(ip(25), [22, 445, 5900]));
+  add(await T.spotifySpeaker(ip(26), 8200, { remoteName: "Bathroom Speaker", deviceType: "SPEAKER", brandDisplayName: "Bose", modelDisplayName: "Smart Speaker 500" }));
+  add(await S.openPorts(ip(27), [8008]));
+  add(await T.wsdResponder(ip(1), [{ ip: ip(22), uuid: "2419d68a-2dd2-21b2-a205-ec71dbe1a2b3", maker: "Reolink", model: "RLC-510A", location: "Driveway" }]));
+  add(await T.youtubeApi(ip(1), 8099));
 
   const arp = [
     [1, "a0:40:a0:11:22:33"], [2, "00:17:88:2a:3b:4c"], [3, "c8:3a:6b:12:34:56"], [4, "48:a6:b8:f1:c2:d3"], [5, "a8:03:2a:b1:c2:d3"],
     [6, "c4:5b:be:6a:1b:2c"], [7, "a4:cf:12:aa:bb:cc"], [8, "3c:6a:9d:12:34:56"], [9, "50:c7:bf:12:34:56"], [10, "d0:73:d5:2a:bb:01"],
     [11, "04:cf:8c:15:24:3f"], [12, "30:05:5c:1a:2b:3c"], [13, "f8:0f:f9:5c:0a:7e"], [14, "dc:a6:32:9a:8b:7c"], [20, "00:1a:2b:3c:4d:5e"],
     [21, "9a:4c:01:22:33:44"], [22, "bc:51:fe:44:55:66"], [23, "b8:27:eb:4d:5e:6f"], [30, "10:2c:6b:00:11:22"], [31, "6e:12:ab:cd:ef:01"],
+    [15, "64:1c:ae:12:34:56"], [16, "44:be:8b:0a:1b:2c"], [17, "f0:4f:7c:3a:2b:1c"], [18, "a4:b1:c2:d3:e4:f5"], [19, "f0:b3:ec:12:9a:7b"],
+    [24, "2a:91:fe:61:0c:33"], [25, "f4:d4:88:5e:21:9c"], [26, "08:df:1f:55:66:77"], [27, "56:3e:91:aa:20:4d"],
   ].map(([n, mac]) => ({ ip: ip(n), mac, iface: "sim" }));
 
   // ── mDNS ──
@@ -78,11 +96,18 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     { type: "_googlecast._tcp", instance: "Google-TV-Streamer-5c0a7e2bd1f84e5a9c3b2a1d0e9f8a7b", host: "5c0a7e2b-d1f8-4e5a-9c3b-2a1d0e9f8a7b.local", ip: ip(13), port: 8009, txt: { id: state.cast.id, cd: "B3B4E0C77AA5A3F1F7A1C3D0E9F8A7B1", rm: "", ve: "05", md: "Google TV Streamer", ic: "/setup/icon.png", fn: state.cast.name, ca: "4101", st: "1", bs: "FA8FCA123456", nf: "1", rs: "YouTube" } },
     { type: "_home-assistant._tcp", instance: "Home", host: "homeassistant.local", ip: ip(14), port: 8123, txt: { location_name: "Home", uuid: "9a8b7c6d5e4f40312a1b", version: "2026.11.2", internal_url: `http://${ip(14)}:8123`, base_url: `http://${ip(14)}:8123`, requires_api_password: "True" } },
     { type: "_companion-link._tcp", instance: "Kitchen iPad", host: "Kitchen-iPad.local", ip: ip(21), port: 49152, txt: { rpMd: "iPad13,1", rpVr: "600.70" } },
+    { type: "_amzn-wplay._tcp", instance: "amzn.dmgr:7C3A2B1C9F0E4D5A", host: "amazon-7c3a2b1c.local", ip: ip(17), port: 33201, txt: { n: "Kids Room Fire TV", s: "G4N1AB1234567890", ad: "AFTKA", c: "FireTV", v: "1" } },
+    { type: "_airplay._tcp", instance: "Den", host: "Den-Apple-TV.local", ip: ip(19), port: 7000, txt: { model: "AppleTV14,1", deviceid: "F0:B3:EC:12:9A:7B", features: "0x4A7FDFD5,0xBC177FDE", osvers: "18.1", srcvers: "800.20.3" } },
+    { type: "_companion-link._tcp", instance: "Den", host: "Den-Apple-TV.local", ip: ip(19), port: 49152, txt: { rpMd: "AppleTV14,1", rpVr: "800.20.3", rpFl: "0x36782" } },
+    { type: "_companion-link._tcp", instance: "Alex's iPhone", host: "Alexs-iPhone.local", ip: ip(24), port: 49153, txt: { rpMd: "iPhone15,2", rpVr: "600.70" } },
+    { type: "_device-info._tcp", instance: "Alex's MacBook Pro", host: "Alexs-MacBook-Pro.local", ip: ip(25), port: 0, txt: { model: "MacBookPro18,3", osxvers: "24" } },
+    { type: "_smb._tcp", instance: "Alex's MacBook Pro", host: "Alexs-MacBook-Pro.local", ip: ip(25), port: 445, txt: {} },
+    { type: "_spotify-connect._tcp", instance: "Bathroom Speaker", host: "Bose-SM500-55667.local", ip: ip(26), port: 8200, txt: { CPath: "/zc", VERSION: "1.0", Stack: "SP" } },
     { type: "_workstation._tcp", instance: "raspberrypi [b8:27:eb:4d:5e:6f]", host: "raspberrypi.local", ip: ip(23), port: 9, txt: {} },
     { type: "_plexmediasvr._tcp", instance: "raspberrypi", host: "raspberrypi.local", ip: ip(23), port: 32400, txt: {} },
   ];
   const fullName = (s) => joinName([s.instance, ...s.type.split("."), "local"]);
-  const reverse = new Map([[reverseName(ip(21)), "Kitchen-iPad.local"], [reverseName(ip(23)), "raspberrypi.local"], [reverseName(ip(20)), "OFFICE-PC.local"]]);
+  const reverse = new Map([[reverseName(ip(21)), "Kitchen-iPad.local"], [reverseName(ip(23)), "raspberrypi.local"], [reverseName(ip(20)), "OFFICE-PC.local"], [reverseName(ip(27)), "Galaxy-S24-Ultra.local"]]);
   const types = [...new Set(services.map((s) => s.type))];
   const recordsFor = (s) => ({
     srv: { name: fullName(s), type: TYPE.SRV, data: { priority: 0, weight: 0, port: s.port, target: s.host }, flush: true },
@@ -141,6 +166,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     { sts: ["upnp:rootdevice", "urn:schemas-upnp-org:device:InternetGatewayDevice:1"], location: `http://${ip(1)}:5000/rootDesc.xml`, usn: "uuid:824ff22b-8c7d-41c5-a131-44a1b2c3d4e5", server: "Linux/4.1.27, UPnP/1.0, MiniUPnPd/2.1" },
     { sts: ["upnp:rootdevice", "urn:schemas-upnp-org:device:basic:1"], location: `http://${ip(2)}:80/description.xml`, usn: "uuid:2f402f80-da50-11e1-9b23-0017882a3b4c", server: "Hue/1.0 UPnP/1.0 IpBridge/1.67.0", extra: { "hue-bridgeid": "001788FFFE2A3B4C" } },
     { sts: ["roku:ecp", "upnp:rootdevice"], location: `http://${ip(3)}:8060/`, usn: "uuid:roku:ecp:YN00AB123456", server: "Roku/14.1.4 UPnP/1.0 Roku/14.1.4" },
+    { sts: ["upnp:rootdevice", "urn:lge-com:service:webos-second-screen:1", "urn:dial-multiscreen-org:service:dial:1"], location: `http://${ip(16)}:1754/`, usn: "uuid:4c1d7e52-0b3f-4f43-a9e1-44be8b0a1b2c", server: "WebOS/6.0 UPnP/1.0 webOSTV/1.0" },
     { sts: ["upnp:rootdevice", "urn:schemas-upnp-org:device:ZonePlayer:1", "urn:schemas-upnp-org:device:MediaRenderer:1"], location: `http://${ip(4)}:1400/xml/device_description.xml`, usn: "uuid:RINCON_48A6B8F1C2D301400", server: "Linux UPnP/1.0 Sonos/80.1-55020 (ZPS18)", extra: { "X-RINCON-HOUSEHOLD": "Sonos_4f2a91" } },
   ];
   const ssdpReply = (d, st) =>
@@ -189,7 +215,8 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     network,
     arpTable: async () => arp.map((e) => ({ ...e })),
     /** Scanner settings that point discovery at the simulator instead of the real network. */
-    overrides: { network, arp: async () => arp.map((e) => ({ ...e })), mdnsTarget: ip(1), ssdpTarget: ip(1), broadcasts: [], multicastYeelight: false, skipReverseDns: true },
+    overrides: { network, arp: async () => arp.map((e) => ({ ...e })), mdnsTarget: ip(1), ssdpTarget: ip(1), wsdTarget: ip(1), broadcasts: [], multicastYeelight: false, skipReverseDns: true, youtubeBase: `http://${ip(1)}:8099/youtube/v3` },
+    youtubeKey: "demo-youtube-key",
     async stop() {
       for (const s of [...servers, ...mdnsSockets]) {
         try {

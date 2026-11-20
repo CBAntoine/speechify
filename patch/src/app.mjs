@@ -17,6 +17,7 @@ import { wifiInfo } from "./net/wifi.mjs";
 import { ACTIONS } from "./drivers/common.mjs";
 import homeassistant from "./drivers/homeassistant.mjs";
 import { DEFAULT_AGENT_ID, DEFAULT_PORT, VERSION } from "./defaults.mjs";
+import { YOUTUBE_API } from "./net/youtube.mjs";
 import { localNetworks } from "./net/interfaces.mjs";
 import { safeJson } from "./util.mjs";
 
@@ -93,6 +94,20 @@ export async function voiceSession(creds, mode) {
   return { ok: false, error: "upstream", message: "Unexpected answer from ElevenLabs." };
 }
 
+/** A one-unit YouTube Data API call that tells a working key from a wrong or switched-off one. */
+async function checkYouTubeKey(key, base = YOUTUBE_API) {
+  try {
+    const res = await fetch(`${base}/videos?part=id&id=dQw4w9WgXcQ&key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) return { ok: true, message: "YouTube key works. I can find and play videos on your TVs now." };
+    const body = await res.json().catch(() => null);
+    const reason = body?.error?.errors?.[0]?.reason || body?.error?.status || "";
+    if (/accessNotConfigured|SERVICE_DISABLED/i.test(reason)) return { ok: false, message: "That key's Google project doesn't have the YouTube Data API v3 turned on. Enable it in the Google Cloud console, then save again." };
+    return { ok: false, message: "YouTube didn't accept that key. Copy it again from the Google Cloud console (APIs & Services → Credentials)." };
+  } catch {
+    return { ok: false, network: true, message: "Couldn't reach YouTube to check the key, so I saved it anyway." };
+  }
+}
+
 export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false, dataDir, overrides = {}, autoScan = true, log = console.log } = {}) {
   const store = new Store(dataDir || path.join(ROOT, demo ? ".data-demo" : ".data"));
   lan = lan || store.data.lan.enabled;
@@ -101,7 +116,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     store.save();
   }
   const inventory = new Inventory(store);
-  const controller = new Controller({ store, inventory });
+  const controller = new Controller({ store, inventory, overrides });
   const scanner = new Scanner({ store, inventory, controller, overrides });
   controller.scanner = scanner;
   const token = crypto.randomBytes(18).toString("base64url");
@@ -136,6 +151,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     return {
       elevenlabs: { hasKey: !!el.apiKey, keyHint: el.apiKey ? `…${el.apiKey.slice(-4)}` : null, agentId: el.agentId || DEFAULT_AGENT_ID, customAgent: !!el.agentId, fromEnv: !!process.env.ELEVENLABS_API_KEY },
       homeAssistant: { url: store.data.homeAssistant.url || ha?.url || "", hasToken: !!ha?.token },
+      youtube: { hasKey: !!store.secrets.youtubeApiKey, keyHint: store.secrets.youtubeApiKey ? `…${store.secrets.youtubeApiKey.slice(-4)}` : null, fromEnv: !!process.env.YOUTUBE_API_KEY },
       network: { subnet: store.data.network.subnet || "" },
       lan: { enabled: !!store.data.lan.enabled, active: lan, accessCode: lan ? store.data.lan.accessCode : null },
       features: store.data.features,
@@ -163,7 +179,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       if (offline && r.ok) r.message += ` (${offline} offline ${offline === 1 ? "device was" : "devices were"} skipped.)`;
       return r;
     }
-    const r = inventory.resolve(room && device ? `${room} ${device}` : device, { kind });
+    const r = inventory.resolve(room && device ? `${room} ${device}` : device, { kind, action });
     if (r.ambiguous) return { ok: false, error: "EAMBIGUOUS", message: `Which one do you mean: ${r.ambiguous.map((d) => inventory.displayName(d)).join(", ")}?`, candidates: r.ambiguous.map((d) => inventory.toPublic(d)) };
     if (r.none) return { ok: false, error: "ENOTFOUND", message: `I couldn't find "${device}".${r.suggestions.length ? ` Did you mean ${r.suggestions.join(" or ")}?` : " A new scan might find it."}${setupHint()}` };
     return controller.act(r.device.id, action, value, { confirmToken });
@@ -195,6 +211,15 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
         checks.elevenlabs = probe.ok ? { ok: true, message: "Key works. You can talk to Patch now." } : { ok: probe.error === "network", message: probe.message };
         if (probe.ok || probe.error === "network" || probe.error === "agent") store.data.elevenlabs.apiKey = key;
       } else store.data.elevenlabs.apiKey = "";
+    }
+    if (typeof b.youtubeApiKey === "string") {
+      const key = b.youtubeApiKey.trim();
+      if (!key) store.data.youtube.apiKey = "";
+      else {
+        const check = await checkYouTubeKey(key, overrides.youtubeBase);
+        checks.youtube = check;
+        if (check.ok || check.network) store.data.youtube.apiKey = key;
+      }
     }
     if (typeof b.agentId === "string") store.data.elevenlabs.agentId = /^agent_[a-z0-9]+$/i.test(b.agentId.trim()) ? b.agentId.trim() : "";
     if (typeof b.haUrl === "string" || typeof b.haToken === "string") {

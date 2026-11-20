@@ -11,17 +11,20 @@ const ON_DEVICE_RENAME = new Set(["hue", "shelly", "wled", "elgato", "kasa", "li
 const RISKY_PORTS = { 21: "FTP", 23: "Telnet", 3389: "Remote Desktop", 5900: "VNC", 1883: "MQTT" };
 
 export class Controller {
-  constructor({ store, inventory }) {
+  constructor({ store, inventory, overrides = {} }) {
     this.store = store;
     this.inventory = inventory;
+    this.overrides = overrides;
     this.scanner = null;
     this.confirmations = new Map();
     this.network = null;
+    this.memory = new Map(); // short-lived things to remember between commands, e.g. the last YouTube results
   }
 
   ctx(network = this.network) {
     if (network) this.network = network;
     const store = this.store;
+    const o = this.overrides;
     return {
       get secrets() {
         return store.secrets;
@@ -30,6 +33,12 @@ export class Controller {
       forgetSecret: (keys) => store.setPath(keys, undefined),
       hostname: os.hostname().replace(/\..*$/, "") || "computer",
       network: this.network,
+      memory: this.memory,
+      get youtube() {
+        const apiKey = store.secrets.youtubeApiKey;
+        return apiKey ? { apiKey, base: o.youtubeBase } : null;
+      },
+      openUrl: o.openUrl,
     };
   }
 
@@ -146,7 +155,7 @@ export class Controller {
         for (const dev of r.devices) this.inventory.upsert(dev.id === id ? { ...d, ...dev } : dev, { scanId: d.scanId });
       } else this.inventory.patch(id, patch);
       if (r.rescan && this.scanner) this.scanner.scan().catch(() => {});
-      return { ok: true, message: r.message, device: this.publicDevice(id) };
+      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}) };
     } catch (err) {
       const e = err instanceof DeviceError ? err : new DeviceError(err.message || String(err));
       if (e.code === "EOFFLINE") this.inventory.patch(id, { online: false });

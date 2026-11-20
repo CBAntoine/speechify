@@ -18,13 +18,17 @@ import { kasaDiscover } from "./drivers/kasa.mjs";
 import { lifxDiscover } from "./drivers/lifx.mjs";
 import { yeelightDiscover } from "./drivers/yeelight.mjs";
 import { DRIVERS } from "./drivers/index.mjs";
+import { ddpDiscover } from "./net/ddp.mjs";
+import { wsdDiscover } from "./net/wsd.mjs";
+import { factsFor, probeIdentity } from "./identify.mjs";
 import { webUrlFor } from "./drivers/generic.mjs";
+import { SELF_ACTIONS } from "./drivers/self.mjs";
 import { inCidr, isPrivateIPv4, isRandomizedMac, mapLimit, prettyHostname, settleWithin, sortIps, subnetHosts } from "./util.mjs";
 
-export const SERVICE_PORTS = [21, 22, 23, 53, 80, 139, 443, 445, 548, 554, 631, 1400, 1883, 3389, 5000, 5001, 5900, 7000, 8001, 8008, 8009, 8060, 8080, 8123, 8443, 9100, 9123, 9999, 32400, 55443, 62078];
+export const SERVICE_PORTS = [21, 22, 23, 53, 80, 139, 443, 445, 548, 554, 631, 1400, 1883, 3000, 3001, 3389, 5000, 5001, 5555, 5900, 7000, 8001, 8002, 8008, 8009, 8060, 8080, 8123, 8443, 9100, 9123, 9999, 32400, 55443, 62078];
 
 function newHost(ip) {
-  return { ip, mac: null, vendor: null, randomMac: false, hostnames: new Set(), netbios: null, ports: new Set(), mdns: [], ssdp: [], udp: {}, http: {}, isGateway: false, rtt: null };
+  return { ip, mac: null, vendor: null, randomMac: false, hostnames: new Set(), netbios: null, ports: new Set(), mdns: [], ssdp: [], udp: {}, http: {}, extra: {}, facts: null, isGateway: false, rtt: null };
 }
 
 const PLATFORM = { darwin: "Mac", win32: "Windows PC", linux: "Linux computer" };
@@ -116,6 +120,17 @@ export class Scanner extends EventEmitter {
         const primary = i === 0 && !d.parent && !d.extra;
         d.ip ??= h.ip;
         if (primary) {
+          const f = h.facts;
+          if (f) {
+            // What the device's own announcements say fills in anything its driver didn't know.
+            if (!d.model && f.model) d.model = f.model;
+            if (!d.brand && f.brand) d.brand = f.brand;
+            if ((!d.kind || d.kind === "unknown") && f.kind) d.kind = f.kind;
+            d.info = { ...(d.info || {}), modelNumber: d.info?.modelNumber ?? f.modelNumber ?? null, os: d.info?.os ?? f.os ?? null };
+            const evidence = [...(driver.id !== "generic" && driver.id !== "upnp" ? [`its own ${driver.label} API`] : []), ...f.evidence];
+            d.info.identity = { exact: driver.id !== "generic" ? true : f.exact, evidence: [...new Set(evidence)].slice(0, 4) };
+            if (!d.room && f.room) d.room = f.room;
+          }
           d.mac ??= h.mac;
           d.vendor = h.vendor;
           d.ports = [...h.ports].sort((a, b) => a - b);
@@ -151,13 +166,15 @@ export class Scanner extends EventEmitter {
     const vendorTask = this.store.data.features.vendorLookup ? ensureOui(this.store.dir).catch(() => null) : null;
 
     this.progress("Listening for devices…", 8);
-    const [nb, md, ss, kasa, lifx, yee] = await Promise.all([
+    const [nb, md, ss, kasa, lifx, yee, wsd, ddp] = await Promise.all([
       o.skipNetbios ? new Map() : nbstatSweep(ips),
       mdns.browse({ iface: net.address || undefined, ...mTarget }),
       ssdp.search({ iface: net.address || undefined, ...sTarget }),
       kasaDiscover({ broadcasts: bcast }),
       lifxDiscover({ broadcasts: bcast }),
       yeelightDiscover({ target: o.multicastYeelight === false ? null : "239.255.255.250" }),
+      wsdDiscover({ iface: net.address || undefined, ...(o.wsdTarget ? { target: o.wsdTarget } : {}) }).catch(() => new Map()),
+      ddpDiscover({ broadcasts: bcast }).catch(() => new Map()),
     ]);
 
     const arp = (await (o.arp ? o.arp() : readArpTable())).filter((e) => inCidr(e.ip, net.cidr));
@@ -192,6 +209,14 @@ export class Scanner extends EventEmitter {
       const h = host(ip);
       if (h) h.udp.yeelight = info;
     }
+    for (const [ip, info] of wsd) {
+      const h = host(ip);
+      if (h) h.extra.wsd = info;
+    }
+    for (const [ip, info] of ddp) {
+      const h = host(ip);
+      if (h) h.extra.ddp = info;
+    }
     const gw = host(net.gateway);
     if (gw) gw.isGateway = true;
 
@@ -205,7 +230,7 @@ export class Scanner extends EventEmitter {
     const alive = [...hosts.keys()].sort(sortIps);
     this.progress(`Checking ${alive.length} devices…`, 40);
     const need = (key) => alive.filter((ip) => !hosts.get(ip).udp[key]);
-    const [, rdns, mrev, kasa2, lifx2, yee2] = await Promise.all([
+    const [, rdns, mrev, kasa2, lifx2, yee2, ddp2] = await Promise.all([
       mapLimit(alive, 24, async (ip) => {
         const r = await probePorts(ip, SERVICE_PORTS, { timeout: 900, concurrency: 16 });
         const h = hosts.get(ip);
@@ -217,11 +242,13 @@ export class Scanner extends EventEmitter {
       kasaDiscover({ broadcasts: [], unicast: need("kasa") }),
       lifxDiscover({ broadcasts: [], unicast: need("lifx") }),
       yeelightDiscover({ target: null, unicast: need("yeelight") }),
+      ddpDiscover({ broadcasts: [], unicast: alive.filter((ip) => !hosts.get(ip).extra.ddp) }).catch(() => new Map()),
     ]);
     for (const [ip, name] of [...rdns, ...mrev]) hosts.get(ip)?.hostnames.add(name);
     for (const [ip, info] of kasa2) if (hosts.get(ip)) hosts.get(ip).udp.kasa = info;
     for (const [ip, info] of lifx2) if (hosts.get(ip)) hosts.get(ip).udp.lifx = info;
     for (const [ip, info] of yee2) if (hosts.get(ip)) hosts.get(ip).udp.yeelight = info;
+    for (const [ip, info] of ddp2) if (hosts.get(ip)) hosts.get(ip).extra.ddp = info;
 
     await settleWithin(vendorTask, 8000);
     for (const h of hosts.values()) {
@@ -241,6 +268,9 @@ export class Scanner extends EventEmitter {
       }
     });
 
+    await mapLimit(alive, 12, (ip) => probeIdentity(hosts.get(ip)).catch(() => {}));
+    for (const h of hosts.values()) h.facts = factsFor(h);
+
     this.progress("Identifying devices…", 75);
     const ctx = this.controller.ctx(net);
     const results = [];
@@ -259,7 +289,7 @@ export class Scanner extends EventEmitter {
         mac: net.mac || null,
         state: {},
         info: { platform: `${os.type()} ${os.release()}` },
-        actions: ["rename", "set_room"],
+        actions: SELF_ACTIONS,
       });
     }
 

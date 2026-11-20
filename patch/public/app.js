@@ -39,6 +39,7 @@ const state = {
   openId: null,
   busy: new Set(),
   dismissed: new Set(JSON.parse(safeStorage("get", "patch.dismissed") || "[]")),
+  view: safeStorage("get", "patch.view") === "list" ? "list" : "cards",
 };
 
 function safeStorage(op, key, value) {
@@ -126,7 +127,8 @@ const isPowered = (d) => typeof d.state?.on === "boolean" && (has(d, "toggle") |
 
 function primaryControl(d) {
   const busy = state.busy.has(d.id);
-  if (d.setup?.kind === "button" && has(d, "pair")) return `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Pair</button>`;
+  if ((d.setup?.kind === "button" || d.setup?.kind === "tv-prompt") && has(d, "pair")) return `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Pair</button>`;
+  if (d.setup?.kind === "adb") return `<button class="btn btn--sm" data-ui="open" data-id="${esc(d.id)}">Set up</button>`;
   if (d.setup?.kind === "token") return `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>`;
   if (d.setup?.kind === "password") return `<button class="btn btn--sm" data-ui="open" data-id="${esc(d.id)}">${icon("key", 15)} Add password</button>`;
   if (d.online === false) return "";
@@ -150,7 +152,7 @@ function primaryControl(d) {
 function cardHtml(d) {
   const cat = catOf(d.kind);
   const on = d.online !== false && (d.state?.on === true || d.state?.playback === "playing");
-  const sub = [d.brand, d.model && !String(d.model).includes(d.brand || "§") ? d.model : d.model && !d.brand ? d.model : null].filter(Boolean).join(" · ") || d.kindLabel;
+  const sub = d.what || [d.brand, d.model].filter(Boolean).join(" · ") || d.kindLabel;
   return `<article class="card ${on ? "is-on" : ""} ${d.online === false ? "is-offline" : ""}" style="--tint:${cat.tint}" data-id="${esc(d.id)}" tabindex="0" aria-label="${esc(d.name)}, ${esc(d.kindLabel)}">
     <div class="card__top">
       <div class="kind-icon">${icon(kindIcon(d), 20)}</div>
@@ -192,6 +194,11 @@ function renderDevices() {
     host.innerHTML = `<div class="empty"><h3>Nothing matches</h3><p>Try another word, or clear the filter.</p></div>`;
     return;
   }
+  if (state.view === "list") {
+    host.innerHTML = tableHtml(groups.flatMap((g) => g.items));
+    cardCache.clear();
+    return;
+  }
   // Rebuild sections, reusing card elements whose HTML didn't change (keeps hover/focus stable).
   const frag = document.createDocumentFragment();
   const seen = new Set();
@@ -216,6 +223,50 @@ function renderDevices() {
   }
   for (const id of cardCache.keys()) if (!seen.has(id)) cardCache.delete(id);
   host.replaceChildren(frag);
+}
+
+const SURE_SHORT = { exact: "exact", likely: "likely", guess: "guess" };
+
+/** Every device as one table: what exactly it is, where, its address and status. */
+function tableHtml(list) {
+  const rows = list
+    .map(
+      (d) => `<tr data-id="${esc(d.id)}" tabindex="0" class="${d.online === false ? "is-offline" : ""}">
+      <td><span class="dot ${d.online ? "dot--on" : d.online === false ? "dot--off" : ""}"></span><strong>${esc(d.name)}</strong>${d.isNew ? ' <span class="badge badge--new">New</span>' : ""}</td>
+      <td>${esc(d.what || d.kindLabel)} <span class="badge badge--${esc(d.confidence || "guess")}">${SURE_SHORT[d.confidence] || "guess"}</span></td>
+      <td class="col-room">${esc(d.room || "")}</td>
+      <td class="col-addr">${d.ip ? `<code>${esc(d.ip)}</code>` : '<span style="color:var(--muted)">via hub</span>'}${d.mac ? `<small>${esc(d.mac)}${d.vendor ? ` · ${esc(d.vendor)}` : ""}</small>` : ""}</td>
+      <td class="col-state">${esc(stateLine(d) || (d.online === false ? "Offline" : "Online"))}</td>
+    </tr>`,
+    )
+    .join("");
+  return `<div class="table-wrap"><table class="dtable"><thead><tr><th>Name</th><th>What it is</th><th class="col-room">Room</th><th class="col-addr">Address</th><th class="col-state">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/** A spreadsheet of everything on the network, for keeping records or sharing with whoever helps you. */
+function exportCsv() {
+  const cols = [["Name", (d) => d.name], ["What it is", (d) => d.what], ["Type", (d) => d.kindLabel], ["Brand", (d) => d.brand], ["Model", (d) => d.model], ["Model number", (d) => d.info?.modelNumber], ["Software", (d) => d.info?.os], ["How sure", (d) => d.confidence], ["How Patch knows", (d) => (d.evidence || []).join("; ")], ["Room", (d) => d.room], ["IP address", (d) => d.ip], ["Hardware (MAC) address", (d) => d.mac], ["Network chip maker", (d) => d.vendor], ["Online", (d) => (d.online === false ? "no" : "yes")], ["Status", (d) => stateLine(d)], ["First seen", (d) => d.firstSeen && new Date(d.firstSeen).toISOString()], ["Last seen", (d) => d.lastSeen && new Date(d.lastSeen).toISOString()]];
+  const cell = (v) => {
+    const t = v == null ? "" : String(v);
+    // Quote everything; a leading = + - @ would make spreadsheets run it as a formula.
+    return `"${(/^[=+\-@]/.test(t) ? `'${t}` : t).replace(/"/g, '""')}"`;
+  };
+  const list = state.devices.filter((d) => !d.hidden);
+  const csv = [cols.map(([h]) => cell(h)).join(","), ...list.map((d) => cols.map(([, f]) => cell(f(d))).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `patch-devices-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 500);
+  toast(`Exported ${list.length} devices.`);
+}
+
+function renderViewToggle() {
+  for (const b of document.querySelectorAll("[data-view]")) b.setAttribute("aria-pressed", String(b.dataset.view === state.view));
 }
 
 function renderFilters() {
@@ -252,7 +303,14 @@ function renderBanners() {
   if (!state.setup.sdk) add("sdk", "banner--warn", "alert", "<strong>Voice isn't installed yet.</strong> In the Patch folder, run <code>npm install</code>, then restart Patch.");
   else if (!state.setup.voice) add("voice", "banner--voice", "mic", "<strong>Talk to your network.</strong> Add your ElevenLabs API key once, and Patch can listen and answer out loud.", '<button class="btn btn--voice btn--sm" data-ui="settings" data-focus="el">Add key</button>');
   for (const d of state.devices.filter((x) => x.setup && x.online !== false)) {
-    const btn = d.setup.kind === "button" ? `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Pair now</button>` : d.setup.kind === "token" ? `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>` : `<button class="btn btn--sm" data-ui="open" data-id="${esc(d.id)}">Add password</button>`;
+    const btn =
+      d.setup.kind === "button" || d.setup.kind === "tv-prompt"
+        ? `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Pair now</button>`
+        : d.setup.kind === "token"
+          ? `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>`
+          : d.setup.kind === "adb"
+            ? `<button class="btn btn--sm" data-ui="open" data-id="${esc(d.id)}">How to</button>`
+            : `<button class="btn btn--sm" data-ui="open" data-id="${esc(d.id)}">Add password</button>`;
     add(`setup:${d.id}`, "banner--warn", d.kind === "hub" ? "hub" : "key", `<strong>${esc(d.name)}</strong> found. ${esc(d.setup.message)}`, btn);
   }
   $("#banners").innerHTML = out.join("");
@@ -312,7 +370,22 @@ async function doAction(id, action, value, { confirmToken } = {}) {
   renderAll();
   toast(r.message || (r.ok ? "Done." : "That didn't work."), r.ok ? "ok" : "bad");
   if (r.ok) voice.uiActivity(`The person used the dashboard: ${r.message}`);
+  if (r.results?.length) showYouTubeResults(id, r.results);
   return r;
+}
+
+/** Search results under the YouTube box in the device drawer (kept in state so live updates don't wipe them). */
+function showYouTubeResults(id, results) {
+  state.ytResults = { id, results: results.slice(0, 5) };
+  const box = $("#ytResults");
+  if (box && state.openId === id) box.innerHTML = ytResultsHtml(id);
+}
+
+function ytResultsHtml(id) {
+  if (state.ytResults?.id !== id) return "";
+  return state.ytResults.results
+    .map((x) => `<div class="yt-row"><span>${esc(x.title)}<em>${esc([x.channel, x.live ? "live" : x.duration].filter(Boolean).join(" · "))}</em></span><button class="btn btn--sm" data-act="play_youtube" data-value="${esc(x.id)}" data-id="${esc(id)}">${icon("play", 13)} Play</button></div>`)
+    .join("");
 }
 
 export function flashDevice(id) {
@@ -326,7 +399,7 @@ export function flashDevice(id) {
 // ── drawer ────────────────────────────────────────────
 
 const SWATCHES = ["#ff3b30", "#ff9500", "#ffd60a", "#34c759", "#00c7be", "#0a84ff", "#5e5ce6", "#bf5af2", "#ff2d92", "#ffffff"];
-const PORT_NAMES = { 21: "FTP", 22: "SSH", 23: "Telnet", 53: "DNS", 80: "Web", 139: "NetBIOS", 443: "Web (secure)", 445: "File sharing", 548: "AFP", 554: "Video stream (RTSP)", 631: "Printing (IPP)", 1400: "Sonos", 1883: "MQTT", 3389: "Remote Desktop", 5000: "Web (alt)", 5001: "Web (alt, secure)", 5900: "Screen sharing (VNC)", 7000: "AirPlay", 8001: "TV remote", 8008: "Cast", 8009: "Cast", 8060: "Roku", 8080: "Web (alt)", 8123: "Home Assistant", 8443: "Web (alt, secure)", 9100: "Printing (raw)", 9123: "Elgato", 9999: "Kasa", 32400: "Plex", 55443: "Yeelight", 62078: "iPhone sync" };
+const PORT_NAMES = { 21: "FTP", 22: "SSH", 23: "Telnet", 53: "DNS", 80: "Web", 139: "NetBIOS", 443: "Web (secure)", 445: "File sharing", 548: "AFP", 554: "Video stream (RTSP)", 631: "Printing (IPP)", 1400: "Sonos", 1883: "MQTT", 3000: "TV remote (LG)", 3001: "TV remote (LG, secure)", 3389: "Remote Desktop", 5555: "Android debugging (ADB)", 8002: "TV remote (Samsung, secure)", 5000: "Web (alt)", 5001: "Web (alt, secure)", 5900: "Screen sharing (VNC)", 7000: "AirPlay", 8001: "TV remote", 8008: "Cast", 8009: "Cast", 8060: "Roku", 8080: "Web (alt)", 8123: "Home Assistant", 8443: "Web (alt, secure)", 9100: "Printing (raw)", 9123: "Elgato", 9999: "Kasa", 32400: "Plex", 55443: "Yeelight", 62078: "iPhone sync" };
 
 export function openDevice(id) {
   state.openId = id;
@@ -379,6 +452,17 @@ function controlsHtml(d) {
     rows.push(`<div class="control-row" style="display:block"><label>Remote</label><div class="remote">${k("back", icon("back", 18))}${k("up", icon("up", 18))}${k("home", icon("home", 18))}${k("left", icon("left", 18))}${k("ok", "OK", "ok")}${k("right", icon("right", 18))}${k("rewind", icon("rewind", 16))}${k("down", icon("down", 18))}${k("fast forward", icon("forward", 16))}</div></div>`);
   }
   if (has(d, "launch_app")) rows.push(`<div class="control-row"><label>Open app</label><div class="btns">${["Netflix", "YouTube", "Disney Plus", "Prime Video"].map((a) => btn("launch_app", a, "", a)).join("")}</div><form class="inline-form" data-form="launch_app" data-id="${id}"><input name="value" placeholder="Any app, e.g. Hulu"><button class="btn btn--sm">Open</button></form></div>`);
+  if (has(d, "set_channel") || has(d, "channel_up")) {
+    rows.push(
+      `<div class="control-row"><label>Channel</label><div class="btns">${has(d, "channel_down") ? btn("channel_down", "−", "", undefined).replace("<button", '<button aria-label="Channel down"') : ""}${has(d, "set_channel") ? `<form class="inline-form inline-form--short" data-form="set_channel" data-id="${id}"><input name="value" placeholder="${s.channel ? esc(s.channel) : "e.g. 7.1"}" aria-label="Channel number or name"><button class="btn btn--sm">Go</button></form>` : ""}${has(d, "channel_up") ? btn("channel_up", "+").replace("<button", '<button aria-label="Channel up"') : ""}</div></div>`,
+    );
+  }
+  if (has(d, "search_youtube"))
+    rows.push(`<div class="control-row" style="display:block"><label>YouTube</label><form class="inline-form" data-form="search_youtube" data-id="${id}"><input name="value" placeholder="Search YouTube on ${esc(d.self ? "this computer" : "this TV")}"><button class="btn btn--sm">${icon("search", 14)} Search</button></form><div class="yt-results" id="ytResults">${ytResultsHtml(d.id)}</div></div>`);
+  if (has(d, "web_search"))
+    rows.push(`<div class="control-row"><label>Web</label><form class="inline-form" data-form="web_search" data-id="${id}"><input name="value" placeholder="Search the internet${d.self ? "" : " on the TV"}"><button class="btn btn--sm">Search</button></form></div>`);
+  if (has(d, "open_website")) rows.push(`<div class="control-row"><label>Website</label><form class="inline-form" data-form="open_website" data-id="${id}"><input name="value" placeholder="e.g. bbc.co.uk"><button class="btn btn--sm">Open</button></form></div>`);
+  if (has(d, "type_text")) rows.push(`<div class="control-row"><label>Type</label><form class="inline-form" data-form="type_text" data-id="${id}"><input name="value" placeholder="Types into the box open on the TV"><button class="btn btn--sm">Type</button></form></div>`);
   if (has(d, "search")) rows.push(`<div class="control-row"><label>Search</label><form class="inline-form" data-form="search" data-id="${id}"><input name="value" placeholder="A show or movie"><button class="btn btn--sm">Search</button></form></div>`);
   if (has(d, "switch_input")) rows.push(`<div class="control-row"><label>Input</label><div class="btns">${["HDMI 1", "HDMI 2", "HDMI 3", "Antenna"].map((a) => btn("switch_input", a, "", a)).join("")}</div></div>`);
   if (has(d, "set_temperature")) rows.push(`<div class="control-row"><label>Target</label><div class="btns">${btn("set_temperature", "−", "", (s.targetTemperature ?? 20) - 0.5)}<strong style="min-width:70px;text-align:center;align-self:center">${s.targetTemperature ?? "–"}${s.unit || ""}</strong>${btn("set_temperature", "+", "", (s.targetTemperature ?? 20) + 0.5)}</div></div>`);
@@ -418,10 +502,15 @@ function controlsHtml(d) {
 
 function infoHtml(d) {
   const i = d.info || {};
+  const SURE = { exact: "It says so itself", likely: "Strong clues", guess: "Best guess" };
   const rows = [
+    ["What it is", d.what && `<strong>${esc(d.what)}</strong>${d.confidence ? ` <span class="badge badge--${d.confidence}">${SURE[d.confidence] || esc(d.confidence)}</span>` : ""}`],
+    ["How Patch knows", d.evidence?.length && esc(d.evidence.join("; "))],
     ["Type", d.kindLabel],
     ["Brand", d.brand],
     ["Model", d.model],
+    ["Model number", i.modelNumber && `<code>${esc(i.modelNumber)}</code>`],
+    ["Software", i.os && esc(i.os)],
     ["Address", d.ip && `<code>${esc(d.ip)}</code>`],
     ["Hardware ID", d.mac && `<code>${esc(d.mac)}</code>${d.vendor ? ` · ${esc(d.vendor)}` : ""}`],
     ["Firmware", i.firmware && esc(i.firmware)],
@@ -585,6 +674,15 @@ async function openSettings(focus) {
         <label class="field" style="margin-top:10px"><span>Agent ID</span><input name="agentId" value="${s.elevenlabs.customAgent ? esc(s.elevenlabs.agentId) : ""}" placeholder="${esc(s.elevenlabs.agentId)} (built-in)"><small>Leave empty to use the Patch agent that ships with this app.</small></label>
       </details>
     </form>
+    <form data-form="settings-yt" class="panel">
+      <h3>YouTube search (optional)</h3>
+      <p style="margin:0 0 10px;color:var(--text-2);font-size:13.5px">With a free YouTube key, Patch can find videos for you ("play lo-fi beats on the TV") and read out the results. Without one, TVs show YouTube's own search results instead.</p>
+      <label class="field"><span>YouTube Data API key</span>
+        <div class="row"><input name="youtubeApiKey" type="password" autocomplete="off" placeholder="${s.youtube?.hasKey ? `Saved (${esc(s.youtube.keyHint)}). Paste a new one to replace it` : "AIza…"}" ${s.youtube?.fromEnv ? "disabled" : ""}><button class="btn btn--primary">Save & test</button></div>
+        <small>Free from the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">Google Cloud console</a>: create a project, enable <b>YouTube Data API v3</b>, then APIs &amp; Services → Credentials → Create API key. About 100 searches a day are free. The key stays on this computer.</small>
+        <div class="check" id="ytCheck"></div>
+      </label>
+    </form>
     <form data-form="settings-ha" class="panel">
       <h3>Home Assistant (optional)</h3>
       <p style="margin:0 0 10px;color:var(--text-2);font-size:13.5px">Already use Home Assistant? Connect it and Patch can control everything it controls, from thermostats and locks to Tapo, Tuya, Nest and ecobee devices.</p>
@@ -613,6 +711,7 @@ async function saveSettings(form) {
     if (fd.get("elevenlabsApiKey")) body.elevenlabsApiKey = String(fd.get("elevenlabsApiKey"));
     body.agentId = String(fd.get("agentId") || "");
   }
+  if (kind === "settings-yt" && fd.get("youtubeApiKey")) body.youtubeApiKey = String(fd.get("youtubeApiKey"));
   if (kind === "settings-ha") {
     body.haUrl = String(fd.get("haUrl") || "");
     if (fd.get("haToken")) body.haToken = String(fd.get("haToken"));
@@ -626,7 +725,7 @@ async function saveSettings(form) {
   btn.disabled = true;
   const r = await api("POST", "/api/settings", body).catch((err) => ({ ok: false, checks: { x: { ok: false, message: err.message } } }));
   btn.disabled = false;
-  const check = r.checks?.elevenlabs || r.checks?.homeAssistant || r.checks?.subnet;
+  const check = r.checks?.elevenlabs || r.checks?.youtube || r.checks?.homeAssistant || r.checks?.subnet;
   const out = $(".check", form);
   if (check) {
     out.className = `check ${check.ok ? "check--ok" : "check--bad"}`;
@@ -748,6 +847,19 @@ document.addEventListener("click", async (e) => {
     }
     return;
   }
+  const view = e.target.closest("[data-view]");
+  if (view) {
+    state.view = view.dataset.view === "list" ? "list" : "cards";
+    safeStorage("set", "patch.view", state.view);
+    renderViewToggle();
+    renderDevices();
+    return;
+  }
+  const row = e.target.closest("tr[data-id]");
+  if (row) {
+    openDevice(row.dataset.id);
+    return;
+  }
   const filter = e.target.closest("[data-filter]");
   if (filter) {
     state.filter = filter.dataset.filter;
@@ -766,7 +878,7 @@ document.addEventListener("keydown", (e) => {
       confirmResolve?.(false);
     } else closeOverlays();
   }
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("card")) {
+  if ((e.key === "Enter" || e.key === " ") && (e.target.classList?.contains("card") || e.target.matches?.("tr[data-id]"))) {
     e.preventDefault();
     openDevice(e.target.dataset.id);
   }
@@ -836,6 +948,8 @@ document.addEventListener("keydown", (e) => {
 $("#scanBtn").addEventListener("click", scan);
 $("#tuneBtn").addEventListener("click", () => openTuneup());
 $("#settingsBtn").addEventListener("click", () => openSettings());
+$("#exportBtn").addEventListener("click", exportCsv);
+renderViewToggle();
 $("#scrim").addEventListener("click", closeOverlays);
 $("#searchIcon").outerHTML = icon("search", 16);
 

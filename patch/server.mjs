@@ -71,6 +71,11 @@ if (demo) {
     app.store.data.homeAssistant = { url: `http://${sim.prefix}.14:8123`, token: "demo-token" };
     await app.store.save();
   }
+  // …and a pretend YouTube, so "search YouTube for…" works without a real key.
+  if (!app.store.data.youtube.apiKey) {
+    app.store.data.youtube.apiKey = sim.youtubeKey;
+    await app.store.save();
+  }
 }
 
 console.log(`\n  Patch is running${demo ? " (demo network)" : ""}: ${app.url}`);

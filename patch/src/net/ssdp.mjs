@@ -16,6 +16,8 @@ export const SEARCH_TARGETS = [
   "urn:schemas-upnp-org:device:InternetGatewayDevice:2",
   "urn:schemas-upnp-org:device:MediaRenderer:1",
   "urn:schemas-upnp-org:device:ZonePlayer:1",
+  "urn:lge-com:service:webos-second-screen:1",
+  "urn:samsung.com:device:RemoteControlReceiver:1",
 ];
 
 export function mSearch(st, { mx = 2, host = `${GROUP}:${PORT}` } = {}) {

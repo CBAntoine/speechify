@@ -213,7 +213,7 @@ export async function yeelightDevice(ip, s) {
 // ── Chromecast (Google TV Streamer) ───────────────────────
 
 export function castState() {
-  return { id: "5c0a7e2bd1f84e5a9c3b2a1d0e9f8a7b", name: "Bedroom TV", volume: 0.35, muted: false, app: "YouTube", playerState: "PLAYING", title: "Lo-fi beats to relax to", stops: 0 };
+  return { id: "5c0a7e2bd1f84e5a9c3b2a1d0e9f8a7b", name: "Bedroom TV", volume: 0.35, muted: false, app: "YouTube", playerState: "PLAYING", title: "Lo-fi beats to relax to", stops: 0, launched: [] };
 }
 
 export async function castDevice(ip, s) {
@@ -253,6 +253,11 @@ export async function castDevice(ip, s) {
           if (p.type === "STOP") {
             s.app = null;
             s.stops++;
+          }
+          if (p.type === "LAUNCH") {
+            s.launched.push(p.appId);
+            s.app = { "233637DE": "YouTube", CA5E8412: "Netflix", CC32E753: "Spotify" }[p.appId] || p.appId;
+            s.title = "";
           }
           reply(receiverStatus(p.requestId));
         }

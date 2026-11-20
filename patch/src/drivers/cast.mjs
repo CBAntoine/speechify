@@ -1,7 +1,7 @@
 // Google Cast devices (Chromecast, Google/Nest speakers and displays, Android/Google TVs, Cast groups).
 // Cast v2 protocol: length-prefixed protobuf CastMessage frames over TLS on port 8009, carrying JSON.
 import tls from "node:tls";
-import { clamp, parsePercent } from "../util.mjs";
+import { clamp, fuzzyPick, parsePercent } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
 
 const NS = {
@@ -194,6 +194,12 @@ async function mediaSession(c, status) {
   return media ? { app, media } : { app, media: null };
 }
 
+// Cast receiver apps that can be opened by id on screens (Chromecast, Google TV, Nest Hub).
+const CAST_APPS = [
+  { id: "233637DE", name: "YouTube" }, { id: "CA5E8412", name: "Netflix" }, { id: "CC32E753", name: "Spotify" }, { id: "2DB7CC49", name: "YouTube Music" },
+  { id: "9AC194DC", name: "Plex" }, { id: "C3DE6BC2", name: "Disney Plus" }, { id: "B3DCF968", name: "Twitch" },
+];
+
 function kindOf(txt) {
   const ca = Number(txt.ca) || 0;
   const md = String(txt.md || "");
@@ -233,7 +239,7 @@ export default {
         extra: kind === "group",
         state,
         info: { castVersion: s.txt.ve || null },
-        actions: ["set_volume", "volume_up", "volume_down", "mute", "unmute", "play", "pause", "stop", "rename", "set_room"],
+        actions: ["set_volume", "volume_up", "volume_down", "mute", "unmute", "play", "pause", "stop", ...(["tv", "streamer", "display"].includes(kind) ? ["launch_app"] : []), "rename", "set_room"],
       });
     }
     return devices;
@@ -272,6 +278,13 @@ export default {
           case "mute":
           case "unmute":
             return done(action === "mute" ? `${device.name} is muted.` : `${device.name} is unmuted.`, { state: { ...device.state, ...(await setVol({ muted: action === "mute" })) } });
+          case "launch_app": {
+            const app = fuzzyPick(need(value, "app"), CAST_APPS);
+            if (!app) throw new DeviceError(`On ${device.name} I can open ${CAST_APPS.map((a) => a.name).join(", ")}. Other apps need casting from your phone.`, { code: "ENOTINSTALLED" });
+            const r = await c.request(NS.receiver, { type: "LAUNCH", appId: app.id }, "receiver-0", 8000);
+            if (r?.type === "LAUNCH_ERROR") throw new DeviceError(`${device.name} couldn't open ${app.name}.`);
+            return done(`Opening ${app.name} on ${device.name}.`, { state: { ...device.state, app: app.name } });
+          }
           case "stop": {
             const app = status.applications?.find((a) => !a.isIdleScreen);
             if (!app) return done(`Nothing is casting to ${device.name}.`);

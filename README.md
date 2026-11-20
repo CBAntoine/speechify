@@ -54,4 +54,4 @@ Map data © OpenStreetMap contributors (ODbL) via OpenFreeMap and OpenMapTiles. 
 
 ## Also in this repo: Patch, a voice assistant for your home WiFi
 
-[`patch/`](patch/README.md) is a separate app you run on your own computer. It finds every device on your home network, controls lights, TVs, speakers, plugs, printers and more, and runs a network tune-up, all by talking to an ElevenLabs agent called Patch. It has its own `package.json` and is not part of the website build. Start with `cd patch && npm install && npm start`, or try it on a simulated home with `npm run demo`.
+[`patch/`](patch/README.md) is a separate app you run on your own computer. It finds every device on your home network and says exactly what each one is (make and model), controls lights, TVs, speakers, plugs, printers and more (including TV channels, apps, YouTube and web searches on the TV), and runs a network tune-up, all by talking or typing to an ElevenLabs agent called Patch. It has its own `package.json` and is not part of the website build. Start with `cd patch && npm install && npm start`, or try it on a simulated home with `npm run demo`.

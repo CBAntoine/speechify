@@ -1610,3 +1610,148 @@ svg {
     left: calc((100vw - var(--voice-w)) / 2);
   }
 }
+
+/* ── Identity, TV controls and the list view ─────────── */
+
+.badge--exact {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge--likely {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.badge--guess {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.inline-form--short {
+  flex: 0 1 180px;
+  min-width: 140px;
+}
+
+.yt-results:empty {
+  display: none;
+}
+
+.yt-results {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.yt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.yt-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.yt-row em {
+  display: block;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.msg--link .yt-row {
+  margin-top: 6px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.dtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.dtable th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dtable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.dtable tbody tr {
+  cursor: pointer;
+}
+
+.dtable tbody tr:hover,
+.dtable tbody tr:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.dtable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dtable tr.is-offline {
+  opacity: 0.6;
+}
+
+.dtable .dot {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+
+.dtable small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.dtable code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .dtable .col-room,
+  .dtable .col-addr {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .dtable .col-state {
+    display: none;
+  }
+}

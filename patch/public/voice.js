@@ -2,7 +2,7 @@
 // Patch's local API, so the cloud agent decides what to do and this computer does it.
 import { icon } from "./icons.js";
 
-const QUICK = ["What's on my WiFi?", "Turn the living room lights to warm white", "Is anything on my network unsafe?", "Run a tune-up and fix what you can", "Why is my internet slow?"];
+const QUICK = ["What exactly is on my WiFi?", "Search YouTube for cooking videos on the TV", "Put the TV on channel 7", "Turn the living room lights to warm white", "Is anything on my network unsafe?", "Run a tune-up and fix what you can"];
 
 const json = (v) => JSON.stringify(v);
 const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -118,7 +118,7 @@ export function createVoice(ui) {
     const lines = devs.slice(0, 110).map((d) => {
       const acts = (d.actions || []).filter((a) => !SKIP_ACTIONS.has(a));
       const st = d.online === false ? "offline" : ui.stateLine(d);
-      return `- ${d.name} | ${d.kindLabel}${d.room ? ` | room: ${d.room}` : ""}${st ? ` | ${st}` : ""}${acts.length ? ` | can: ${acts.join(", ")}` : ""}${d.setup ? ` | NEEDS SETUP: ${d.setup.message}` : ""}`;
+      return `- ${d.name} | ${d.what || d.kindLabel}${d.confidence === "guess" ? " (best guess)" : ""}${d.room ? ` | room: ${d.room}` : ""}${st ? ` | ${st}` : ""}${acts.length ? ` | can: ${acts.join(", ")}` : ""}${d.setup ? ` | NEEDS SETUP: ${d.setup.message}` : ""}`;
     });
     return lines.join("\n");
   }
@@ -142,6 +142,8 @@ export function createVoice(ui) {
   const compact = (d) => ({
     name: d.name,
     type: d.kindLabel,
+    what_it_is: d.what || undefined,
+    how_sure: d.confidence || undefined,
     room: d.room || undefined,
     online: d.online !== false,
     status: d.online === false ? "offline" : ui.stateLine(d) || undefined,
@@ -187,10 +189,31 @@ export function createVoice(ui) {
     return { token: p.token };
   }
 
-  const ICON_FOR = { turn_on: "power", turn_off: "power", toggle: "power", set_brightness: "light", set_color: "sparkle", set_color_temperature: "light", set_volume: "volume", mute: "mute", unmute: "volume", play: "play", pause: "pause", launch_app: "tv", reboot: "refresh", update_firmware: "refresh", remove_port_forward: "shield" };
+  /** YouTube results in the transcript, each with a Play button for the TV they were searched on. */
+  function showResults(results, device) {
+    const el = add(
+      "link",
+      `<strong>YouTube results</strong>${results
+        .slice(0, 5)
+        .map((x, i) => `<div class="yt-row"><span>${i + 1}. ${ui.esc(x.title)}${x.channel ? ` <em>· ${ui.esc(x.channel)}${x.duration ? ` · ${ui.esc(x.duration)}` : x.live ? " · live" : ""}</em>` : ""}</span>${device ? `<button class="btn btn--sm" type="button" data-play="${ui.esc(x.id)}">${icon("play", 13)} Play</button>` : ""}</div>`)
+        .join("")}`,
+      { raw: true },
+    );
+    el.querySelectorAll("[data-play]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        const r = await ui.api("POST", `/api/devices/${encodeURIComponent(device.id)}/action`, { action: "play_youtube", value: b.dataset.play });
+        toolLine(r.ok ? "play" : "alert", r.message);
+        if (r.device) ui.mergeDevice(r.device);
+        conv?.sendContextualUpdate(`The person tapped Play on the dashboard: ${r.message}`);
+      }),
+    );
+  }
+
+  const ICON_FOR = { turn_on: "power", turn_off: "power", toggle: "power", set_brightness: "light", set_color: "sparkle", set_color_temperature: "light", set_volume: "volume", mute: "mute", unmute: "volume", play: "play", pause: "pause", launch_app: "tv", set_channel: "tv", channel_up: "tv", channel_down: "tv", search_youtube: "search", play_youtube: "play", web_search: "search", open_website: "external", type_text: "tv", reboot: "refresh", update_firmware: "refresh", remove_port_forward: "shield" };
 
   const tools = {
-    list_devices: async ({ kind, room, query, include_offline } = {}) => {
+    list_devices: async ({ kind, room, query, include_offline, details } = {}) => {
       const r = await ui.api("GET", "/api/devices");
       ui.setDevices(r.devices);
       let list = r.devices.filter((d) => !d.hidden && !d.self);
@@ -201,7 +224,9 @@ export function createVoice(ui) {
       toolLine("search", `Looked through ${list.length} devices`);
       const counts = {};
       for (const d of list) counts[d.kindLabel] = (counts[d.kindLabel] || 0) + 1;
-      return json({ total: list.length, by_type: counts, devices: list.slice(0, 60).map(compact), truncated: list.length > 60 || undefined });
+      const full = details === true || details === "true";
+      const rows = list.slice(0, 60).map((d) => (full ? { ...compact(d), address: d.ip || undefined, hardware_address: d.mac || undefined, network_chip_maker: d.vendor || undefined, os: d.info?.os || undefined, how_patch_knows: d.evidence?.length ? d.evidence : undefined } : compact(d)));
+      return json({ total: list.length, by_type: counts, devices: rows, truncated: list.length > 60 || undefined, note: full ? "Read addresses only if the person asked for them." : undefined });
     },
 
     scan_network: async ({ deep } = {}) => {
@@ -218,7 +243,7 @@ export function createVoice(ui) {
       if (error) return error;
       ui.flashDevice(d.id);
       if (window.matchMedia("(min-width: 1081px)").matches) ui.openDevice(d.id);
-      return json({ ...compact(d), brand: d.brand || undefined, model: d.model || undefined, state: d.state, firmware: d.info?.firmware, wifi_signal_dbm: d.info?.rssi ?? undefined, update_available: d.info?.updateAvailable || d.state?.updateAvailable || undefined, has_web_page: !!d.webUrl, last_seen: d.online === false && d.lastSeen ? new Date(d.lastSeen).toISOString() : undefined });
+      return json({ ...compact(d), brand: d.brand || undefined, model: d.model || undefined, model_number: d.info?.modelNumber || undefined, os: d.info?.os || undefined, how_patch_knows: d.evidence?.length ? d.evidence : undefined, network_chip_maker: d.vendor || undefined, address: d.ip || undefined, state: d.state, firmware: d.info?.firmware, wifi_signal_dbm: d.info?.rssi ?? undefined, update_available: d.info?.updateAvailable || d.state?.updateAvailable || undefined, has_web_page: !!d.webUrl, last_seen: d.online === false && d.lastSeen ? new Date(d.lastSeen).toISOString() : undefined });
     },
 
     control_device: async ({ device, action, value, room, kind, confirmed } = {}) => {
@@ -243,7 +268,17 @@ export function createVoice(ui) {
       if (r.results) r.results.forEach((x) => ui.flashDevice(x.id));
       if (r.ok) toolLine(ICON_FOR[action] || "check", r.message);
       else toolLine("alert", r.message);
-      return json({ ok: !!r.ok, message: r.message, error: r.error || undefined, options: r.candidates?.map((c) => c.name), hint: r.hint || undefined, status: r.device ? ui.stateLine(r.device) : undefined });
+      if (r.results?.length) showResults(r.results, r.device);
+      return json({
+        ok: !!r.ok,
+        message: r.message,
+        error: r.error || undefined,
+        options: r.candidates?.map((c) => c.name),
+        hint: r.hint || undefined,
+        status: r.device ? ui.stateLine(r.device) : undefined,
+        // YouTube search results: to play one, call control_device with action play_youtube and its id.
+        results: r.results?.map((x, i) => ({ number: i + 1, id: x.id, title: x.title, channel: x.channel || undefined, length: x.live ? "live" : x.duration || undefined })),
+      });
     },
 
     diagnose_device: async ({ device } = {}) => {

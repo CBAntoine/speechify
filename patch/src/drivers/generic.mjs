@@ -43,8 +43,25 @@ function appleModel(host) {
   return null;
 }
 
-/** Best guess at { kind, brand, model, nameHint } for a host with no dedicated driver. */
+/**
+ * Best answer to "what is it?" for a host with no dedicated driver: exact facts the device announced
+ * (identify.mjs) win; otherwise clues from its ports, services and maker.
+ */
 export function classify(host) {
+  const base = classifyClues(host);
+  const f = host.facts;
+  if (!f) return base;
+  const weakKind = !base.kind || ["unknown", "personal", "smart"].includes(base.kind);
+  const model = f.exact ? f.model || base.model : (!base.weak && base.model) || f.model || base.model;
+  return {
+    kind: f.kind && (f.exact || weakKind) ? f.kind : base.kind || f.kind || "unknown",
+    brand: f.brand || base.brand,
+    model,
+    weak: !!base.weak && model === base.model,
+  };
+}
+
+function classifyClues(host) {
   const types = new Set(host.mdns.map((s) => s.type));
   const ports = host.ports;
   const vendor = host.vendor || "";
@@ -65,7 +82,7 @@ export function classify(host) {
   if (/synology|diskstation/i.test(title) || /synology/i.test(vendor)) return { kind: "nas", brand: "Synology", model: null };
   if (/qnap/i.test(`${title} ${vendor}`)) return { kind: "nas", brand: "QNAP", model: null };
   if (types.has("_plexmediasvr._tcp") || ports.has(32400)) return { kind: "computer", brand: vendor || null, model: "Plex media server" };
-  if (ports.has(62078)) return { kind: "phone", brand: vendor || "Apple", model: "iPhone or iPad" };
+  if (ports.has(62078)) return { kind: "phone", brand: vendor || "Apple", model: "iPhone or iPad", weak: true };
   if (ports.has(554) && !ports.has(8009)) return { kind: "camera", brand: vendor || null, model: null };
   if (ports.has(3389)) return { kind: "computer", brand: vendor || null, model: "Windows PC" };
   if (types.has("_device-info._tcp") || types.has("_workstation._tcp") || types.has("_rdlink._tcp") || types.has("_nvstream_dbd._tcp")) return { kind: "computer", brand: vendor || null, model: null };
@@ -78,7 +95,7 @@ export function classify(host) {
   if (/^(amazon)$/i.test(vendor)) return { kind: "smart", brand: "Amazon", model: "Echo, Fire TV or Ring" };
   if (/^(microsoft)$/i.test(vendor)) return { kind: ports.size ? "computer" : "console", brand: "Microsoft", model: null };
   if (ports.has(22)) return { kind: "computer", brand: vendor || null, model: null };
-  if (host.randomMac) return { kind: "personal", brand: null, model: "Uses a private Wi-Fi address" };
+  if (host.randomMac) return { kind: "personal", brand: null, model: "Uses a private Wi-Fi address", weak: true };
   return { kind: "unknown", brand: vendor || null, model: null };
 }
 
@@ -87,6 +104,7 @@ export function nameHint(host) {
   const svcName = (t) => host.mdns.find((s) => s.type === t)?.name;
   const candidates = [
     svcName("_companion-link._tcp"),
+    host.facts?.name,
     svcName("_device-info._tcp"),
     svcName("_airplay._tcp"),
     svcName("_raop._tcp")?.replace(/^[0-9A-F]{12}@/i, ""),
@@ -137,7 +155,7 @@ export default {
         ip: host.ip,
         ref: { ip: host.ip },
         state: {},
-        info: {},
+        info: c.weak ? { guess: c.model } : {},
         webUrl: webUrlFor(host),
         actions: [...(wakeable ? ["wake"] : []), "rename", "set_room"],
       },

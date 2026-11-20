@@ -10,6 +10,9 @@ const DEFAULTS = () => ({
   elevenlabs: { apiKey: "", agentId: "" },
   homeAssistant: { url: "", token: "" },
   hue: {},
+  pairings: {},
+  adbKey: "",
+  youtube: { apiKey: "" },
   credentials: {},
   meta: {},
   network: { subnet: "" },
@@ -68,7 +71,14 @@ export class Store {
       url: process.env.HOME_ASSISTANT_URL || this.data.homeAssistant.url || "",
       token: process.env.HOME_ASSISTANT_TOKEN || this.data.homeAssistant.token || "",
     };
-    return { hue: this.data.hue, credentials: this.data.credentials, homeAssistant: ha.url && ha.token ? ha : null };
+    return {
+      hue: this.data.hue,
+      pairings: this.data.pairings,
+      adbKey: this.data.adbKey || "",
+      youtubeApiKey: process.env.YOUTUBE_API_KEY || this.data.youtube.apiKey || "",
+      credentials: this.data.credentials,
+      homeAssistant: ha.url && ha.token ? ha : null,
+    };
   }
 
   get subnet() {

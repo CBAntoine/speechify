@@ -2,6 +2,7 @@
 // tracks online/offline and "new on the network", and turns spoken names into devices.
 import { EventEmitter } from "node:events";
 import { KIND_LABEL } from "./drivers/generic.mjs";
+import { confidenceOf, describeDevice } from "./identify.mjs";
 import { ipToInt, levenshtein, normalizeText } from "./util.mjs";
 
 export const KIND_WORDS = {
@@ -174,6 +175,7 @@ export class Inventory extends EventEmitter {
   /** What the dashboard and the voice agent get (no driver internals). */
   toPublic(d) {
     const m = this.meta(d.id);
+    const what = d.self ? `${d.brand || "Computer"} running Patch${d.info?.platform ? ` (${d.info.platform})` : ""}` : describeDevice(d);
     return {
       id: d.id,
       name: this.displayName(d),
@@ -182,6 +184,9 @@ export class Inventory extends EventEmitter {
       kindLabel: KIND_LABEL[d.kind] || "Device",
       brand: d.brand || null,
       model: d.model || null,
+      what,
+      confidence: confidenceOf(d),
+      evidence: d.info?.identity?.evidence || [],
       ip: d.ip || null,
       mac: d.mac || null,
       vendor: d.vendor || null,
@@ -215,10 +220,13 @@ export class Inventory extends EventEmitter {
    * Find the device someone means: "kitchen light", "the TV", "Office plug", an exact id…
    * Returns { device } | { ambiguous: [...] } | { none: true, suggestions: [...] }.
    */
-  resolve(query, { kind } = {}) {
+  resolve(query, { kind, action } = {}) {
     const raw = String(query || "").trim();
     if (!raw) return { none: true, suggestions: [] };
     if (this.devices.has(raw)) return { device: this.devices.get(raw) };
+    // "this computer", "here", "my browser": the computer Patch is running on.
+    const self = [...this.devices.values()].find((d) => d.self);
+    if (self && /^((this|my|the)\s+(own\s+)?(computer|pc|laptop|mac|desktop|browser|machine|screen)(\s+here)?|here|right here|my browser|the browser|on here)$/i.test(raw)) return { device: self };
     const byIp = [...this.devices.values()].filter((d) => d.ip === raw && !d.parent);
     if (byIp.length === 1) return { device: byIp[0] };
 
@@ -226,6 +234,8 @@ export class Inventory extends EventEmitter {
     const hints = kindHints(raw);
     if (kind) hints.kinds.add(kind);
     const content = tokens(raw).filter((t) => !STOP.has(t) && !hints.words.has(t));
+    // "the fire tv": every word is also a kind word, but they still say which device ("Fire TV Stick").
+    const kindOnly = content.length ? [] : tokens(raw).filter((t) => !STOP.has(t));
     const scored = [];
     for (const d of this.all()) {
       const name = normalizeText(this.displayName(d));
@@ -241,12 +251,17 @@ export class Inventory extends EventEmitter {
           const nameHits = content.filter((t) => tokenHit(t, nameTokens)).length;
           s += (100 * nameHits) / Math.max(nameTokens.length, content.length);
           if (!hits) s -= 200;
-        } else s += 300;
+        } else {
+          s += 300;
+          if (kindOnly.length) s += (150 * kindOnly.filter((t) => tokenHit(t, fields)).length) / kindOnly.length;
+        }
         if (hints.kinds.size) s += kindMatches(d, hints.kinds) ? 200 : -250;
         if (name && (q.includes(name) || name.includes(q))) s += 150;
       }
       if (d.online === false) s -= 30;
       if (d.self) s -= 50;
+      // "Channel down on the Samsung" means the Samsung that has channels, not the Samsung phone.
+      if (action && !["rename", "set_room"].includes(action) && s < 1000) s += d.actions?.includes(action) ? 40 : -120;
       scored.push({ d, s });
     }
     scored.sort((a, b) => b.s - a.s);

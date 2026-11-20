@@ -3,6 +3,9 @@ import { request } from "../net/lanhttp.mjs";
 import { childText, findAll, findFirst, parseXml } from "../net/xml.mjs";
 import { fuzzyPick, normalizeMac, normalizeText } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
+import { parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
+
+const YOUTUBE = "837"; // YouTube's channel id on every Roku
 
 const KEYS = {
   home: "Home", back: "Back", up: "Up", down: "Down", left: "Left", right: "Right", ok: "Select", select: "Select",
@@ -91,8 +94,8 @@ export default {
         state: { on: tv ? powerOn(info.power) : true, power: info.power, app: app && app !== "Roku" ? app : "Home screen" },
         info: { firmware: info.software, model: info.modelNumber, network: info.network },
         actions: [
-          ...(tv ? ["turn_on", "turn_off", "switch_input"] : []),
-          "launch_app", "press_button", "search", "play", "pause", "volume_up", "volume_down", "mute", "rename", "set_room",
+          ...(tv ? ["turn_on", "turn_off", "switch_input", "set_channel", "channel_up", "channel_down"] : []),
+          "launch_app", "press_button", "search", "type_text", "search_youtube", "play_youtube", "play", "pause", "volume_up", "volume_down", "mute", "rename", "set_room",
         ],
       },
     ];
@@ -105,7 +108,7 @@ export default {
     return { online: true, state: { on: device.ref.isTv ? powerOn(info.power) : true, power: info.power, app: app && app !== "Roku" ? app : "Home screen" } };
   },
 
-  async act(device, action, value) {
+  async act(device, action, value, ctx = {}) {
     const ref = device.ref;
     try {
       switch (action) {
@@ -144,6 +147,43 @@ export default {
           await post(ref, `/launch/${encodeURIComponent(app.id)}`);
           return done(`Opening ${app.name} on ${device.name}.`, { state: { ...device.state, on: true, app: app.name } });
         }
+        case "channel_up":
+        case "channel_down":
+          if (!ref.isTv) throw new DeviceError("Roku players don't have TV channels. Roku calls its apps channels, so I can open one by name.", { code: "EUNSUPPORTED" });
+          await post(ref, `/keypress/${action === "channel_up" ? "ChannelUp" : "ChannelDown"}`);
+          return done(`Channel ${action === "channel_up" ? "up" : "down"} on ${device.name}.`);
+        case "set_channel": {
+          const ch = parseChannel(value);
+          if (ch.name) {
+            // On a Roku, "channels" are its apps: "put on Netflix", "the Roku Channel".
+            const list = await apps(ref.base);
+            const app = fuzzyPick(ch.name, list);
+            if (!app) throw new DeviceError(`${device.name} doesn't have a channel called ${ch.name}.${ref.isTv ? " For live TV, tell me the channel number." : ""}`, { code: "ENOTFOUND" });
+            await post(ref, `/launch/${encodeURIComponent(app.id)}`);
+            return done(`Opening ${app.name} on ${device.name}.`, { state: { ...device.state, on: true, app: app.name } });
+          }
+          if (!ref.isTv) throw new DeviceError("This Roku player has no live TV. Roku calls its apps channels, so tell me which one to open.", { code: "EUNSUPPORTED" });
+          if (ch.dir) {
+            await post(ref, `/keypress/${ch.dir === "up" ? "ChannelUp" : "ChannelDown"}`);
+            return done(`Channel ${ch.dir} on ${device.name}.`);
+          }
+          await post(ref, `/launch/tvinput.dtv?ch=${encodeURIComponent(ch.number)}`);
+          return done(`${device.name} is on channel ${ch.number}.`, { state: { ...device.state, on: true, app: "Live TV", channel: ch.number } });
+        }
+        case "type_text": {
+          const text = String(need(value, "text")).slice(0, 200);
+          for (const c of text) await post(ref, `/keypress/Lit_${encodeURIComponent(c)}`);
+          return done(`Typed “${text}” on ${device.name}. (It goes into whatever search box is open.)`);
+        }
+        case "search_youtube": {
+          const list = await apps(ref.base);
+          if (!list.some((a) => a.id === YOUTUBE)) throw new DeviceError(`YouTube isn't installed on ${device.name}. Add it from the Roku Channel Store.`, { code: "ENOTINSTALLED" });
+          return await youtubeSearch(device, value, ctx, { openYouTube: () => post(ref, `/launch/${YOUTUBE}`) });
+        }
+        case "play_youtube":
+          return await youtubePlay(device, value, ctx, {
+            playVideo: (id) => post(ref, `/launch/${YOUTUBE}?contentId=${encodeURIComponent(id)}&mediaType=movie`),
+          });
         case "search": {
           const q = String(need(value, "search"));
           await post(ref, `/search/browse?keyword=${encodeURIComponent(q)}`);

@@ -39,6 +39,11 @@
             <span id="searchIcon"></span>
             <input id="search" type="search" placeholder="Search devices" autocomplete="off" />
           </label>
+          <div class="view-toggle" role="group" aria-label="Show devices as">
+            <button class="chip" type="button" data-view="cards" aria-pressed="true">Cards</button>
+            <button class="chip" type="button" data-view="list" aria-pressed="false">List</button>
+          </div>
+          <button class="btn btn--sm btn--ghost" type="button" id="exportBtn" title="Download the device list as a spreadsheet (CSV)">Export</button>
         </div>
         <div id="devices" aria-live="polite"></div>
       </main>

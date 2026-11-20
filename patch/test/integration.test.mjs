@@ -57,7 +57,8 @@ test("a scan finds and identifies every kind of device", async () => {
   assert.equal(named("Bedroom TV").kind, "streamer");
   assert.equal(named("Kitchen iPad").kind, "tablet");
   assert.equal(named("OFFICE-PC").kind, "computer");
-  assert.equal(named("Camera").kind, "camera");
+  assert.equal(named("Reolink RLC-510A").kind, "camera", "the camera's ONVIF announcement names its maker and model");
+  assert.equal(named("Reolink RLC-510A").room, "Driveway");
   assert.equal(named("Living Room Thermostat").kind, "thermostat");
   assert.ok(named("NETGEAR Nighthawk RAX50").info.portForwards.length === 2);
   assert.equal(named("Philips hue").setup.kind, "button", "the Hue Bridge waits for its button");
@@ -171,7 +172,7 @@ test("tune-up finds the problems and fixes the fixable ones", async () => {
   const t = (await api("POST", "/api/tuneup", { skipInternet: true, skipWifi: true })).json;
   const titles = t.findings.map((f) => `${f.severity}: ${f.title}`);
   const has = (re) => titles.some((x) => re.test(x));
-  assert.ok(has(/^high: Camera has Telnet/), titles.join("\n"));
+  assert.ok(has(/^high: Reolink RLC-510A has Telnet/), titles.join("\n"));
   assert.ok(has(/Open to the internet: IPCAM/));
   assert.ok(has(/Open to the internet: Plex/));
   assert.ok(has(/Update available for Coffee Maker/));

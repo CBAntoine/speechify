@@ -1,8 +1,9 @@
 // Home Assistant bridge. If you already run Home Assistant, Patch can control everything it controls
 // (thermostats, locks, blinds, vacuums, cameras' lights, Tapo/Tuya/Nest/ecobee devices…) through its
 // REST API with a long-lived access token (Profile → Security → Long-lived access tokens).
-import { clamp, parseColor, parseKelvin, parsePercent, rgbToHex } from "../util.mjs";
+import { clamp, fuzzyPick, parseColor, parseKelvin, parsePercent, rgbToHex } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
+import { parseChannel } from "./tv.mjs";
 
 const DOMAINS = new Set(["light", "switch", "fan", "cover", "climate", "media_player", "lock", "vacuum", "scene", "script"]);
 
@@ -67,7 +68,11 @@ function actionsOf(domain, a) {
     case "climate":
       return ["set_temperature", "set_mode", "turn_on", "turn_off"];
     case "media_player":
-      return ["turn_on", "turn_off", "play", "pause", "stop", "next", "previous", "set_volume", "volume_up", "volume_down", "mute", "unmute"];
+      return [
+        "turn_on", "turn_off", "play", "pause", "stop", "next", "previous", "set_volume", "volume_up", "volume_down", "mute", "unmute",
+        ...(a.source_list?.length ? ["launch_app", "switch_input"] : []),
+        ...(a.device_class === "tv" ? ["set_channel"] : []),
+      ];
     case "lock":
       return ["lock", "unlock"];
     case "vacuum":
@@ -208,7 +213,7 @@ export default {
         ip: null,
         room: snap.areas[s.entity_id] || null,
         online: s.state !== "unavailable",
-        ref: { entity: s.entity_id, domain, unit },
+        ref: { entity: s.entity_id, domain, unit, ...(domain === "media_player" && a.source_list?.length ? { sources: a.source_list.slice(0, 80).map(String) } : {}) },
         state: stateOf(domain, s, unit),
         info: {},
         actions: [...actionsOf(domain, a), "set_room"],
@@ -247,6 +252,19 @@ export default {
       if (action === "mute" || action === "unmute") {
         await call("media_player", "volume_mute", { is_volume_muted: action === "mute" });
         return done(`${device.name} is ${action === "mute" ? "muted" : "unmuted"}.`, { state: { ...device.state, muted: action === "mute" } });
+      }
+      if (action === "launch_app" || action === "switch_input") {
+        const sources = device.ref.sources || [];
+        const hit = fuzzyPick(need(value, action === "launch_app" ? "app" : "input"), sources);
+        if (!hit) throw new DeviceError(`${device.name} can switch to ${sources.slice(0, 12).join(", ") || "nothing else"}.`, { code: "ENOTFOUND" });
+        await call("media_player", "select_source", { source: hit });
+        return done(`Switched ${device.name} to ${hit}.`, { state: { ...device.state, on: true, app: hit } });
+      }
+      if (action === "set_channel") {
+        const ch = parseChannel(value);
+        if (!ch.number) throw new DeviceError("Through Home Assistant I can change to a channel by its number.", { code: "EVALUE" });
+        await call("media_player", "play_media", { media_content_type: "channel", media_content_id: ch.number });
+        return done(`${device.name} is on channel ${ch.number}.`, { state: { ...device.state, channel: ch.number } });
       }
       if (action === "set_volume") {
         const v = parsePercent(need(value, "volume"), device.state?.volume);
