@@ -1,3 +1,6 @@
+/** On Vercel, the project's production domain (no protocol), exposed at build time. */
+const vercelHost = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
 /** Brand + public configuration. Everything a visitor's browser may see. */
 export const SITE = {
   name: "Neon Atlas",
@@ -5,7 +8,7 @@ export const SITE = {
   description:
     "Unofficial GTA VI companion: an interactive map of secrets and Easter eggs, verified tips and tricks, a voice guide you can talk to, and news updated daily.",
   guideName: "Sol",
-  url: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, ""),
+  url: (process.env.NEXT_PUBLIC_SITE_URL || (vercelHost ? `https://${vercelHost}` : "http://localhost:3000")).replace(/\/$/, ""),
   disclaimer:
     "Neon Atlas is an unofficial fan site. It is not affiliated with, endorsed or sponsored by Rockstar Games or Take-Two Interactive. Grand Theft Auto and related names are trademarks of their respective owners. The map shows real-world Florida (OpenStreetMap, Natural Earth) as a stand-in for Leonida; the in-game layout differs.",
 } as const;

@@ -26,7 +26,7 @@ npm test                     # pipeline + routing unit tests
 
 ## Deploy (Vercel)
 
-1. Import the repo in Vercel and set the variables from `.env.example`. You need at least `NEXT_PUBLIC_SITE_URL`, `SESSION_SECRET`, `ELEVENLABS_AGENT_ID` and `ELEVENLABS_API_KEY`. The agent is private, so the site mints short-lived conversation tokens server-side.
+1. Import the repo in Vercel (vercel.com/new) and add `ELEVENLABS_API_KEY`: an ElevenLabs key with **ElevenLabs Agents: Write** access. That is the only required variable; the agent ID, site URL and cookie secret have working defaults (setting `SESSION_SECRET` is still recommended). The agent is private, so the site mints short-lived conversation tokens server-side. Other variables in `.env.example` switch on each money feature.
 2. Merge to the default branch. Scheduled GitHub Actions only run there. Add `ANTHROPIC_API_KEY` as a repository secret if you want AI-written briefs. Run the workflow once by hand from the Actions tab to check it.
 3. Stripe: create a Payment Link for Crew Pass and set "After payment" to redirect to `https://YOUR-DOMAIN/crew-pass/success?session_id={CHECKOUT_SESSION_ID}`.
 4. Before heavy traffic, point `GEOCODER_URL` and `ROUTING_URL_*` at your own (or paid) Nominatim/OSRM. The public OpenStreetMap servers are for light use. Responses are cached in memory and at the CDN.

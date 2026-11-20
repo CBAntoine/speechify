@@ -2,16 +2,23 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * HMAC-signed, tamper-proof cookie payloads (quota counters, Crew Pass claims).
- * Without SESSION_SECRET we fall back to a random per-process secret: cookies then
- * reset on restart (harmless for quotas), but can never be forged.
+ * Secret, in order: SESSION_SECRET; else one derived from ELEVENLABS_API_KEY, which
+ * every server instance shares (rotating that key then resets cookies, and Crew Pass
+ * members restore by email); else a random per-process secret for local dev.
  */
 let fallback: string | null = null;
 function secret(): string {
   const s = process.env.SESSION_SECRET;
   if (s && s.length >= 16) return s;
   if (!fallback) {
-    fallback = randomBytes(32).toString("hex");
-    console.warn("[neon-atlas] SESSION_SECRET is missing or short; using a temporary secret. Set it in production.");
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (key && key.length >= 16) {
+      fallback = createHmac("sha256", key).update("neon-atlas/session-secret/v1").digest("hex");
+      console.warn("[neon-atlas] SESSION_SECRET is not set; deriving it from ELEVENLABS_API_KEY. Set SESSION_SECRET to keep cookies valid across key rotations.");
+    } else {
+      fallback = randomBytes(32).toString("hex");
+      console.warn("[neon-atlas] SESSION_SECRET is missing or short; using a temporary secret. Set it in production.");
+    }
   }
   return fallback;
 }

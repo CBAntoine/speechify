@@ -7,6 +7,7 @@ import { clientIp, rateLimit } from "@/lib/server/rate-limit";
 export const dynamic = "force-dynamic";
 
 const QUOTA_COOKIE = "na_q";
+const DEFAULT_AGENT_ID = "agent_7001m7t6yy2fekkta6jf0fnq0t14";
 const LIMITS = {
   free: {
     voice: Number(process.env.VOICE_FREE_SESSIONS_PER_DAY || 3),
@@ -64,7 +65,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const agentId = process.env.ELEVENLABS_AGENT_ID || process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
+  // The "Sol" agent built for this site is the default once a server key is set.
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const agentId = process.env.ELEVENLABS_AGENT_ID || process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || (apiKey ? DEFAULT_AGENT_ID : undefined);
   if (!agentId) {
     return NextResponse.json(
       { ok: false, error: "unconfigured", message: "The voice guide isn't switched on yet. Check back soon." },
@@ -91,7 +94,6 @@ export async function POST(req: Request) {
   }
 
   let auth: { conversationToken: string } | { signedUrl: string } | { agentId: string };
-  const apiKey = process.env.ELEVENLABS_API_KEY;
   if (apiKey) {
     const endpoint = mode === "voice" ? "token" : "get-signed-url";
     const upstream = await fetch(
