@@ -60,7 +60,7 @@ async function connect(device, ctx, { pairing = false } = {}) {
     return existing.ws;
   }
   const saved = ctx.secrets.pairings?.[device.id] || {};
-  if (!saved.paired && !pairing) throw new DeviceError(`${device.name} hasn't been connected to Patch yet. Press Pair, then choose Allow on the TV.`, { code: "ESETUP" });
+  if (!saved.paired && !pairing) throw new DeviceError(`${device.name} hasn't been connected to Patch yet. Press Connect, then choose Allow on the TV.`, { code: "ESETUP" });
   const { ip, tokenAuth } = device.ref;
   const urls = tokenAuth
     ? [`wss://${ip}:8002/api/v2/channels/samsung.remote.control?name=${CLIENT_NAME}${saved.token ? `&token=${encodeURIComponent(saved.token)}` : ""}`]
@@ -79,9 +79,9 @@ async function connect(device, ctx, { pairing = false } = {}) {
     if (first instanceof Error || first.event !== "ms.channel.connect") {
       ws.close();
       if (first instanceof Error && first.code === "ETIMEDOUT")
-        throw new DeviceError(pairing ? `Nobody answered the question on ${device.name}'s screen. Press Pair again and choose Allow on the TV.` : `${device.name} didn't answer.`, { code: pairing ? "ESETUP" : "EOFFLINE" });
+        throw new DeviceError(pairing ? `Nobody answered the question on ${device.name}'s screen. Press Connect again and choose Allow on the TV.` : `${device.name} didn't answer.`, { code: pairing ? "ESETUP" : "EOFFLINE" });
       if (saved.paired && !pairing) await ctx.forgetSecret(["pairings", device.id]);
-      throw new DeviceError(`${device.name} said no to Patch. Press Pair and choose Allow on the TV. (If it never asks, check Settings → General → External Device Manager → Device Connection Manager on the TV.)`, { code: "ESETUP" });
+      throw new DeviceError(`${device.name} said no to Patch. Press Connect and choose Allow on the TV. (If it never asks, check Settings → General → External Device Manager → Device Connection Manager on the TV.)`, { code: "ESETUP" });
     }
     const token = first.data?.token;
     if (!saved.paired || (token && token !== saved.token)) await ctx.saveSecret(["pairings", device.id], { ...saved, paired: true, ...(token ? { token: String(token) } : {}) });
@@ -141,6 +141,8 @@ const FULL = ["turn_on", "turn_off", "volume_up", "volume_down", "mute", "set_ch
 export default {
   id: "samsung",
   label: "Samsung TV",
+  /** What it can do once it's connected. */
+  readyActions: () => FULL,
 
   async detect(host, ctx) {
     const hinted = host.ports.has(8001) || host.ports.has(8002) || host.ssdp.some((r) => /samsung/i.test(`${r.server} ${r.st} ${r.usn} ${r.desc?.manufacturer || ""}`));
@@ -166,7 +168,7 @@ export default {
         state: tvState(j),
         info: { modelNumber: d.modelName || null, os: d.OS ? `${d.OS}${d.firmwareVersion && d.firmwareVersion !== "Unknown" ? ` ${d.firmwareVersion}` : ""}` : "Tizen", resolution: d.resolution || null, network: d.networkType || null, apiVersion: j.version || null },
         // Until the person has allowed Patch on the TV, only pairing and Wake-on-LAN work.
-        setup: paired ? null : { kind: "tv-prompt", message: `Press Pair, then choose Allow on ${name}'s screen.` },
+        setup: paired ? null : { kind: "tv-prompt", message: `Press Connect, then choose Allow on ${name}'s screen.` },
         actions: paired ? FULL : ["pair", "turn_on", "rename", "set_room"],
       },
     ];

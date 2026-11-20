@@ -59,7 +59,7 @@ test("every device gets an exact description, and says how Patch knows", async (
 test("Samsung TV: asks to be allowed once, then takes channels, apps, YouTube, the web and typing", async () => {
   let r = await control({ device: "Family Room TV", action: "set_channel", value: "7" });
   assert.equal(r.ok, false, "nothing works before the TV has allowed Patch");
-  assert.match(r.message, /pair/i);
+  assert.match(r.message, /needs to be connected to Patch first\. Press Connect/, "it says how to connect instead of \"it can't\"");
   const tv = await named("Family Room TV");
   assert.equal(tv.setup.kind, "tv-prompt");
   r = await control({ device: "Family Room TV", action: "pair" });

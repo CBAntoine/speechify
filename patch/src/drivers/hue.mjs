@@ -112,7 +112,7 @@ export default {
       info: { firmware: cfg.swversion, api: cfg.apiversion },
       webUrl: null,
       actions: ["pair", "rename", "set_room"],
-      setup: { kind: "button", message: "Press the round button on top of the Hue Bridge, then pair it within 30 seconds." },
+      setup: { kind: "button", message: "Press the round button on top of the Hue Bridge, then press Connect within 30 seconds." },
     };
     const username = ctx.secrets.hue?.[bridgeId]?.username;
     if (!username) return [bridge];

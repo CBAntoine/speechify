@@ -125,6 +125,10 @@ export class Controller {
     }
 
     if (!d.actions?.includes(action)) {
+      // A TV that hasn't been connected yet will do this once it is: say how, rather than "it can't".
+      if (d.setup?.message && driverById[d.driver]?.readyActions?.(d)?.includes(action)) {
+        return { ok: false, error: "ESETUP", needsSetup: true, message: `${name} needs to be connected to Patch first. ${d.setup.message}`, device: this.publicDevice(id) };
+      }
       const offered = (d.actions || []).filter((a) => !["rename", "set_room"].includes(a));
       return { ok: false, error: "EUNSUPPORTED", message: `${name} can't ${ACTIONS[action].label.toLowerCase()}.${offered.length ? ` It can: ${offered.map((a) => ACTIONS[a].label.toLowerCase()).join(", ")}.` : ""}` };
     }

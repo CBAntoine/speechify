@@ -41,7 +41,7 @@ The agent's ten tools (`list_devices`, `scan_network`, `get_device_status`, `con
 
    Your browser opens at <http://localhost:4545>. Patch scans your network straight away (about 10 seconds).
 4. **Turn on the voice:** in ElevenLabs, go to *Developers → API keys*, create a key with the **ElevenLabs Agents** permission set to *Write*, and paste it into Patch's **Settings**. The key stays on your computer and is only used to start each conversation. Then click **Talk to Patch** and allow the microphone, or just type in the box under the conversation: typed chat uses the same agent and tools, no microphone needed.
-5. **Connect your TVs** (once each): press **Pair** on the TV's card and answer the question on the TV screen (details below).
+5. **Connect your TVs** (once each): press **Connect** on the TV's card and answer the question on the TV screen (details below).
 6. **Optional, for YouTube by name:** add a free YouTube Data API key in **Settings → YouTube search** so Patch can find a video ("play lo-fi beats on the TV") and read out the results. Without it, TVs show YouTube's own search results instead.
 
 Keep the window that started Patch open while you use it.
@@ -54,11 +54,11 @@ Keep the window that started Patch open while you use it.
 
 | Device | Works out of the box | Setup |
 | --- | --- | --- |
-| **Philips Hue** lights, rooms and scenes | on/off, brightness, colour, white tone, scenes, blink, rename, bridge updates and auto-updates | Press the bridge's button, then say "pair the Hue bridge" (or tap **Pair**) |
+| **Philips Hue** lights, rooms and scenes | on/off, brightness, colour, white tone, scenes, blink, rename, bridge updates and auto-updates | Press the bridge's button, then say "pair the Hue bridge" (or tap **Connect**) |
 | **Roku** players and Roku TVs | open apps (Roku "channels"), live TV channels by number (Roku TVs), YouTube videos, Roku search, typing, remote buttons, inputs, power (TVs), volume | If it's blocked: Roku *Settings → System → Advanced → Control by mobile apps → Default* |
-| **Samsung** smart TVs (Tizen, 2016 on) | power, channels, apps, YouTube, web searches and websites in the TV's browser, typing, remote buttons, inputs, volume | Press **Pair**, then choose **Allow** on the TV. To turn it on from off, enable *Power On with Mobile* in the TV's network settings |
-| **LG** smart TVs (webOS) | power, channels by number or name, apps, YouTube, web browser, typing, remote buttons, inputs, volume | Press **Pair**, then choose **Accept** on the TV. To turn it on from off, enable *Turn on via Wi-Fi* |
-| **Fire TV** and **Android / Google TV** (Fire TV Stick, Cube, Sony, TCL, Hisense, Nvidia Shield…) | power, apps, YouTube search and videos, web browser (Fire TV: Silk), typing, remote buttons, channels on TVs with a tuner, volume | Turn on *ADB debugging* (Fire TV: *Settings → My Fire TV → Developer options*) or *Network debugging* (Android TV: *Settings → System → Developer options*), then press **Pair** and choose **Allow** on the TV |
+| **Samsung** smart TVs (Tizen, 2016 on) | power, channels, apps, YouTube, web searches and websites in the TV's browser, typing, remote buttons, inputs, volume | Press **Connect**, then choose **Allow** on the TV. To turn it on from off, enable *Power On with Mobile* in the TV's network settings |
+| **LG** smart TVs (webOS) | power, channels by number or name, apps, YouTube, web browser, typing, remote buttons, inputs, volume | Press **Connect**, then choose **Accept** on the TV. To turn it on from off, enable *Turn on via Wi-Fi* |
+| **Fire TV** and **Android / Google TV** (Fire TV Stick, Cube, Sony, TCL, Hisense, Nvidia Shield…) | power, apps, YouTube search and videos, web browser (Fire TV: Silk), typing, remote buttons, channels on TVs with a tuner, volume | Turn on *ADB debugging* (Fire TV: *Settings → My Fire TV → Developer options*) or *Network debugging* (Android TV: *Settings → System → Developer options*), then press **Connect** and choose **Allow** on the TV |
 | **Sonos** | play, pause, skip, volume, mute (groups handled) | none |
 | **Chromecast / Google TV / Google & Nest speakers** | volume, mute, play/pause, stop casting, open YouTube and other Cast apps on screens | none |
 | **This computer** | web searches, websites and YouTube open in its browser | none |
@@ -80,10 +80,10 @@ Anything Patch can't control directly (Apple TVs, Vizio TVs, cable boxes, most c
 
 TVs only take commands from apps you've allowed, so each one asks once:
 
-- **Samsung:** press **Pair** on the TV's card and choose **Allow** in the box that appears on the TV. Patch keeps the TV's token, so it won't ask again.
-- **LG:** press **Pair** and choose **Accept** on the TV.
-- **Fire TV:** first turn on *ADB debugging*: *Settings → My Fire TV → Developer options* (no Developer options? *Settings → My Fire TV → About*, then select the device name 7 times). Then press **Pair**, tick *Always allow from this computer* on the TV, and choose **Allow**.
-- **Android TV / Google TV:** *Settings → System → About*, select *Android TV OS build* 7 times, then in *Settings → System → Developer options* turn on *USB debugging* and *Network debugging*. Then **Pair** as for Fire TV. (Some newer Google TV devices only offer *Wireless debugging* with a pairing code, which Patch doesn't support yet; their volume and casting still work through Google Cast.)
+- **Samsung:** press **Connect** on the TV's card and choose **Allow** in the box that appears on the TV. Patch keeps the TV's token, so it won't ask again.
+- **LG:** press **Connect** and choose **Accept** on the TV.
+- **Fire TV:** first turn on *ADB debugging*: *Settings → My Fire TV → Developer options* (no Developer options? *Settings → My Fire TV → About*, then select the device name 7 times). Then press **Connect**, tick *Always allow from this computer* on the TV, and choose **Allow**.
+- **Android TV / Google TV:** *Settings → System → About*, select *Android TV OS build* 7 times, then in *Settings → System → Developer options* turn on *USB debugging* and *Network debugging*. Then **Connect** as for Fire TV. (Some newer Google TV devices only offer *Wireless debugging* with a pairing code, which Patch doesn't support yet; their volume and casting still work through Google Cast.)
 - **Roku** needs nothing; **Chromecast** needs nothing.
 
 Channels: on Roku TVs, Samsung, LG and Android TVs with an antenna, Patch tunes the TV's own tuner. If you watch through a cable or satellite box, change the channel on the box (Patch can't reach most boxes; Home Assistant can control some).
@@ -107,7 +107,7 @@ Start with `npm run lan` (or tick the option in Settings and restart). Patch pri
 - **A device is missing:** make sure this computer is on the same WiFi (not a guest network, and with any VPN switched off), then press **Scan**. Mesh systems with "AP/client isolation" turned on hide devices from each other.
 - **Patch picked the wrong network** (e.g. a VPN or Docker one): set it in *Settings → Network to scan*, such as `192.168.1.0/24`.
 - **"Port 4545 is busy":** Patch is already running. Open <http://localhost:4545>, or start with `node server.mjs --port 4546`.
-- **A TV says "press Pair" again:** the TV forgot Patch (after a reset or update). Press **Pair** and allow it once more.
+- **A TV asks to be connected again:** the TV forgot Patch (after a reset or update). Press **Connect** and allow it once more.
 - **Fire TV or Android TV "refused the connection":** ADB debugging is off, or the TV restarted and turned it off. Turn it back on in Developer options.
 - **"Search YouTube" opens the TV's browser instead of the YouTube app:** that's the fallback without a YouTube key. Add one in **Settings → YouTube search** to get results read out and played in the YouTube app.
 - **Voice says the agent can't be found:** your API key is from a different ElevenLabs account than the agent. Use a key from the account that has the "Patch - Home Network Voice Assistant" agent, or set your own agent ID in *Settings → Advanced*.

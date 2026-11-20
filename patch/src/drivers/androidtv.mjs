@@ -51,8 +51,8 @@ async function adbKey(ctx) {
 function setupMessage(device) {
   const fire = /fire tv/i.test(`${device.brand} ${device.model}`) || device.brand === "Amazon";
   return fire
-    ? `To let Patch open apps, YouTube and websites on ${device.name}: on the Fire TV go to Settings → My Fire TV → Developer options and turn on ADB debugging (no Developer options? Settings → My Fire TV → About, then select the device name 7 times). Then press Pair.`
-    : `To let Patch open apps, YouTube and websites on ${device.name}: on the TV go to Settings → System → About and select "Android TV OS build" 7 times, then in Settings → System → Developer options turn on USB debugging and Network debugging. Then press Pair.`;
+    ? `To let Patch open apps, YouTube and websites on ${device.name}: on the Fire TV go to Settings → My Fire TV → Developer options and turn on ADB debugging (no Developer options? Settings → My Fire TV → About, then select the device name 7 times). Then press Connect.`
+    : `To let Patch open apps, YouTube and websites on ${device.name}: on the TV go to Settings → System → About and select "Android TV OS build" 7 times, then in Settings → System → Developer options turn on USB debugging and Network debugging. Then press Connect.`;
 }
 
 async function connect(device, ctx, { pairing = false } = {}) {
@@ -69,7 +69,7 @@ async function connect(device, ctx, { pairing = false } = {}) {
     if (err.code === "ECONNREFUSED") throw new DeviceError(setupMessage(device), { code: "ESETUP" });
     if (err.code === "ESETUP") {
       if (!pairing) await ctx.forgetSecret(["pairings", device.id]);
-      throw new DeviceError(pairing ? `Nobody allowed Patch on ${device.name}. Press Pair again, then on the TV tick "Always allow from this computer" and choose Allow.` : `${device.name} hasn't allowed Patch yet. Press Pair, then choose Allow on the TV.`, { code: "ESETUP" });
+      throw new DeviceError(pairing ? `Nobody allowed Patch on ${device.name}. Press Connect again, then on the TV tick "Always allow from this computer" and choose Allow.` : `${device.name} hasn't allowed Patch yet. Press Connect, then choose Allow on the TV.`, { code: "ESETUP" });
     }
     throw err;
   }
@@ -155,6 +155,8 @@ export function actionsFor({ kind, paired, cast: hasCast }) {
 export default {
   id: "androidtv",
   label: "Android TV / Fire TV",
+  /** What it can do once it's connected. */
+  readyActions: (d) => actionsFor({ kind: d.kind, paired: true, cast: !!d.ref?.cast }),
 
   async detect(host, ctx) {
     const svc = (t) => host.mdns.find((s) => s.type === t);
@@ -185,7 +187,7 @@ export default {
       info: { os: isFire ? "Fire OS" : "Android TV / Google TV", modelNumber: fire?.code || null },
       actions: [],
     };
-    device.setup = paired ? null : { kind: adbOpen ? "tv-prompt" : "adb", message: adbOpen ? `Press Pair, then on ${name} tick "Always allow from this computer" and choose Allow.` : setupMessage(device) };
+    device.setup = paired ? null : { kind: adbOpen ? "tv-prompt" : "adb", message: adbOpen ? `Press Connect, then on ${name} tick "Always allow from this computer" and choose Allow.` : setupMessage(device) };
     device.actions = actionsFor({ kind, paired, cast: !!gcast });
     if (paired && adbOpen) {
       // Exact model and current app straight from the device.

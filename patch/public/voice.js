@@ -2,7 +2,7 @@
 // Patch's local API, so the cloud agent decides what to do and this computer does it.
 import { icon } from "./icons.js";
 
-const QUICK = ["What exactly is on my WiFi?", "Search YouTube for cooking videos on the TV", "Put the TV on channel 7", "Turn the living room lights to warm white", "Is anything on my network unsafe?", "Run a tune-up and fix what you can"];
+const QUICK = ["What exactly is on my WiFi?", "Put the TV on channel 7", "Search YouTube for cooking videos", "Warm white in the living room", "Is anything on my network unsafe?", "Run a tune-up and fix what you can"];
 
 const json = (v) => JSON.stringify(v);
 const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -61,7 +61,7 @@ export function createVoice(ui) {
 
   function intro() {
     lines = 0;
-    els.log.innerHTML = `<div class="voice__intro"><p>I'm Patch. I can see everything on your WiFi. Ask me to switch things on and off, change colours and volume, find what's slowing things down, or check that nothing's unsafe.</p><div class="prompts">${QUICK.map((q) => `<button class="prompt" type="button" data-prompt="${ui.esc(q)}">${ui.esc(q)}</button>`).join("")}</div></div>`;
+    els.log.innerHTML = `<div class="voice__intro"><h3>Hi, I'm Patch</h3><p>Talk or type to me. I can tell you exactly what's on your WiFi, run your TVs, lights and plugs, and keep your network safe.</p><p class="hint">Try saying</p><div class="prompts">${QUICK.map((q) => `<button class="prompt" type="button" data-prompt="${ui.esc(q)}">${ui.esc(q)}</button>`).join("")}</div></div>`;
   }
 
   function notice(text, { settings = false } = {}) {
@@ -498,6 +498,11 @@ export function createVoice(ui) {
 
   return {
     refresh: render,
+    /** "Ask Patch": open the panel (on small screens) and put the cursor in the message box. */
+    open() {
+      openPanel();
+      setTimeout(() => els.text.focus(), 60);
+    },
     /** Keep the agent's picture of the network current while it's listening. */
     devicesChanged(list) {
       if (!conv || status !== "connected") return;

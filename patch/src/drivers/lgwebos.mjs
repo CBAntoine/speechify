@@ -98,7 +98,7 @@ async function connect(device, ctx, { pairing = false } = {}) {
     return live.session;
   }
   const saved = ctx.secrets.pairings?.[device.id] || {};
-  if (!saved.clientKey && !pairing) throw new DeviceError(`${device.name} hasn't been connected to Patch yet. Press Pair, then choose Accept on the TV.`, { code: "ESETUP" });
+  if (!saved.clientKey && !pairing) throw new DeviceError(`${device.name} hasn't been connected to Patch yet. Press Connect, then choose Accept on the TV.`, { code: "ESETUP" });
   const { ip } = device.ref;
   let ws = null;
   let lastErr = null;
@@ -118,9 +118,9 @@ async function connect(device, ctx, { pairing = false } = {}) {
   if (r instanceof Error || r.type !== "registered" || !r.payload?.["client-key"]) {
     ws.close();
     if (r instanceof Error && r.code === "ETIMEDOUT")
-      throw new DeviceError(pairing ? `Nobody accepted Patch on ${device.name}'s screen. Press Pair again and choose Accept on the TV.` : `${device.name} didn't answer.`, { code: pairing ? "ESETUP" : "EOFFLINE" });
+      throw new DeviceError(pairing ? `Nobody accepted Patch on ${device.name}'s screen. Press Connect again and choose Accept on the TV.` : `${device.name} didn't answer.`, { code: pairing ? "ESETUP" : "EOFFLINE" });
     if (saved.clientKey) await ctx.forgetSecret(["pairings", device.id]);
-    throw new DeviceError(`${device.name} didn't allow Patch. Press Pair and choose Accept on the TV.`, { code: "ESETUP" });
+    throw new DeviceError(`${device.name} didn't allow Patch. Press Connect and choose Accept on the TV.`, { code: "ESETUP" });
   }
   const key = r.payload["client-key"];
   if (key !== saved.clientKey) await ctx.saveSecret(["pairings", device.id], { ...saved, clientKey: key, paired: true });
@@ -162,6 +162,8 @@ const FULL = ["turn_on", "turn_off", "set_volume", "volume_up", "volume_down", "
 export default {
   id: "lgwebos",
   label: "LG TV",
+  /** What it can do once it's connected. */
+  readyActions: () => FULL,
 
   async detect(host, ctx) {
     const lg = host.ssdp.find((r) => /lge-com|webos/i.test(`${r.st} ${r.usn} ${r.server}`) || /^LG Electronics/i.test(r.desc?.manufacturer || ""));
@@ -186,7 +188,7 @@ export default {
         ref: { ip: host.ip, mac: host.mac },
         state: {},
         info: { modelNumber: parsed.model, os: "webOS" },
-        setup: paired ? null : { kind: "tv-prompt", message: `Press Pair, then choose Accept on ${name}'s screen.` },
+        setup: paired ? null : { kind: "tv-prompt", message: `Press Connect, then choose Accept on ${name}'s screen.` },
         actions: paired ? FULL : ["pair", "turn_on", "rename", "set_room"],
       },
     ];
@@ -337,7 +339,7 @@ export default {
     } catch (err) {
       if (err.code === "EDENIED") {
         await ctx.forgetSecret(["pairings", device.id]);
-        throw new DeviceError(`${device.name} no longer accepts Patch. Press Pair and choose Accept on the TV.`, { code: "ESETUP" });
+        throw new DeviceError(`${device.name} no longer accepts Patch. Press Connect and choose Accept on the TV.`, { code: "ESETUP" });
       }
       throw explainError(err, device.name);
     }
