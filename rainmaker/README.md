@@ -135,6 +135,7 @@ Without a database, Vercel forgets your data whenever its servers restart. The a
 
 - **Tab bar** at the bottom (Today, Find, Pipeline, Inbox, More), with large tap targets and room for Android's gesture bar.
 - **Find clients near me:** tap the target icon in the city field to search around where you're standing. Good for walk-in prospecting.
+- **Map search runs from your phone.** The free OpenStreetMap servers turn away requests from cloud hosts like Vercel, so Find clients asks them from your phone's own connection, and the server scores the results. Agent searches run on the server, so on Vercel they need a Google Places key.
 - **Pipeline:** one stage at a time, with swipeable stage tabs and a **Move to** menu on each card. Drag-and-drop doesn't work with touch, so this replaces it.
 - **Lead screen:** big **Call, Text, Email, Website, Directions and Share** buttons. They open your phone's dialer, Messages, Gmail and Google Maps.
 - **Inbox:** tap a message to read it full screen, then send it from your own email or Messages app, or **Share** it to WhatsApp or any other app.
