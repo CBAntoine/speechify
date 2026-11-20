@@ -34,7 +34,7 @@ Fine-print caption: *Based on $25 tickets, 2 per order, a $2.75 booking fee incl
 | 27–35 s | "Fans see one all-in price, usually lower than they pay now, and the booking fee stays with the house. No monthly fee." | **Fans pay less. The house keeps the fee. $0/month.** |
 | 35–40 s | "Doorkeep. Own the door. Book a ten-minute fee check: link below." | End card letterboard "OWN THE DOOR" + CTA **Book a fee check →** |
 
-Fine-print caption: *"Usually lower" holds for $12–$40 tickets against Eventbrite's US fees. Doorkeep earns 75¢ per paid ticket (50¢ under $20).*
+Fine-print caption: *"Usually lower" holds for $12–$40 tickets against a major self-serve platform's US fees. Doorkeep earns 75¢ per paid ticket (50¢ under $20).*
 
 ---
 
@@ -43,3 +43,17 @@ Fine-print caption: *"Usually lower" holds for $12–$40 tickets against Eventbr
 1. **Real presenter (best):** the founder films both scripts in a real venue on a weekday afternoon. That takes about an hour with a phone and a lavalier mic.
 2. **AI avatar:** needs an avatar video tool. Graph, as used in the reference video, isn't connected to this workspace. Paste the scripts in once a tool is connected and keep the "AI presenter" label.
 3. **Faceless edit:** voiceover generated with the connected ElevenLabs account, laid over captions and venue b-roll (licensed stock or footage you shoot).
+
+## Produced: faceless versions (2026-11-20)
+
+| File | Length | Voice |
+|---|---|---|
+| [`video/doorkeep-ugc-a-the-receipt.mp4`](video/doorkeep-ugc-a-the-receipt.mp4) | 33.7 s | ElevenLabs "Paul O'Banion" (warm, slightly gravelly, American), eleven_v4, take 1 of 2 |
+| [`video/doorkeep-ugc-b-doors-at-7.mp4`](video/doorkeep-ugc-b-doors-at-7.mp4) | 37.4 s | Same voice, take 1 of 2 |
+
+- **Format:** 1080 × 1920, 30 fps, H.264 + AAC. Each spoken line is a slide in the brand style, with the line as a burned-in caption. Captions sit inside the safe zone, between 14% from the top and 20% from the bottom.
+- **Motion:** each slide slowly pushes in, with a 0.3 s crossfade between slides and a 1.8 s end-card hold.
+- **Timing:** slide cuts are timed to the pauses at the end of each spoken line.
+- **Cost:** four takes cost 2,100 ElevenLabs credits (about $0.42). The second takes are in the ElevenLabs flow "Doorkeep UGC voiceovers".
+- **Rebuild:** `node video/src/render_slides.cjs && python3 video/src/build_videos.py`, run from `business-in-a-box/`.
+- **Before running these as paid ads,** check that your ElevenLabs plan includes commercial use. Swap in venue b-roll or a real presenter when you have them: faces and real rooms usually outperform text-only video.

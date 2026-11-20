@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Doorkeep UGC slides</title>
+<style>
+  @font-face { font-family: "Anton"; src: url("../../ads/src/fonts/anton-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; src: url("../../ads/src/fonts/inter-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Inter"; src: url("../../ads/src/fonts/inter-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+  @font-face { font-family: "Inter"; src: url("../../ads/src/fonts/inter-latin-800-normal.woff2") format("woff2"); font-weight: 800; }
+  @font-face { font-family: "JetBrains Mono"; src: url("../../ads/src/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "JetBrains Mono"; src: url("../../ads/src/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+  :root { --black: #14111A; --cream: #F4EBD9; --gold: #FFC233; --green: #3DBE7A; --red: #E5483B; --smoke: #A39CAD;
+          --deep-green: #1E7A4C; --deep-red: #A3261C; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; display: flex; flex-direction: column; gap: 20px; padding: 20px; }
+  /* 1080x1920. Safe zones: keep text between y=270 (top 14%) and y=1536 (bottom 20%). */
+  .slide { position: relative; width: 1080px; height: 1920px; overflow: hidden; color: var(--cream); font-family: "Inter", sans-serif;
+           background: radial-gradient(ellipse 70% 45% at 50% 0%, rgba(255,194,51,.16), rgba(255,194,51,0) 70%),
+                       radial-gradient(ellipse 90% 60% at 50% 48%, #211b2b 0%, var(--black) 72%); }
+  .brand { position: absolute; top: 290px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 14px; }
+  .door { width: 30px; height: 40px; border: 5px solid var(--gold); border-bottom: none; border-radius: 15px 15px 0 0; position: relative; }
+  .door::after { content: ""; position: absolute; right: 5px; top: 19px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
+  .brand span { font-family: "Anton", sans-serif; font-size: 40px; letter-spacing: .1em; }
+  .stage { position: absolute; top: 380px; left: 80px; right: 80px; height: 860px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+  .display { font-family: "Anton", sans-serif; text-transform: uppercase; line-height: .95; }
+  .gold { color: var(--gold); } .green { color: var(--green); } .red { color: var(--red); } .smoke { color: var(--smoke); }
+  .caption { position: absolute; left: 80px; right: 80px; top: 1262px; max-height: 250px; display: flex; align-items: center; justify-content: center; }
+  .caption p { background: rgba(20,17,26,.78); border: 2px solid rgba(255,194,51,.25); border-radius: 18px; padding: 18px 26px;
+               font-weight: 600; font-size: 40px; line-height: 1.28; text-align: center; color: var(--cream); }
+  .fine { position: absolute; left: 90px; right: 90px; top: 1180px; font-family: "JetBrains Mono", monospace; font-size: 24px; line-height: 1.35;
+          color: var(--smoke); text-align: center; }
+  .chip { display: inline-block; border: 4px solid var(--gold); color: var(--gold); border-radius: 14px; padding: 10px 22px;
+          font-family: "Anton", sans-serif; font-size: 64px; letter-spacing: .03em; margin: 0 10px; text-transform: uppercase; }
+  /* receipt */
+  .receipt { width: 640px; background: var(--cream); color: var(--black); padding: 40px 44px 56px; transform: rotate(-2deg); box-shadow: 0 30px 70px rgba(0,0,0,.5); text-align: left; }
+  .receipt h3 { font-family: "Anton", sans-serif; font-weight: 400; font-size: 46px; letter-spacing: .05em; text-transform: uppercase; }
+  .receipt hr { border: none; border-top: 4px dashed rgba(20,17,26,.35); margin: 22px 0; }
+  .line { display: flex; align-items: baseline; font-family: "JetBrains Mono", monospace; font-size: 40px; margin: 14px 0; }
+  .line .lead { flex: 1; border-bottom: 4px dotted rgba(20,17,26,.3); margin: 0 12px; transform: translateY(-8px); }
+  .line.bad { color: var(--deep-red); font-weight: 700; }
+  /* marquee end card */
+  .sign { position: relative; width: 860px; height: 470px; background: #0b090e; border-radius: 26px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .bulb { position: absolute; width: 22px; height: 22px; border-radius: 50%; transform: translate(-50%, -50%);
+          background: radial-gradient(circle at 40% 35%, #fff6d6 0%, var(--gold) 45%, #c98f00 100%); box-shadow: 0 0 18px 4px rgba(255,194,51,.55); }
+  .board { position: absolute; inset: 60px; background: var(--cream); color: var(--black); border-radius: 8px;
+           background-image: repeating-linear-gradient(to bottom, transparent 0 17px, rgba(20,17,26,.07) 17px 19px);
+           display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .board .display { font-size: 150px; }
+  .button { margin-top: 56px; background: var(--gold); color: var(--black); border-radius: 18px; padding: 22px 40px;
+            font-family: "Anton", sans-serif; font-size: 66px; letter-spacing: .03em; text-transform: uppercase; }
+  /* tickets row */
+  .tix { display: flex; gap: 22px; margin-top: 60px; }
+  .tix div { width: 150px; height: 96px; background: var(--cream); border-radius: 10px; position: relative; color: var(--deep-red);
+             font-family: "Anton", sans-serif; font-size: 44px; display: flex; align-items: center; justify-content: center; }
+  .tix div::before, .tix div::after { content: ""; position: absolute; top: 34px; width: 28px; height: 28px; border-radius: 50%; background: #1a1622; }
+  .tix div::before { left: -14px; } .tix div::after { right: -14px; }
+  /* checklist */
+  .checks { text-align: left; margin-top: 40px; }
+  .checks div { display: flex; align-items: center; gap: 26px; font-weight: 800; font-size: 60px; letter-spacing: .03em; text-transform: uppercase; margin: 14px 0; }
+  .tick { width: 54px; height: 54px; border-radius: 12px; background: var(--green); position: relative; flex: none; }
+  .tick::after { content: ""; position: absolute; left: 18px; top: 8px; width: 14px; height: 28px; border: solid var(--black); border-width: 0 7px 7px 0; transform: rotate(45deg); }
+</style>
+</head>
+<body>
+
+<!-- Script A: "The Receipt" -->
+<section class="slide" id="A1">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display red" style="font-size: 280px;">$3.54</div>
+    <div class="display smoke" style="font-size: 92px; margin-top: 4px;">to them.</div>
+    <div class="display" style="font-size: 280px; margin-top: 40px;">$0</div>
+    <div class="display smoke" style="font-size: 92px; margin-top: 4px;">to you.</div>
+  </div>
+  <div class="caption"><p>Last Friday, your fans paid about three-fifty a ticket in fees. Your venue kept zero.</p></div>
+</section>
+
+<section class="slide" id="A2">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display" style="font-size: 104px; margin-bottom: 56px;">Every ticket.<br><span class="gold">Every show.</span></div>
+    <div class="receipt">
+      <h3>The big ticket site</h3><hr>
+      <div class="line"><span>Ticket</span><span class="lead"></span><span>$25.00</span></div>
+      <div class="line"><span>Platform fees</span><span class="lead"></span><span>$3.54</span></div><hr>
+      <div class="line bad"><span>Fees to you</span><span class="lead"></span><span>$0.00</span></div>
+    </div>
+  </div>
+  <div class="caption"><p>That's the ticket platform's cut. Every ticket, every show, all year.</p></div>
+</section>
+
+<section class="slide" id="A3">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display smoke" style="font-size: 76px;">Your own box office</div>
+    <div class="display" style="font-size: 230px; margin-top: 24px;">$27.75</div>
+    <div class="display smoke" style="font-size: 70px; margin-top: 18px;">all-in for the fan</div>
+    <div class="display green" style="font-size: 150px; margin-top: 60px;">You keep $1.05</div>
+  </div>
+  <div class="caption"><p>Doorkeep gives you your own box office, paid into your own Stripe. One honest price, still lower than fans pay now, and you keep about a dollar a ticket.</p></div>
+</section>
+
+<section class="slide" id="A4">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage" style="height: 780px;">
+    <div class="display green" style="font-size: 270px;">~$16.3K</div>
+    <div class="display smoke" style="font-size: 64px; margin-top: 8px;">a year at 300 tickets a week</div>
+    <div style="margin-top: 60px;"><span class="chip">$0 / month</span><span class="chip">75¢ / ticket</span></div>
+  </div>
+  <p class="fine">$25 tickets, 2 per order, $2.75 booking fee incl. Doorkeep's 75¢, Stripe 2.9% + 30¢. Your numbers will differ.</p>
+  <div class="caption"><p>Three hundred tickets a week? That's about sixteen grand a year. No monthly fee: we only earn seventy-five cents when you sell.</p></div>
+</section>
+
+<section class="slide" id="A5">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="sign" data-bulbs="1"><div class="board"><div class="display">Own the</div><div class="display">door</div></div></div>
+    <div class="button">See what you'd keep</div>
+  </div>
+  <div class="caption"><p>Want your number? Tap below, and we'll run your last month of shows.</p></div>
+</section>
+
+<!-- Script B: "Doors at 7" -->
+<section class="slide" id="B1">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display gold" style="font-size: 250px;">300-cap<br>room?</div>
+    <div class="display" style="font-size: 96px; margin-top: 50px;">This one's for you.</div>
+  </div>
+  <div class="caption"><p>If you run a room that holds three hundred people, this one's for you.</p></div>
+</section>
+
+<section class="slide" id="B2">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display" style="font-size: 160px;">A <span class="red">fee</span> on<br>every ticket.</div>
+    <div class="tix"><div>FEE</div><div>FEE</div><div>FEE</div><div>FEE</div></div>
+  </div>
+  <div class="caption"><p>Right now, a ticket site sits between you and every fan. It takes a fee on each ticket, owns the checkout, and makes your fans pay more.</p></div>
+</section>
+
+<section class="slide" id="B3">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display gold" style="font-size: 130px;">Live in 7 days</div>
+    <div class="checks">
+      <div><span class="tick"></span>Your logo</div>
+      <div><span class="tick"></span>Your domain</div>
+      <div><span class="tick"></span>Your Stripe</div>
+      <div><span class="tick"></span>Phone check-in</div>
+      <div><span class="tick"></span>Your list</div>
+    </div>
+  </div>
+  <div class="caption"><p>We build you your own box office in seven days. Your logo, your domain, your Stripe account. Door staff scan tickets on their phones. Your list is yours.</p></div>
+</section>
+
+<section class="slide" id="B4">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage">
+    <div class="display green" style="font-size: 150px;">Fans pay less.</div>
+    <div class="display" style="font-size: 104px; margin-top: 36px;">The house keeps<br>the fee.</div>
+    <div style="margin-top: 64px;"><span class="chip">$0 / month</span></div>
+  </div>
+  <div class="caption"><p>Fans see one all-in price, usually lower than they pay now, and the booking fee stays with the house. No monthly fee.</p></div>
+</section>
+
+<section class="slide" id="B5">
+  <div class="brand"><div class="door"></div><span>DOORKEEP</span></div>
+  <div class="stage" style="height: 760px;">
+    <div class="sign" data-bulbs="1"><div class="board"><div class="display">Own the</div><div class="display">door</div></div></div>
+    <div class="button" style="font-size: 58px;">Book a 10-minute fee check</div>
+  </div>
+  <p class="fine" style="top: 1160px;">"Usually lower" holds for $12–$40 tickets vs. a major self-serve platform's US fees. Doorkeep earns 75¢ per paid ticket (50¢ under $20).</p>
+  <div class="caption"><p>Doorkeep. Own the door. Book a ten-minute fee check: link below.</p></div>
+</section>
+
+<script>
+  for (const sign of document.querySelectorAll('[data-bulbs]')) {
+    const w = sign.offsetWidth, h = sign.offsetHeight, inset = 30, gap = 50;
+    const sides = [[inset, inset, w - inset, inset], [w - inset, inset, w - inset, h - inset], [w - inset, h - inset, inset, h - inset], [inset, h - inset, inset, inset]];
+    for (const [x1, y1, x2, y2] of sides) {
+      const n = Math.round(Math.hypot(x2 - x1, y2 - y1) / gap);
+      for (let i = 0; i < n; i++) {
+        const b = document.createElement('div'); b.className = 'bulb';
+        b.style.left = `${x1 + (x2 - x1) * i / n}px`; b.style.top = `${y1 + (y2 - y1) * i / n}px`; sign.appendChild(b);
+      }
+    }
+  }
+</script>
+</body>
+</html>
