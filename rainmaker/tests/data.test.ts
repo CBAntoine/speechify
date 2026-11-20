@@ -12,7 +12,7 @@ test("Overpass query covers tags and business-only name matches", () => {
   assert.ok(q.includes('nwr["craft"="roofer"]["name"](around:12000,39.73920,-104.99030);'));
   assert.ok(q.includes('nwr["name"~"roof",i]["shop"]'));
   assert.ok(!q.includes('nwr["name"~"roof",i](around'), "never matches names without a business key");
-  assert.ok(q.endsWith("out center tags 250;"));
+  assert.ok(q.endsWith("out center 250;"), "body verbosity, so nodes keep their coordinates");
 });
 
 test("Overpass results become prospects, nearest first, deduped", () => {

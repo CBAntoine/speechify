@@ -26,7 +26,10 @@ export function buildOverpassQuery(niche: Pick<Niche, "osmTags" | "osmName">, la
       parts.push(`nwr["name"~"${re}",i]["${key}"]${around};`);
     }
   }
-  return `[out:json][timeout:25];(${parts.join("")});out center tags 250;`;
+  // Plain `out center` (body verbosity): Overpass documents coordinates for
+  // nodes there and a center for ways. The `tags` level documents "not
+  // coordinates", and the parser skips elements without a location.
+  return `[out:json][timeout:25];(${parts.join("")});out center 250;`;
 }
 
 export function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
