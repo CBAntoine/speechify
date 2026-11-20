@@ -240,7 +240,7 @@ export function Faq() {
   const qa: [string, string][] = [
     [
       "Is this the official GTA VI map?",
-      `No. ${SITE.name} is an independent fan guide. The map is our own illustration of Leonida, drawn from scratch, and positions are approximate until the community charts exact spots.`,
+      `No. ${SITE.name} is an independent fan guide. The map is real-world Florida, street by street from OpenStreetMap, standing in for Leonida. We never copy Rockstar's in-game map, so pin positions are approximate until the community charts exact spots.`,
     ],
     [
       "How do you know a secret is real?",

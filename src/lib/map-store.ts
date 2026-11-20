@@ -80,6 +80,8 @@ const initial: MapState = {
 };
 
 let state: MapState = initial;
+/** Phones: a selected pin shows its popup and the sheet stays as it was (the popup links to the full guide). */
+const isNarrow = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
 const listeners = new Set<() => void>();
 let nonce = 0;
 /** Camera centre, kept outside the store so panning doesn't re-render anything. */
@@ -102,7 +104,7 @@ export const mapStore = {
       selectedRegion: null,
       place: id ? null : state.place,
       popupNonce: ++nonce,
-      sheetOpen: id ? true : state.sheetOpen,
+      sheetOpen: id && !isNarrow() ? true : state.sheetOpen,
       fly: id && opts.fly !== false ? { kind: "location", id, nonce: ++nonce } : state.fly,
     });
   },

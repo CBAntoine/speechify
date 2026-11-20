@@ -236,7 +236,5 @@ export async function planRoute(destination: string, origin: string | undefined,
   }
 
   const route = await drawRoute(from, dest.end, mode);
-  // Show what's at the destination without moving the camera off the whole route.
-  showSpot(dest, { fly: false });
   return { ok: true as const, route, summary: { ...describeRoute(route, from, dest.end), origin_note: originNote } };
 }

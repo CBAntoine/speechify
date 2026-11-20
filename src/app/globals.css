@@ -2572,6 +2572,12 @@ a.tip-card__src:hover {
   font: 600 16px/1.25 var(--font-display);
   margin: 0 0 6px;
 }
+.pop--narrow .pop__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .pop__text {
   font-size: 13px;
   line-height: 1.5;
@@ -2694,7 +2700,7 @@ a.tip-card__src:hover {
   position: absolute;
   z-index: 640;
   left: calc(var(--panel-w) + var(--gutter) * 2);
-  top: var(--gutter);
+  bottom: 76px;
   width: min(400px, calc(100% - var(--panel-w) - 140px));
   background: var(--surface-strong);
   border: 1px solid var(--line-2);
@@ -2703,9 +2709,6 @@ a.tip-card__src:hover {
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   padding: 12px 14px;
-}
-.explorer:has(.route-card) .map-credit {
-  display: none;
 }
 .route-card__head {
   display: flex;
@@ -2827,6 +2830,7 @@ a.tip-card__src:hover {
     left: 12px;
     right: 66px;
     top: 12px;
+    bottom: auto;
     width: auto;
   }
   .route-card__steps {

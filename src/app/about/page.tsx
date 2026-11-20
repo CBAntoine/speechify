@@ -28,9 +28,10 @@ export default function About() {
         </ul>
         <h2>The map</h2>
         <p>
-          Our map is an original illustration of Leonida, drawn from scratch and inspired by the real-world geography the game
-          parodies. It is not Rockstar&apos;s map and it isn&apos;t to scale. Pins marked &quot;search zone&quot; show the area to
-          look in; as the community confirms exact spots, we tighten them.
+          Leonida parodies Florida, so our map is real-world Florida standing in for it: Natural Earth and seafloor data for
+          the state view, then every street, building and shop from OpenStreetMap as you zoom in. It is not Rockstar&apos;s map,
+          and the in-game layout differs. Pins marked &quot;search zone&quot; show the area to look in; as the community
+          confirms exact spots, we tighten them. Routes follow real-world roads, as a guide rather than in-game GPS.
         </p>
         <h2>The voice guide</h2>
         <p>

@@ -14,8 +14,9 @@ import { fileURLToPath } from "node:url";
 import { fallbackBrief, isRelevant, mergeNews, parseFeed, toNewsItem } from "./lib/intel.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const NEWS_FILE = resolve(root, "data/news.json");
-const SOURCES_FILE = resolve(root, "data/sources.json");
+// Overridable for tests.
+const NEWS_FILE = process.env.INTEL_NEWS_FILE || resolve(root, "data/news.json");
+const SOURCES_FILE = process.env.INTEL_SOURCES_FILE || resolve(root, "data/sources.json");
 const UA = "NeonAtlasBot/1.0 (+unofficial GTA VI fan guide; daily headline aggregator)";
 
 async function fetchFeed(src) {
@@ -98,6 +99,11 @@ results.forEach((r, i) => {
   if (r.status === "fulfilled") fetched.push(...r.value);
   else console.warn(`[feed] ${sources[i].name}: ${r.reason?.message ?? r.reason}`);
 });
+if (results.every((r) => r.status === "rejected")) {
+  // Don't stamp "updated today" on a feed we couldn't refresh; fail the job so it's noticed.
+  console.error("[intel] every feed failed; leaving data/news.json unchanged");
+  process.exit(1);
+}
 const relevant = fetched.filter(isRelevant).map((i) => toNewsItem(i, now));
 const { items, added } = mergeNews(news.items, relevant);
 console.log(`[intel] ${fetched.length} feed items, ${relevant.length} about GTA VI, ${added.length} new`);

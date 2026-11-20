@@ -1,6 +1,6 @@
 /**
  * Client tools the ElevenLabs agent can call. Names and parameters must match
- * the tool definitions on the agent (see scripts/agent/tools.json).
+ * the client-tool definitions on the agent (ElevenLabs dashboard → Sol → Tools; see README).
  * Each handler acts on the map and returns compact JSON for the agent to speak from.
  */
 import {

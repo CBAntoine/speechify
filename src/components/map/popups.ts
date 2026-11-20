@@ -44,9 +44,9 @@ export function locationPopup(loc: MapLocation & { lng: number; lat: number }, o
   const steps = !opts.narrow && !loc.spoiler ? (loc.steps ?? []).slice(0, 3) : [];
   const where =
     loc.placement === "approximate" && loc.radiusKm
-      ? `Search zone ≈ ${formatDistance(loc.radiusKm * 1000)} wide`
+      ? `Search zone ≈ ${formatDistance(loc.radiusKm * 2000)} across`
       : "Marked spot";
-  return `<div class="pop" style="--c:${cat.color}">
+  return `<div class="pop${opts.narrow ? " pop--narrow" : ""}" style="--c:${cat.color}">
   <div class="pop__meta"><span class="pop__cat">${esc(cat.label)}</span><span class="pop__conf" style="--cc:${conf.color}" title="${esc(conf.help)}">${esc(conf.label)}</span></div>
   <h3 class="pop__title">${esc(loc.name)}</h3>
   <p class="pop__text">${esc(loc.summary)}</p>
@@ -57,14 +57,14 @@ export function locationPopup(loc: MapLocation & { lng: number; lat: number }, o
 </div>`;
 }
 
-export function placePopup(place: PlaceFocus, opts: { from?: RouteEnd | null }) {
+export function placePopup(place: PlaceFocus, opts: { narrow: boolean; from?: RouteEnd | null }) {
   const region = regionById(place.region);
   const kind = KIND_LABEL[place.kind] ?? "Place";
   const nearby = place.nearby
     .map((id) => locationById(id))
     .filter((l): l is MapLocation & { lng: number; lat: number } => !!l && l.lng != null && l.lat != null)
-    .slice(0, 3);
-  return `<div class="pop" style="--c:#4db2ff">
+    .slice(0, opts.narrow ? 0 : 3);
+  return `<div class="pop${opts.narrow ? " pop--narrow" : ""}" style="--c:#4db2ff">
   <div class="pop__meta"><span class="pop__cat">${esc(kind)}</span>${region ? `<span class="pop__conf" style="--cc:${region.color}">${esc(region.name)}</span>` : ""}</div>
   <h3 class="pop__title">${esc(place.name)}</h3>
   <p class="pop__text">${esc(place.label)}. A real-world ${esc(kind.toLowerCase())} on the stand-in map${region ? `, inside the ${esc(region.name)} region` : ""}. The in-game layout differs.</p>

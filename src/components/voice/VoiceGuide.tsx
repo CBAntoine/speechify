@@ -80,6 +80,10 @@ function VoiceDock() {
 
   // ── client tools ──
   const tools = useMemo(() => makeVoiceTools((t) => push("tool", t)), [push]);
+  // Dev only: lets automated checks drive the exact handlers the agent calls.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __neonTools?: typeof tools }).__neonTools = tools;
+  }, [tools]);
   useConversationClientTool("show_location", tools.show_location);
   useConversationClientTool("search_map", tools.search_map);
   useConversationClientTool("focus_region", tools.focus_region);

@@ -10,12 +10,13 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "intel:update": "node scripts/update-intel.mjs",
-    "intel:test": "node --test scripts/test/",
+    "intel:test": "node --test scripts/test/*.test.mjs",
     "geo:build": "node scripts/build-geodata.mjs",
     "vendor:copy": "node scripts/copy-vendor.mjs",
     "postinstall": "node scripts/copy-vendor.mjs",
     "predev": "node scripts/copy-vendor.mjs",
-    "prebuild": "node scripts/copy-vendor.mjs"
+    "prebuild": "node scripts/copy-vendor.mjs",
+    "test": "node --test scripts/test/*.test.mjs"
   },
   "engines": {
     "node": ">=20.9"

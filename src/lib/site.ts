@@ -7,7 +7,7 @@ export const SITE = {
   guideName: "Sol",
   url: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, ""),
   disclaimer:
-    "Neon Atlas is an unofficial fan site. It is not affiliated with, endorsed or sponsored by Rockstar Games or Take-Two Interactive. Grand Theft Auto and related names are trademarks of their respective owners. The map is an original illustration, not to scale.",
+    "Neon Atlas is an unofficial fan site. It is not affiliated with, endorsed or sponsored by Rockstar Games or Take-Two Interactive. Grand Theft Auto and related names are trademarks of their respective owners. The map shows real-world Florida (OpenStreetMap, Natural Earth) as a stand-in for Leonida; the in-game layout differs.",
 } as const;
 
 export const PUBLIC_CONFIG = {

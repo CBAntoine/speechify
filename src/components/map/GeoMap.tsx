@@ -38,17 +38,38 @@ const MAX_BOUNDS: LngLatBoundsLike = [
 const SHEET_COLLAPSED = 128; // keep in sync with .map-panel height (mobile) in globals.css
 const SHEET_OPEN = 0.62;
 
-function layoutInsets(container: HTMLElement) {
+/** Room the route card takes (desktop: bottom-left; phones: top). */
+const ROUTE_CARD_H = 190;
+
+function layoutInsets(container: HTMLElement, opts: { popup?: boolean } = {}) {
   const wide = container.clientWidth >= 1024;
   const panel = container.closest(".explorer")?.querySelector<HTMLElement>("[data-map-panel]");
-  const voiceOpen = mapStore.get().voiceOpen;
+  const { voiceOpen, route } = mapStore.get();
+  // Leave headroom above a pin for its popup.
+  const popupRoom = opts.popup ? Math.min(220, Math.round(container.clientHeight * 0.28)) : 0;
   if (wide) {
     const left = panel ? panel.offsetWidth + 40 : 410;
     const right = voiceOpen ? 420 : 40;
-    return { left, right, top: 40, bottom: 80 };
+    return clampInsets({ left, right, top: 40 + popupRoom, bottom: 80 + (route ? ROUTE_CARD_H : 0) }, container);
   }
   const sheetH = mapStore.get().sheetOpen ? Math.round(container.clientHeight * SHEET_OPEN) : SHEET_COLLAPSED;
-  return { left: 16, right: 16, top: 64, bottom: sheetH + 16 };
+  return clampInsets(
+    { left: 16, right: 16, top: 64 + (route ? ROUTE_CARD_H - 40 : 0) + (opts.popup ? 190 : 0), bottom: sheetH + 16 },
+    container,
+  );
+}
+
+/** Padding larger than the map makes MapLibre's camera maths fail: keep at least 120px of view. */
+function clampInsets(p: { left: number; right: number; top: number; bottom: number }, container: HTMLElement) {
+  const fit = (a: number, b: number, room: number) => {
+    const total = a + b;
+    if (total <= room) return [a, b];
+    const k = Math.max(0, room) / total;
+    return [Math.floor(a * k), Math.floor(b * k)];
+  };
+  const [top, bottom] = fit(p.top, p.bottom, container.clientHeight - 120);
+  const [left, right] = fit(p.left, p.right, container.clientWidth - 120);
+  return { top, bottom, left, right };
 }
 
 function visibleIds(s: MapState): Set<string> {
@@ -133,15 +154,20 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         } catch (err) {
           console.warn("[map] street detail unavailable", err);
         }
+        // A dead tile host (no TileJSON) drops street detail at once; a few bad tiles don't.
+        let tileErrors = 0;
         map.on("error", (e) => {
-          const sourceId = (e as unknown as { sourceId?: string }).sourceId;
-          if (sourceId === "streets" && streetsOn) {
-            streetsOn = false;
-            container.classList.remove("has-streets");
-            removeStreetLayers(map);
-            map.setMaxZoom(12.5);
-            console.warn("[map] street tiles failed to load; continuing without street detail");
-          }
+          const ev = e as unknown as { sourceId?: string; tile?: unknown };
+          if (ev.sourceId !== "streets" || !streetsOn) return;
+          if (ev.tile && ++tileErrors < 12) return;
+          streetsOn = false;
+          container.classList.remove("has-streets");
+          removeStreetLayers(map);
+          map.setMaxZoom(12.5);
+          console.warn(
+            "[map] street tiles failed to load; continuing without street detail:",
+            (e as unknown as { error?: { message?: string } }).error?.message ?? e,
+          );
         });
 
         // Route line (cyan → pink), drawn under street labels so names stay readable.
@@ -153,6 +179,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
             id: "route-glow",
             type: "line",
             source: "route",
+            filter: ["!", ["get", "approx"]],
             layout: round,
             paint: {
               "line-color": "#ff4f9a",
@@ -168,6 +195,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
             id: "route-casing",
             type: "line",
             source: "route",
+            filter: ["!", ["get", "approx"]],
             layout: round,
             paint: { "line-color": "#05060d", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 7, 16, 15] },
           },
@@ -314,7 +342,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           const loc = locationById(req.id);
           if (!loc || !isPlaced(loc)) return;
           if (loc.placement === "exact" || !loc.radiusKm) {
-            map.flyTo({ center: [loc.lng, loc.lat], zoom: streetsOn ? 16.5 : 10.5, padding: layoutInsets(container), duration: 1600, essential: true });
+            map.flyTo({ center: [loc.lng, loc.lat], zoom: streetsOn ? 16.5 : 10.5, padding: layoutInsets(container, { popup: true }), duration: 1600, essential: true });
             return;
           }
           const km = Math.max(loc.radiusKm ?? 1.5, 1.2);
@@ -325,7 +353,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
               [loc.lng - dLng, loc.lat - dLat],
               [loc.lng + dLng, loc.lat + dLat],
             ],
-            { ...fitOptions(), maxZoom: streetsOn ? 15 : 10.5 },
+            { ...fitOptions(), padding: layoutInsets(container, { popup: true }), maxZoom: streetsOn ? 15 : 10.5 },
           );
           return;
         }
@@ -340,10 +368,10 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
                 [b[0], b[1]],
                 [b[2], b[3]],
               ],
-              { ...fitOptions(), maxZoom: streetsOn ? (big ? 14 : 17) : 11 },
+              { ...fitOptions(), padding: layoutInsets(container, { popup: true }), maxZoom: streetsOn ? (big ? 14 : 17) : 11 },
             );
           } else {
-            map.flyTo({ center: [p.lng, p.lat], zoom: streetsOn ? 16.5 : 11, padding: layoutInsets(container), duration: 1600, essential: true });
+            map.flyTo({ center: [p.lng, p.lat], zoom: streetsOn ? 16.5 : 11, padding: layoutInsets(container, { popup: true }), duration: 1600, essential: true });
           }
           return;
         }
@@ -456,6 +484,8 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         }
         if (!prev || prev.route !== s.route) {
           const r = s.route;
+          // The route card takes over from the popup.
+          if (r) popup?.remove();
           (map.getSource("route") as GeoJSONSource | undefined)?.setData(
             r
               ? {
@@ -475,6 +505,14 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
               el.className = `route-end route-end--${tag.toLowerCase()}`;
               el.textContent = tag;
               el.title = end.name;
+              if (end.locationId) {
+                const id = end.locationId;
+                el.style.cursor = "pointer";
+                el.addEventListener("click", (e) => {
+                  e.stopPropagation();
+                  mapStore.selectLocation(id, { fly: false });
+                });
+              }
               routeMarkers.push(new ml.Marker({ element: el, anchor: "bottom", offset: [0, -16] }).setLngLat([end.lng, end.lat]).addTo(map));
             }
           }
@@ -497,11 +535,13 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           html = locationPopup(loc, { narrow: container.clientWidth < 700, from: previousFocus() });
         } else if (s.place) {
           at = [s.place.lng, s.place.lat];
-          html = placePopup(s.place, { from: previousFocus() });
+          html = placePopup(s.place, { narrow: container.clientWidth < 700, from: previousFocus() });
         }
         if (!at) return;
+        const narrow = container.clientWidth < 1024;
         const here = { name: loc?.name ?? s.place!.name, lng: at[0], lat: at[1], locationId: loc?.id };
-        popup = new ml.Popup({ className: "na-popup na-popup--rich", offset: 26, maxWidth: "330px", focusAfterOpen: false })
+        // Phones: always above the spot, clear of the bottom sheet and the Ask Sol button.
+        popup = new ml.Popup({ className: "na-popup na-popup--rich", offset: 26, maxWidth: "330px", focusAfterOpen: false, ...(narrow ? { anchor: "bottom" as const } : {}) })
           .setLngLat(at)
           .setHTML(html)
           .addTo(map);
@@ -509,7 +549,10 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
           const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
           if (!btn) return;
           const act = btn.dataset.act;
-          if (act === "guide") mapStore.setSheet(true);
+          if (act === "guide") {
+            mapStore.setSheet(true);
+            if (container.clientWidth < 1024) popup?.remove();
+          }
           else if (act === "pin" && btn.dataset.id) mapStore.selectLocation(btn.dataset.id);
           else if (act === "route") {
             const from = previousFocus();

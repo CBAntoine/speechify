@@ -37,6 +37,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Update news + daily brief
+        # If every feed is down this step fails (so you see it) but approved pins still get committed.
+        continue-on-error: true
         run: node scripts/update-intel.mjs
         env:
           # Optional: set this repository secret for AI-written daily briefs.
