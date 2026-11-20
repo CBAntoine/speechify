@@ -44,12 +44,17 @@ export function coverCrop(srcW: number, srcH: number, boxAspect: number) {
   return { sx: 0, sy: (srcH - sh) / 2, sw: srcW, sh };
 }
 
-/** Output size for a target height, keeping aspect and even dimensions. */
-export function outputSize(srcW: number, srcH: number, targetHeight: number | null): { width: number; height: number } {
+/**
+ * Output size for a target "p" size, keeping aspect and even dimensions. The
+ * target applies to the short side, so 1080p is 1920x1080 for a monitor and
+ * 1080x2400 for a phone held upright.
+ */
+export function outputSize(srcW: number, srcH: number, targetShort: number | null): { width: number; height: number } {
   const even = (v: number) => Math.max(2, Math.round(v / 2) * 2);
-  if (!targetHeight || targetHeight >= srcH) return { width: even(srcW), height: even(srcH) };
-  const scale = targetHeight / srcH;
-  return { width: even(srcW * scale), height: even(targetHeight) };
+  const short = Math.min(srcW, srcH);
+  if (!targetShort || targetShort >= short) return { width: even(srcW), height: even(srcH) };
+  const scale = targetShort / short;
+  return { width: even(srcW * scale), height: even(srcH * scale) };
 }
 
 /** Splits caption text into at most two balanced lines that fit `maxChars`. */

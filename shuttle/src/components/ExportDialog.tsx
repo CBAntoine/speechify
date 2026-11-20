@@ -5,14 +5,18 @@ import { buildPlayerPage } from '../lib/playerPage.ts';
 import { captionCues, chaptersToOutput, cuesToOutput, toSRT, toVTT, transcriptMarkdown, transcriptToOutput } from '../lib/captions.ts';
 import { keptSegments, outputDuration } from '../lib/timeline.ts';
 import { outputSize } from '../lib/layout.ts';
-import { bytes, downloadBlob, extFor, slug, span, timer } from '../lib/format.ts';
+import { bytes, extFor, slug, span, timer } from '../lib/format.ts';
+import { deliverFile, saveToPhone } from '../lib/files.ts';
+import { isNativeApp } from '../lib/native.ts';
 import { Button, Field, Notice, Progress, Segmented, Toggle } from './ui.tsx';
 import { useSettings } from './App.tsx';
 
 export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: { main: Blob; cam?: Blob }; onClose: () => void }) {
   const { settings, update } = useSettings();
   const [format, setFormat] = useState<'mp4' | 'webm'>(settings.exportFormat);
-  const [height, setHeight] = useState<number | null>(settings.exportHeight && settings.exportHeight < rec.height ? settings.exportHeight : null);
+  const [height, setHeight] = useState<number | null>(
+    settings.exportHeight && settings.exportHeight < Math.min(rec.width, rec.height) ? settings.exportHeight : null,
+  );
   const [burn, setBurn] = useState(rec.edits.captionsBurnIn);
   const [progress, setProgress] = useState<number | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
@@ -21,6 +25,8 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
   const [ctaLabel, setCtaLabel] = useState('');
   const [ctaUrl, setCtaUrl] = useState('');
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [saving, setSaving] = useState<number | null>(null);
+  const native = isNativeApp();
   const abort = useRef<AbortController | null>(null);
   const started = useRef(0);
   const [eta, setEta] = useState<string>('');
@@ -32,7 +38,8 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
   const chapters = useMemo(() => chaptersToOutput(rec.markers, segs), [rec.markers, segs]);
   const lines = useMemo(() => transcriptToOutput(rec.transcript, segs), [rec.transcript, segs]);
   const base = slug(rec.title);
-  const heights = [2160, 1440, 1080, 720].filter((h) => h < rec.height);
+  const shortSide = Math.min(rec.width, rec.height);
+  const heights = [2160, 1440, 1080, 720].filter((h) => h < shortSide);
   const out = outputSize(rec.width, rec.height, height);
 
   useEffect(() => {
@@ -72,8 +79,19 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
 
   const filename = (ext: string) => `${base}.${ext}`;
 
+  // Downloads in a browser; the share sheet in the Android app.
+  const give = async (blob: Blob, name: string) => {
+    setShareNote(null);
+    try {
+      await deliverFile(blob, name);
+    } catch (err) {
+      setShareNote(`Could not hand over ${name}: ${(err as Error).message}`);
+    }
+  };
+
   const share = async () => {
     if (!result) return;
+    if (native) return give(result.blob, filename(result.ext));
     const file = new File([result.blob], filename(result.ext), { type: result.blob.type });
     try {
       if (navigator.canShare?.({ files: [file] })) {
@@ -81,6 +99,20 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
       } else setShareNote('This browser cannot share files directly. Download it and attach it instead.');
     } catch (err) {
       if ((err as Error).name !== 'AbortError') setShareNote('Sharing was blocked. Download the file instead.');
+    }
+  };
+
+  const saveVideo = async () => {
+    if (!result) return;
+    setShareNote(null);
+    setSaving(0);
+    try {
+      const folder = await saveToPhone(result.blob, filename(result.ext), setSaving);
+      setShareNote(`Saved to ${folder}. It shows up in your gallery.`);
+    } catch (err) {
+      setShareNote(`Saving failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(null);
     }
   };
 
@@ -100,7 +132,7 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
         cues,
         cta: ctaUrl.trim() ? { label: ctaLabel.trim() || 'Learn more', url: ctaUrl.trim() } : undefined,
       });
-      downloadBlob(page, filename('html'));
+      await give(page, filename('html'));
     } catch (err) {
       setError(`Could not build the player page: ${(err as Error).message}`);
     } finally {
@@ -142,7 +174,7 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
             </Field>
             <Field label="Size" htmlFor="ex-size">
               <select id="ex-size" value={height ?? ''} onChange={(e) => setHeight(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Original ({rec.height}p)</option>
+                <option value="">Original ({shortSide}p)</option>
                 {heights.map((h) => (
                   <option key={h} value={h}>
                     {h === 2160 ? '4K' : `${h}p`}
@@ -177,10 +209,16 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
                 {result.note ? ` · ${result.note}` : ''}
               </Notice>
               <div className="panel-actions">
-                <Button variant="primary" icon="download" onClick={() => downloadBlob(result.blob, filename(result.ext))}>
-                  Download video
-                </Button>
-                {'share' in navigator && (
+                {native ? (
+                  <Button variant="primary" icon="download" onClick={saveVideo} disabled={saving !== null}>
+                    {saving !== null ? `Saving… ${Math.round(saving * 100)}%` : 'Save to phone'}
+                  </Button>
+                ) : (
+                  <Button variant="primary" icon="download" onClick={() => void give(result.blob, filename(result.ext))}>
+                    Download video
+                  </Button>
+                )}
+                {(native || 'share' in navigator) && (
                   <Button variant="quiet" icon="share" onClick={share}>
                     Share…
                   </Button>
@@ -189,7 +227,6 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
                   Export again
                 </Button>
               </div>
-              {shareNote && <p className="muted small">{shareNote}</p>}
             </div>
           ) : (
             <Button variant="record" size="lg" icon="film" onClick={run}>
@@ -198,6 +235,8 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
           )}
           {error && <Notice tone="error">{error}</Notice>}
         </section>
+
+        {shareNote && <p className="muted small" role="status">{shareNote}</p>}
 
         <section className="export-page">
           <h3>Player page</h3>
@@ -213,7 +252,7 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
             </Field>
           </div>
           <Button variant="quiet" icon="link" disabled={!result || pageBusy} onClick={makePage} title={!result ? 'Export the video first' : undefined}>
-            {pageBusy ? 'Building…' : result ? 'Download player page' : 'Export the video first'}
+            {pageBusy ? 'Building…' : result ? (native ? 'Share player page' : 'Download player page') : 'Export the video first'}
           </Button>
           {result && result.blob.size > 150 * 1024 * 1024 && (
             <p className="muted small">This video is large ({bytes(result.blob.size)}); the page will be about a third bigger. A 720p export keeps it smaller.</p>
@@ -223,10 +262,10 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
         <section className="export-text">
           <h3>Text</h3>
           <div className="panel-actions">
-            <Button size="sm" variant="ghost" icon="download" disabled={!cues.length} onClick={() => downloadBlob(new Blob([toVTT(cues)], { type: 'text/vtt' }), filename('vtt'))}>
+            <Button size="sm" variant="ghost" icon="download" disabled={!cues.length} onClick={() => void give(new Blob([toVTT(cues)], { type: 'text/vtt' }), filename('vtt'))}>
               Captions .vtt
             </Button>
-            <Button size="sm" variant="ghost" icon="download" disabled={!cues.length} onClick={() => downloadBlob(new Blob([toSRT(cues)], { type: 'application/x-subrip' }), filename('srt'))}>
+            <Button size="sm" variant="ghost" icon="download" disabled={!cues.length} onClick={() => void give(new Blob([toSRT(cues)], { type: 'application/x-subrip' }), filename('srt'))}>
               Captions .srt
             </Button>
             <Button
@@ -235,7 +274,7 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
               icon="download"
               disabled={!lines.length && !rec.summary}
               onClick={() =>
-                downloadBlob(
+                void give(
                   new Blob(
                     [
                       transcriptMarkdown({
@@ -259,11 +298,11 @@ export function ExportDialog({ rec, media, onClose }: { rec: Recording; media: {
           </div>
           <h3>Original files</h3>
           <div className="panel-actions">
-            <Button size="sm" variant="ghost" icon="download" onClick={() => downloadBlob(media.main, `${base}-${rec.mode === 'cam' ? 'camera' : 'screen'}.${extFor(media.main.type)}`)}>
+            <Button size="sm" variant="ghost" icon="download" onClick={() => void give(media.main, `${base}-${rec.mode === 'cam' ? 'camera' : 'screen'}.${extFor(media.main.type)}`)}>
               {rec.mode === 'cam' ? 'Camera' : 'Screen'} ({bytes(media.main.size)})
             </Button>
             {media.cam && (
-              <Button size="sm" variant="ghost" icon="download" onClick={() => downloadBlob(media.cam!, `${base}-camera.${extFor(media.cam!.type)}`)}>
+              <Button size="sm" variant="ghost" icon="download" onClick={() => void give(media.cam!, `${base}-camera.${extFor(media.cam!.type)}`)}>
                 Camera ({bytes(media.cam.size)})
               </Button>
             )}

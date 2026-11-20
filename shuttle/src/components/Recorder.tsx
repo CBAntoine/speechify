@@ -13,6 +13,7 @@ import { Button, ConfirmButton, Field, Icon, LevelMeter, Notice, Segmented, Spin
 import { navigate, useSettings } from './App.tsx';
 import { Brand } from './Brand.tsx';
 import { PipControls } from './PipControls.tsx';
+import { isNativeApp } from '../lib/native.ts';
 import { Teleprompter } from './Teleprompter.tsx';
 
 type Phase = 'setup' | 'countdown' | 'recording' | 'saving';
@@ -38,7 +39,8 @@ function deviceLabel(d: MediaDeviceInfo, i: number, kind: string) {
   return d.label || `${kind} ${i + 1}`;
 }
 
-export function Recorder() {
+/** `cameraOnly`: the Android app's selfie recorder (phone browsers cannot capture the screen). */
+export function Recorder({ cameraOnly = false }: { cameraOnly?: boolean }) {
   const { settings, update, openSettings } = useSettings();
   const [phase, setPhase] = useState<Phase>('setup');
   const [cam, setCam] = useState<MediaStream | null>(null);
@@ -74,7 +76,7 @@ export function Recorder() {
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
 
-  const mode: Mode = settings.mode;
+  const mode: Mode = cameraOnly ? 'cam' : settings.mode;
   const needsCam = mode !== 'screen' && settings.cameraId !== 'none';
   const needsScreen = mode !== 'cam';
   const camHeight = mode === 'cam' ? Math.min(1080, QUALITY_HEIGHT[settings.quality]) : 720;
@@ -485,7 +487,7 @@ export function Recorder() {
     <div className="page page-recorder">
       <header className="topbar">
         <div className="topbar-left">
-          <Button variant="ghost" icon="back" aria-label="Back to recordings" title="Back to recordings" disabled={recording || phase === 'saving'} onClick={() => navigate('#/')} />
+          <Button variant="ghost" icon="back" aria-label="Back" title="Back" disabled={recording || phase === 'saving'} onClick={() => navigate(cameraOnly && isNativeApp() ? '#/record' : '#/')} />
           <Brand />
         </div>
         <div className="topbar-actions">
@@ -629,6 +631,7 @@ export function Recorder() {
         </section>
 
         <aside className={`studio-rig ${busy ? 'is-busy' : ''}`} aria-label="Recording setup">
+{!cameraOnly && (
           <Field label="Record" htmlFor="mode">
             <Segmented<Mode>
               id="mode"
@@ -642,6 +645,7 @@ export function Recorder() {
               ]}
             />
           </Field>
+          )}
 
           {needsScreen && screen && (
             <div className="source-row">
@@ -745,7 +749,9 @@ export function Recorder() {
             hint={
               capSupported
                 ? 'Powers captions, chapters and editing by text. Uses the browser’s speech service; Chrome sends the audio to Google to transcribe it.'
-                : 'Not available in this browser. Chrome, Edge and Safari support it.'
+                : isNativeApp()
+                  ? 'Not available in the Android app yet. Record in Chrome on a computer for live transcripts.'
+                  : 'Not available in this browser. Chrome, Edge and Safari support it.'
             }
           />
           {settings.captions && capSupported && (

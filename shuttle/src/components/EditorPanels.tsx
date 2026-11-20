@@ -241,6 +241,8 @@ export function LayoutPanel({ rec, onChange, onBegin }: { rec: Recording; onChan
       <div className="layout-panel">
         {rec.mode === 'cam' ? (
           <Toggle id="mirror-main" checked={cam.mirror} onChange={(v) => onChange({ ...cam, mirror: v })} label="Mirror the video" hint="Flip left and right, like a selfie view." />
+        ) : rec.hasCamera ? (
+          <p className="panel-hint">The camera bubble was recorded as part of the screen, so it moves with the picture.</p>
         ) : (
           <p className="panel-hint">This recording has no camera track.</p>
         )}

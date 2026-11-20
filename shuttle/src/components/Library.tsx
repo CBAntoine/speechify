@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Recording, RecoverySession } from '../lib/types.ts';
-import { deleteRecording, deleteSession, listRecordings, listSessions, storageEstimate } from '../lib/db.ts';
+import { deleteRecording, deleteSession, getMedia, listRecordings, listSessions, patchRecording, storageEstimate } from '../lib/db.ts';
 import { bytes, relativeDate, timer } from '../lib/format.ts';
 import { keptSegments, outputDuration } from '../lib/timeline.ts';
 import { Button, ConfirmButton, Icon, Notice, Spinner } from './ui.tsx';
 import { navigate, useSettings } from './App.tsx';
 import { Brand } from './Brand.tsx';
+import { isNativeApp } from '../lib/native.ts';
 
 function Thumb({ rec }: { rec: Recording }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -43,6 +44,31 @@ export function Library() {
     void refresh();
   }, []);
 
+  // Fill in thumbnails that never got made (for example when the app closed
+  // right after a take was saved).
+  const missingThumbs = (recs ?? []).filter((r) => !r.thumbnail).map((r) => r.id).join(',');
+  useEffect(() => {
+    if (!missingThumbs) return;
+    let cancelled = false;
+    (async () => {
+      const { makeThumbnail } = await import('../lib/media.ts');
+      for (const id of missingThumbs.split(',')) {
+        if (cancelled) return;
+        const r = (await listRecordings()).find((x) => x.id === id);
+        const main = r && (await getMedia(id, 'main'));
+        if (!r || !main) continue;
+        const cam = r.mode === 'screen-cam' ? await getMedia(id, 'cam') : undefined;
+        const thumb = await makeThumbnail(r, main, cam).catch(() => undefined);
+        if (!thumb || cancelled) continue;
+        await patchRecording(id, { thumbnail: thumb });
+        setRecs((prev) => prev?.map((x) => (x.id === id ? { ...x, thumbnail: thumb } : x)) ?? prev);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [missingThumbs]);
+
   const shown = useMemo(() => {
     if (!recs) return [];
     const q = query.trim().toLowerCase();
@@ -70,7 +96,7 @@ export function Library() {
         <Brand />
         <div className="topbar-actions">
           <Button variant="ghost" icon="settings" aria-label="Settings" title="Settings" onClick={openSettings} />
-          <Button variant="record" icon="record" onClick={() => navigate('#/record')}>
+          <Button variant="record" icon="record" aria-label="New recording" onClick={() => navigate('#/record')}>
             New recording
           </Button>
         </div>
@@ -178,7 +204,7 @@ export function Library() {
 
       <footer className="library-foot">
         <span>
-          <Icon name="check" size={14} /> Recordings stay in this browser. Nothing is uploaded.
+          <Icon name="check" size={14} /> Recordings stay {isNativeApp() ? 'on this phone' : 'in this browser'}. Nothing is uploaded.
         </span>
         {usage && usage.quota > 0 && (
           <span className="mono">
@@ -198,10 +224,17 @@ function EmptyLibrary() {
       </div>
       <div className="empty-copy">
         <h1>Record it once. Send it in a minute.</h1>
-        <p>
-          Shuttle records your screen and camera, writes a transcript while you talk, and lets you cut mistakes by
-          striking out sentences. Pauses come out in one click. Everything happens in this browser.
-        </p>
+        {isNativeApp() ? (
+          <p>
+            Shuttle records your phone’s screen, in any app, with your voice and an optional camera bubble. Trim it, cut the
+            pauses, zoom in on what matters, and send it as an MP4 or a one-file player page. Everything stays on this phone.
+          </p>
+        ) : (
+          <p>
+            Shuttle records your screen and camera, writes a transcript while you talk, and lets you cut mistakes by
+            striking out sentences. Pauses come out in one click. Everything happens in this browser.
+          </p>
+        )}
         <Button variant="record" size="lg" icon="record" onClick={() => navigate('#/record')}>
           Record your first video
         </Button>

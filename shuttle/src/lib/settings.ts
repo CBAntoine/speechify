@@ -27,6 +27,11 @@ export interface Settings {
   exportHeight: number | null;
   theme: 'system' | 'dark' | 'light';
   floatingControls: boolean;
+  /** Android app: phone screen recording options. */
+  phoneMic: boolean;
+  phoneCamera: boolean;
+  phoneQuality: '720' | '1080';
+  phoneHideOnStart: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -51,6 +56,10 @@ export const DEFAULTS: Settings = {
   exportHeight: null,
   theme: 'system',
   floatingControls: true,
+  phoneMic: true,
+  phoneCamera: false,
+  phoneQuality: '720',
+  phoneHideOnStart: true,
 };
 
 const KEY = 'shuttle.settings.v1';

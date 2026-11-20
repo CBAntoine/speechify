@@ -29,6 +29,45 @@ Use a recent Chrome or Edge for every feature. Screen capture only works on `loc
 
 Build a static site with `npm run build` and serve `dist/` from any HTTPS host. On Vercel, create a project with **Root Directory** set to `shuttle`; the framework preset is Vite.
 
+## Android app
+
+Shuttle also runs as an Android app (Android 10 or newer) that records the phone's own screen, which phone browsers cannot do. It is the same editor and exporter, wrapped with [Capacitor](https://capacitorjs.com), plus a small native recorder.
+
+**Install.** Copy `Shuttle.apk` to the phone (or download the `shuttle-android-apk` artifact from the latest "Shuttle Android app" GitHub Actions run and unzip it) and open it. Android asks you to allow installing apps from that source once. Updates install over the old version and keep your recordings.
+
+**Record.** Tap the record button, choose the microphone, an optional camera bubble and the quality, then **Start recording**. Android asks each time whether Shuttle may capture the screen; Shuttle then steps aside to your home screen and the moment before that is trimmed off automatically. Stop from the notification (it also has Pause), or come back to Shuttle and tap **Finish**. The take opens in the editor; **Export → Save to phone** puts the MP4 in your gallery under Movies/Shuttle, and **Share…** sends it to any app.
+
+**Permissions it asks for**
+
+| Permission | Why |
+| --- | --- |
+| Screen capture (asked every time) | Recording the screen |
+| Microphone | Your voice |
+| Notifications | The Pause/Stop controls while you record |
+| Camera and “Display over other apps” | Only if you turn on the camera bubble |
+
+**How it works.** `android/app/src/main/java/app/shuttle/recorder/` holds the native side: `ScreenRecordService` is a foreground service that records the screen and microphone to an MP4 with MediaProjection and MediaRecorder (H.264/AAC, 720p or 1080p on the short side, 30 fps). `CameraBubble` floats a round front-camera preview over other apps, so it is captured with the screen. `ShuttleNativePlugin` is the bridge to the web app: permissions, the capture consent, pause/resume/chapter/stop, the list of finished takes, and saving or sharing exported files. Finished takes wait in the app's own storage until the web app copies them into its library (`importFinishedPhoneRecordings` in `src/lib/takes.ts`), even if you stopped from the notification while Shuttle was in the background.
+
+**Differences from the desktop version**
+
+- No live transcript yet: Android's WebView has no speech recognition. Trim, cuts, pause removal, zooms, chapters and export all work.
+- The camera bubble is part of the screen image, so it cannot be moved after recording.
+- The microphone is recorded, not other apps' sound.
+- **Record yourself with the camera instead** records a selfie video inside the app.
+
+**Build it yourself** (needs JDK 21 and the Android SDK with platform 36):
+
+```bash
+cd shuttle
+npm install
+npm run apk     # builds the web app, syncs it into android/, runs gradle
+# → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Builds are signed with `android/app/shuttle-debug.keystore` (password `android`), which is kept in the repo on purpose so every build can update the installed app. It is only for sideloading; use your own key for a Play Store release.
+
+`npm run build && node tests/e2e/phone.mjs` runs the app's whole phone flow at phone size in headless Chromium, with the native recorder replaced by a stand-in (`src/lib/nativeFake.ts`) that records a real video. The native Java code itself is compiled and linted in the build, not exercised by tests.
+
 ## How it works
 
 - **Capture** (`src/lib/recorder.ts`). `getDisplayMedia` for the screen, `getUserMedia` for camera and microphone. Microphone and shared-tab/system audio are mixed with Web Audio into the screen file. The camera goes into a second `MediaRecorder` started in the same task, so the two files line up and the bubble can be composited later. Pause and resume act on both recorders.
@@ -69,7 +108,7 @@ Build a static site with `npm run build` and serve `dist/` from any HTTPS host. 
 
 ```bash
 npm test           # unit tests: timeline math, silence detection, captions, layout
-npm run build && npm run e2e
+npm run build && npm run e2e    # desktop flow, then the Android app flow at phone size
 ```
 
 `npm run e2e` drives headless Chromium with a fake camera, a fake shared screen and a generated speech-like microphone signal. It records a take with a pause and a chapter, edits it (strike a phrase, remove pauses, add a zoom, move the camera), writes AI notes against a stubbed Anthropic API, exports an MP4 and checks it with `ffprobe`/`ffmpeg`, opens the player page, discards a take, then kills a tab mid-recording and recovers it. Screenshots land in `tests/e2e/out/`. It needs Playwright's Chromium and ffmpeg on the PATH.

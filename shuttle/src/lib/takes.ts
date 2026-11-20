@@ -1,10 +1,13 @@
 // Turns a finished (or crashed) take into a saved Recording.
 
 import type { CameraLayout, MediaKind, Mode, Recording, RecoverySession, Segment, Marker } from './types.ts';
-import { deleteSession, patchRecording, requestPersistence, saveNewRecording, sessionChunks } from './db.ts';
+import { deleteSession, getRecording, patchRecording, requestPersistence, saveNewRecording, sessionChunks } from './db.ts';
 import { makeThumbnail, probe } from './media.ts';
 import { defaultTitle } from './format.ts';
 import type { EngineResult } from './recorder.ts';
+import { DEFAULT_CAMERA } from './layout.ts';
+import { uid } from './timeline.ts';
+import { Native, nativeRecordingBlob, type NativeRecording } from './native.ts';
 
 interface TakeMeta {
   sessionId: string;
@@ -21,6 +24,10 @@ interface TakeMeta {
   markers: Marker[];
   startedAt: number;
   recovered?: boolean;
+  /** Seconds to trim off the start (the phone app's own screen). */
+  trimStart?: number;
+  /** The camera is part of the picture (the phone's floating bubble). */
+  cameraInPicture?: boolean;
 }
 
 async function build(meta: TakeMeta, main: Blob, cam?: Blob): Promise<Recording> {
@@ -49,13 +56,13 @@ async function build(meta: TakeMeta, main: Blob, cam?: Blob): Promise<Recording>
     mime: main.type || meta.mime,
     size: main.size + (cam?.size ?? 0),
     hasAudio,
-    hasCamera: meta.mode === 'cam' || !!cam,
+    hasCamera: meta.mode === 'cam' || !!cam || !!meta.cameraInPicture,
     lang: meta.lang,
     transcript: meta.transcript.filter((s) => s.start < duration + 1),
     transcriptRefined: false,
     markers: meta.markers.filter((m) => m.t < duration),
     edits: {
-      trimStart: 0,
+      trimStart: meta.trimStart && meta.trimStart < duration - 1 ? meta.trimStart : 0,
       trimEnd: null,
       cuts: [],
       zooms: [],
@@ -131,4 +138,59 @@ export async function recoverTake(sess: RecoverySession): Promise<Recording | nu
     new Blob(main, { type: mime }),
     cam.length ? new Blob(cam, { type: cam[0].type || mime }) : undefined,
   );
+}
+
+// ---------------------------------------------------------------- phone app
+
+/** Saves a finished phone screen recording into the library. */
+async function importNativeTake(r: NativeRecording, lang: string): Promise<Recording> {
+  const blob = await nativeRecordingBlob(r);
+  return build(
+    {
+      sessionId: r.id,
+      mode: 'screen',
+      fps: 30,
+      lang,
+      camera: { ...DEFAULT_CAMERA, visible: false },
+      mime: 'video/mp4',
+      width: r.width,
+      height: r.height,
+      hasAudio: r.hasAudio,
+      clockDuration: r.durationMs / 1000,
+      transcript: [],
+      markers: (r.markersMs ?? []).map((ms, i) => ({ id: uid('m'), t: ms / 1000, title: `Chapter ${i + 1}` })),
+      startedAt: r.startedAt,
+      trimStart: (r.trimStartMs ?? 0) / 1000,
+      cameraInPicture: r.camera,
+    },
+    blob,
+  );
+}
+
+let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Moves every finished phone recording into the library, oldest first, then
+ * deletes the phone's copy. Calls run one after another, so a take that
+ * finishes while an import is underway is picked up by the next call; a take
+ * that is already in the library is only cleaned up. Resolves with the takes
+ * this call imported.
+ */
+export function importFinishedPhoneRecordings(lang: string): Promise<Recording[]> {
+  const run = queue.then(async () => {
+    const out: Recording[] = [];
+    const { recordings } = await Native.listFinished();
+    for (const r of [...recordings].sort((a, b) => a.startedAt - b.startedAt)) {
+      try {
+        const existing = await getRecording(r.id);
+        if (!existing) out.push(await importNativeTake(r, lang));
+        await Native.deleteFinished({ id: r.id });
+      } catch (err) {
+        console.warn('Shuttle: could not import phone recording', r.id, err);
+      }
+    }
+    return out;
+  });
+  queue = run.catch(() => undefined);
+  return run;
 }

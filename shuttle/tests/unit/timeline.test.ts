@@ -104,6 +104,8 @@ test('bubble geometry stays inside the frame', () => {
   assert.deepEqual(c, { sx: 280, sy: 0, sw: 720, sh: 720 });
   assert.deepEqual(outputSize(2559, 1599, 1080), { width: 1728, height: 1080 });
   assert.deepEqual(outputSize(1280, 720, 1080), { width: 1280, height: 720 });
+  // Portrait phone recordings scale by their short side too.
+  assert.deepEqual(outputSize(1080, 2400, 720), { width: 720, height: 1600 });
 });
 
 test('captions split, shift onto the edited timeline and serialize', () => {
