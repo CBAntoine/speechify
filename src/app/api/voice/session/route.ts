@@ -24,15 +24,38 @@ interface Quota {
   t: number; // text sessions used
 }
 
+const quotaCookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: secureCookie, path: "/", maxAge: 2 * 86_400 };
+
 /**
  * Issues a short-lived ElevenLabs credential for one conversation.
  * - Voice → WebRTC conversation token. Text → WebSocket signed URL.
  * - Enforces daily allowances per tier, so the API key never leaves the server
  *   and free traffic can't run up the bill.
+ * - A session counts once the browser reports it connected ({ event: "connected" }),
+ *   so a declined mic prompt or a failed connection doesn't use up an allowance.
+ *   The per-network rate limit below is the hard cap either way.
  */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { mode?: string };
+  const body = (await req.json().catch(() => ({}))) as { mode?: string; event?: string };
   const mode: "voice" | "text" = body.mode === "text" ? "text" : "voice";
+
+  const jar = await cookies();
+  const crew = await readCrew(jar.get(CREW_COOKIE)?.value);
+  const tier = crew.claims ? "crew" : "free";
+  const limit = LIMITS[tier][mode];
+
+  const today = new Date().toISOString().slice(0, 10);
+  const q = verify<Quota>(jar.get(QUOTA_COOKIE)?.value);
+  const used: Quota = q && q.d === today ? q : { d: today, v: 0, t: 0 };
+  const count = mode === "voice" ? used.v : used.t;
+
+  if (body.event === "connected") {
+    const next: Quota = { ...used, v: used.v + (mode === "voice" ? 1 : 0), t: used.t + (mode === "text" ? 1 : 0) };
+    const res = NextResponse.json({ ok: true, tier, limit, remaining: Math.max(0, limit - count - 1) });
+    res.cookies.set(QUOTA_COOKIE, sign(next), quotaCookieOptions);
+    if (crew.refreshed) res.cookies.set(CREW_COOKIE, crew.refreshed, crewCookieOptions);
+    return res;
+  }
 
   if (!rateLimit(`voice:${clientIp(req)}`, 20, 60 * 60_000)) {
     return NextResponse.json(
@@ -48,16 +71,6 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-
-  const jar = await cookies();
-  const crew = await readCrew(jar.get(CREW_COOKIE)?.value);
-  const tier = crew.claims ? "crew" : "free";
-  const limit = LIMITS[tier][mode];
-
-  const today = new Date().toISOString().slice(0, 10);
-  const q = verify<Quota>(jar.get(QUOTA_COOKIE)?.value);
-  const used: Quota = q && q.d === today ? q : { d: today, v: 0, t: 0 };
-  const count = mode === "voice" ? used.v : used.t;
 
   if (count >= limit) {
     return NextResponse.json(
@@ -103,9 +116,8 @@ export async function POST(req: Request) {
     auth = { agentId };
   }
 
-  const next: Quota = { ...used, v: used.v + (mode === "voice" ? 1 : 0), t: used.t + (mode === "text" ? 1 : 0) };
-  const res = NextResponse.json({ ok: true, tier, limit, remaining: Math.max(0, limit - count - 1), auth });
-  res.cookies.set(QUOTA_COOKIE, sign(next), { httpOnly: true, sameSite: "lax", secure: secureCookie, path: "/", maxAge: 2 * 86_400 });
+  // Not counted yet: the browser confirms with { event: "connected" } once the conversation starts.
+  const res = NextResponse.json({ ok: true, tier, limit, remaining: Math.max(0, limit - count), auth });
   if (crew.refreshed) res.cookies.set(CREW_COOKIE, crew.refreshed, crewCookieOptions);
   return res;
 }

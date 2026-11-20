@@ -63,7 +63,7 @@ function VoiceDock() {
   const selectedRegion = useMapStore((s) => s.selectedRegion);
   const { startSession, endSession, sendUserMessage, sendContextualUpdate, getInputVolume, getOutputVolume } =
     useConversationControls();
-  const { status, message: statusMessage } = useConversationStatus();
+  const { status } = useConversationStatus();
   const { isSpeaking } = useConversationMode();
   const { isMuted, setMuted } = useConversationInput();
   const { lines, push, clear } = useLines();
@@ -169,6 +169,15 @@ function VoiceDock() {
         textOnly: nextMode === "text",
         onConnect: () => {
           push("system", nextMode === "voice" ? "Connected. Start talking." : "Connected.");
+          // A session only counts against today's allowance once it has actually connected.
+          fetch("/api/voice/session", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: nextMode, event: "connected" }),
+          })
+            .then((r) => r.json() as Promise<{ ok: boolean; remaining: number; limit: number; tier: "free" | "crew" }>)
+            .then((q) => q.ok && setQuota({ remaining: q.remaining, limit: q.limit, tier: q.tier }))
+            .catch(() => {});
           const loc = locationById(mapStore.get().selectedId);
           sendContextualUpdate(
             `Context: today is ${longDate(new Date().toISOString())}. The user is on the ${data.tier === "crew" ? "Crew Pass (paid)" : "free"} tier and is using ${SITE.name}${loc ? `, currently viewing "${loc.name}" (id ${loc.id})` : ""}.`,
@@ -193,6 +202,7 @@ function VoiceDock() {
           push("system", "Session ended.");
         },
         onError: (msg: string) => {
+          console.warn("[voice]", msg);
           setNotice({ kind: "error", text: friendlyError(msg) });
         },
       });
@@ -362,7 +372,6 @@ function VoiceDock() {
             : "Free daily sessions · Crew Pass gets more"}
           {" · "}
           {SITE.guideName} can make mistakes, so check each pin&apos;s sources.
-          {statusMessage && status === "error" ? ` (${statusMessage})` : ""}
         </p>
       </aside>
     </>
