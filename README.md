@@ -1,8 +1,8 @@
-# Neon Atlas: the talking map of Leonida
+# GTA 6 Secrets Map: the talking map of Leonida
 
 An unofficial GTA VI companion site. Players talk to **Sol**, a voice guide built on ElevenLabs Agents. Sol flies the map to any secret, pin or street and opens a popup that explains it. It can also draw a route with turn-by-turn directions, give tips with confidence labels, and read out the day's news. The news and community pins update every day on their own.
 
-> Neon Atlas is a fan site. It is not affiliated with Rockstar Games or Take-Two Interactive. The map is **real-world Florida** (the place Leonida parodies) standing in for the game world. It never copies Rockstar's in-game map.
+> GTA 6 Secrets Map is a fan site. It is not affiliated with Rockstar Games or Take-Two Interactive. The map is **real-world Florida** (the place Leonida parodies) standing in for the game world. It never copies Rockstar's in-game map.
 
 ## What's in it
 

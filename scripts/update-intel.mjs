@@ -17,7 +17,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Overridable for tests.
 const NEWS_FILE = process.env.INTEL_NEWS_FILE || resolve(root, "data/news.json");
 const SOURCES_FILE = process.env.INTEL_SOURCES_FILE || resolve(root, "data/sources.json");
-const UA = "NeonAtlasBot/1.0 (+unofficial GTA VI fan guide; daily headline aggregator)";
+const UA = "GTA6SecretsMapBot/1.0 (+unofficial GTA 6 fan site; daily headline aggregator)";
 
 async function fetchFeed(src) {
   const ctrl = new AbortController();
@@ -67,7 +67,7 @@ async function aiBrief(added, date) {
       fallbacks: "default",
       output_config: { effort: "low", format: { type: "json_schema", schema } },
       system:
-        "You write the daily news brief for Neon Atlas, an unofficial GTA VI fan guide. Summarize only what the listed headlines and excerpts say, in your own words. Never invent facts, numbers or quotes. Flag rumors as rumors. Plain, energetic English.",
+        "You write the daily news brief for GTA 6 Secrets Map, an unofficial GTA 6 fan site. Summarize only what the listed headlines and excerpts say, in your own words. Never invent facts, numbers or quotes. Flag rumors as rumors. Plain, energetic English.",
       messages: [{ role: "user", content: `Today's new GTA VI stories (${date}):\n\n${listing}` }],
     });
     if (response.stop_reason === "refusal") throw new Error("model declined");

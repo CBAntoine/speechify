@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "neon-atlas-submissions",
+        "User-Agent": "gta6-secrets-map-submissions",
       },
       body: JSON.stringify({ title: `[Find] ${title}`, body, ...(labels ? { labels } : {}) }),
     });

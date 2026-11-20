@@ -3,14 +3,14 @@ const vercelHost = process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL || proc
 
 /** Brand + public configuration. Everything a visitor's browser may see. */
 export const SITE = {
-  name: "Neon Atlas",
+  name: "GTA 6 Secrets Map",
   tagline: "The talking map of Leonida",
   description:
-    "Unofficial GTA VI companion: an interactive map of secrets and Easter eggs, verified tips and tricks, a voice guide you can talk to, and news updated daily.",
+    "Interactive GTA 6 map with every secret and Easter egg, verified tips and tricks, daily GTA 6 news, and Sol, a voice guide you can talk to. Unofficial fan site.",
   guideName: "Sol",
   url: (process.env.NEXT_PUBLIC_SITE_URL || (vercelHost ? `https://${vercelHost}` : "http://localhost:3000")).replace(/\/$/, ""),
   disclaimer:
-    "Neon Atlas is an unofficial fan site. It is not affiliated with, endorsed or sponsored by Rockstar Games or Take-Two Interactive. Grand Theft Auto and related names are trademarks of their respective owners. The map shows real-world Florida (OpenStreetMap, Natural Earth) as a stand-in for Leonida; the in-game layout differs.",
+    "GTA 6 Secrets Map is an unofficial fan site. It is not affiliated with, endorsed or sponsored by Rockstar Games or Take-Two Interactive. Grand Theft Auto and related names are trademarks of their respective owners. The map shows real-world Florida (OpenStreetMap, Natural Earth) as a stand-in for Leonida; the in-game layout differs.",
 } as const;
 
 export const PUBLIC_CONFIG = {

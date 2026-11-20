@@ -26,7 +26,7 @@ const gh = (path, init = {}) =>
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "neon-atlas-curator",
+      "User-Agent": "gta6-secrets-map-curator",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
     },
   });

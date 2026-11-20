@@ -4,8 +4,8 @@ import NewsTicker from "@/components/NewsTicker";
 import GuideAutoOpen from "@/components/GuideAutoOpen";
 
 export const metadata: Metadata = {
-  title: "Full-screen interactive map",
-  description: "The full-screen Neon Atlas map of Leonida with every secret, Easter egg and tip, plus the Sol voice guide.",
+  title: "GTA 6 Interactive Map: Every Secret & Easter Egg",
+  description: "Full-screen interactive GTA 6 map of Leonida with every secret, Easter egg and tip, plus Sol, the voice guide that flies the map for you.",
   alternates: { canonical: "/map" },
 };
 

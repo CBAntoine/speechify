@@ -116,7 +116,7 @@ export default function Home() {
                 More {SITE.guideName}. <span className="grad-text">No ads.</span>
               </>
             }
-            lede="Neon Atlas is free and stays free. Crew Pass is for players who want more voice time, early pins and a cleaner site, and it keeps the lights on."
+            lede={`${SITE.name} is free and stays free. Crew Pass is for players who want more voice time, early pins and a cleaner site, and it keeps the lights on.`}
           />
           <div className="newsletter-block">
             <h3>Prefer email?</h3>

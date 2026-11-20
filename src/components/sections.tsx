@@ -99,7 +99,7 @@ export function TipCard({ tip }: { tip: Tip }) {
             {hostOf(tip.sources[0].url)}
           </a>
         ) : (
-          <span className="tip-card__src">Neon Atlas inference</span>
+          <span className="tip-card__src">Our inference</span>
         )}
       </footer>
     </article>

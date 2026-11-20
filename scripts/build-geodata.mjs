@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Builds the Neon Atlas base map from REAL, openly licensed geography:
+ * Builds the GTA 6 Secrets Map base map from REAL, openly licensed geography:
  *
  *   • Natural Earth 1:10m vectors (public domain): Florida's coastline, lakes,
  *     rivers, highways, urban footprints, protected lands, reefs and cities.

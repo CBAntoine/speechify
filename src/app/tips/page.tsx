@@ -4,7 +4,7 @@ import AdSlot from "@/components/AdSlot";
 import { STATS } from "@/lib/data";
 
 export const metadata: Metadata = {
-  title: "GTA 6 tips and tricks for beginners",
+  title: "GTA 6 Tips and Tricks for Beginners",
   description:
     "Verified GTA VI tips from outlets that have played it: money, police heat, Focus Mode, exploration and vehicles, plus clearly labelled theories.",
   alternates: { canonical: "/tips" },

@@ -3,7 +3,7 @@ import type { AddLayerObject, Map as MLMap } from "maplibre-gl";
 import { CATEGORIES, GEO, LOCATIONS, circleRing, isPlaced } from "@/lib/data";
 
 /**
- * Neon Atlas map style. Every source is self-hosted (public/geo), built from
+ * GTA 6 Secrets Map style. Every source is self-hosted (public/geo), built from
  * Natural Earth + AWS Terrain Tiles by scripts/build-geodata.mjs, so the base
  * map has no third-party runtime dependency. Street-level detail is optional
  * and layered on separately (see addStreetLayers).
@@ -27,7 +27,7 @@ export function buildStyle(): StyleSpecification {
   const b = GEO.imageBounds;
   return {
     version: 8,
-    name: "Neon Atlas Night",
+    name: "GTA 6 Secrets Map Night",
     // Label fonts are self-hosted and rasterised in the browser (no glyph server).
     ...(STREET_TILES_URL ? { "font-faces": fontFaces() } : {}),
     // Horizon glow when the camera is tilted (3D view).

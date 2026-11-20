@@ -32,7 +32,7 @@ export function SiteHeader() {
           <Logo />
           <span className="brand__text">
             <span className="brand__name">{SITE.name}</span>
-            <span className="brand__sub">Unofficial GTA VI guide</span>
+            <span className="brand__sub">Unofficial fan guide</span>
           </span>
         </Link>
         <nav className="site-nav" aria-label="Main">

@@ -83,7 +83,7 @@ function ListView({ headingLevel }: { headingLevel: 1 | 2 }) {
           <span className="live-dot" aria-hidden="true" /> Live map · updated {relativeDay(NEWS.updatedAt).toLowerCase()}
         </p>
         <H className="map-panel__title">
-          The talking map <span className="grad-text">of Leonida</span>
+          The GTA 6 map <span className="grad-text">of secrets</span>
         </H>
         <p className="map-panel__sub">
           {STATS.placed} on the map · {STATS.unplaced} awaiting coordinates · {STATS.tips} tips. Ask {SITE.guideName} out loud,

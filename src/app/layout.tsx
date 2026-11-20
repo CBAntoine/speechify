@@ -7,16 +7,21 @@ import "./globals.css";
 import { SiteFooter, SiteHeader } from "@/components/chrome";
 import { PUBLIC_CONFIG, SITE } from "@/lib/site";
 
+// Leads with the phrases people search for; the brand itself is the head keyword.
+const HOME_TITLE = `${SITE.name}: Interactive Map, Easter Eggs, Tips & News`;
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: {
-    default: `${SITE.name}: GTA 6 Interactive Map, Secrets, Tips & Daily News (Unofficial)`,
-    template: `%s · ${SITE.name}`,
+    default: HOME_TITLE,
+    template: `%s | ${SITE.name}`,
   },
   description: SITE.description,
   applicationName: SITE.name,
   keywords: [
     "GTA 6 map",
+    "GTA 6 secrets map",
+    "GTA 6 interactive map",
     "GTA VI interactive map",
     "GTA 6 secrets",
     "GTA 6 easter eggs",
@@ -28,10 +33,10 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE.name,
-    title: `${SITE.name}: the talking map of Leonida`,
+    title: HOME_TITLE,
     description: SITE.description,
   },
-  twitter: { card: "summary_large_image", title: `${SITE.name}: the talking map of Leonida`, description: SITE.description },
+  twitter: { card: "summary_large_image", title: HOME_TITLE, description: SITE.description },
   alternates: { canonical: "/" },
 };
 

@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const r = regionById(id);
   if (!r) return {};
   return {
-    title: `${r.name} map, secrets & Easter eggs (GTA 6)`,
+    title: `GTA 6 ${r.name} Map: Secrets & Easter Eggs`,
     description: `${r.tagline} Every confirmed, reported and theorised secret in ${r.name}, mapped.`,
     alternates: { canonical: `/regions/${r.id}` },
   };

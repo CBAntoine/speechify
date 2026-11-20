@@ -33,12 +33,12 @@ export default function OgImage() {
             }}
           />
           <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: 1 }}>{SITE.name}</div>
-          <div style={{ marginLeft: 12, fontSize: 22, color: "#8a8fae" }}>Unofficial GTA VI guide</div>
+          <div style={{ marginLeft: 12, fontSize: 22, color: "#8a8fae" }}>Unofficial fan guide</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ fontSize: 84, fontWeight: 800, lineHeight: 1.02, display: "flex", flexWrap: "wrap", gap: 22 }}>
-            <span>The talking map</span>
-            <span style={{ color: "#ff8aa8" }}>of Leonida</span>
+            <span>The GTA 6 map</span>
+            <span style={{ color: "#ff8aa8" }}>of secrets</span>
           </div>
           <div style={{ fontSize: 30, color: "#c0c4dc", display: "flex" }}>
             {`Secrets · Easter eggs · Tips · Daily news · Ask ${SITE.guideName} out loud`}

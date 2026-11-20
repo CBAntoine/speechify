@@ -6,8 +6,8 @@ import { NEWS } from "@/lib/data";
 import { longDate } from "@/lib/format";
 
 export const metadata: Metadata = {
-  title: "GTA 6 news today: daily intel",
-  description: "Every day's GTA VI news in one place, with a daily brief written in plain English and links to every source.",
+  title: "GTA 6 News Today: Daily Updates",
+  description: "Every day's GTA 6 news in one place: a plain-English daily brief with links to every source.",
   alternates: { canonical: "/news" },
 };
 

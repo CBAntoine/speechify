@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const loc = locationById(id);
   if (!loc) return {};
   const region = regionById(loc.region);
-  const title = `${loc.name}: GTA 6 ${CATEGORIES[loc.category].label}${region ? ` in ${region.name}` : ""}`;
+  const title = `${loc.name}: GTA 6 ${CATEGORIES[loc.category].label} Location${region ? ` in ${region.name}` : ""} & How to Find It`;
   return {
     title,
     description: loc.summary,
