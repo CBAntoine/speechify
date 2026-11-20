@@ -75,6 +75,7 @@ export class Store {
       hue: this.data.hue,
       pairings: this.data.pairings,
       adbKey: this.data.adbKey || "",
+      appLabels: this.data.appLabels || {},
       youtubeApiKey: process.env.YOUTUBE_API_KEY || this.data.youtube.apiKey || "",
       credentials: this.data.credentials,
       homeAssistant: ha.url && ha.token ? ha : null,

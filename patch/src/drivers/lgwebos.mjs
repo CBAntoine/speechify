@@ -157,7 +157,7 @@ async function liveState(s, device) {
   return st;
 }
 
-const FULL = ["turn_on", "turn_off", "set_volume", "volume_up", "volume_down", "mute", "unmute", "set_channel", "channel_up", "channel_down", "launch_app", "switch_input", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "play", "pause", "stop", "rename", "set_room"];
+const FULL = ["turn_on", "turn_off", "set_volume", "volume_up", "volume_down", "mute", "unmute", "set_channel", "channel_up", "channel_down", "launch_app", "switch_input", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "play", "pause", "stop", "list_apps", "install_app", "rename", "set_room"];
 
 export default {
   id: "lgwebos",
@@ -304,6 +304,22 @@ export default {
           if (!hit) throw new DeviceError(`${want} isn't installed on ${device.name}. It has ${list.slice(0, 8).map((a) => a.name).join(", ")}.`, { code: "ENOTINSTALLED" });
           await s.request("ssap://system.launcher/launch", { id: hit.id });
           return done(`Opening ${hit.name} on ${device.name}.`, { state: { ...device.state, on: true, app: hit.name } });
+        }
+        case "list_apps": {
+          const list = await launchPoints(s);
+          device.ref.appNames = Object.fromEntries(list.map((a) => [a.id, a.name]));
+          return done(`${device.name} has ${list.length} apps: ${list.map((a) => a.name).join(", ")}.`, { apps: list.map((a) => ({ name: a.name, id: a.id })) });
+        }
+        case "install_app": {
+          const want = String(need(value, "app")).trim();
+          const list = await launchPoints(s);
+          const known = knownApp(want);
+          const have = list.find((a) => known?.lg?.includes(a.id) || normalizeText(a.name) === normalizeText(want));
+          if (have) return done(`${have.name} is already on ${device.name}. Want me to open it?`, { installed: true });
+          // LG's app store ("LG Content Store", or "Apps" on newer TVs), searching for the app.
+          const store = list.find((a) => /^com\.webos\.app\.(discovery|lgstore|store)/.test(a.id)) || { id: "com.webos.app.discovery" };
+          await s.request("ssap://system.launcher/launch", { id: store.id, params: { query: want } });
+          return done(`LG's app store is open on ${device.name}. Search for ${want} there and choose Install. I can type the name once its search box is open.`, { state: { ...device.state, on: true, app: "App store" } });
         }
         case "type_text": {
           const text = String(need(value, "text"));

@@ -21,6 +21,8 @@ import { YOUTUBE_API } from "./net/youtube.mjs";
 import { localNetworks } from "./net/interfaces.mjs";
 import { safeJson } from "./util.mjs";
 import { onPhone, setPhoneOpener } from "./platform.mjs";
+import { TvApps } from "./tvapps/index.mjs";
+import { Uploads } from "./uploads.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -57,7 +59,7 @@ async function readBody(req) {
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > 1_000_000) throw new HttpError(413, "Request too large");
+    if (size > 3_000_000) throw new HttpError(413, "Request too large");
     chunks.push(c);
   }
   if (!chunks.length) return {};
@@ -120,6 +122,12 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
   const controller = new Controller({ store, inventory, overrides });
   const scanner = new Scanner({ store, inventory, controller, overrides });
   controller.scanner = scanner;
+  // Files sent from the dashboard, and the TV apps the person makes.
+  const uploads = new Uploads(path.join(store.dir, "uploads"));
+  const tvapps = new TvApps({ store, controller, inventory, address: () => scanner.network?.address || null, overrides, log });
+  controller.uploads = uploads;
+  controller.tvapps = tvapps;
+  const previewToken = crypto.randomBytes(12).toString("base64url");
   const token = crypto.randomBytes(18).toString("base64url");
   const sessions = new Set();
   const state = { tuneup: null, speed: null, internet: null, wifi: null };
@@ -266,6 +274,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       devices: inventory.list(),
       tuneup: state.tuneup,
       speed: state.speed,
+      tvapps: tvapps.list(),
     })],
     ["POST", /^\/api\/scan$/, async (b) => {
       const summary = await scanner.scan({ deep: !!b.deep });
@@ -326,7 +335,21 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     ["GET", /^\/api\/settings$/, async () => redactedSettings()],
     ["POST", /^\/api\/settings$/, async (b) => saveSettings(b)],
     ["POST", /^\/api\/voice\/session$/, async (b) => voiceSession(store.elevenlabs, b.mode === "text" ? "text" : "voice")],
+    // The TV app maker.
+    ["GET", /^\/api\/tvapps$/, async () => ({ apps: tvapps.list(), kinds: tvapps.kinds() })],
+    ["POST", /^\/api\/tvapps$/, async (b) => tvChanged(await tvapps.create(b))],
+    ["POST", /^\/api\/tvapps\/([^/]+)$/, async (b, [id]) => tvChanged(await tvapps.update(id, b))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/photos$/, async (b, [id]) => tvChanged(await tvapps.addPhotos(id, Array.isArray(b.files) ? b.files : [], uploads))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/photos\/remove$/, async (b, [id]) => tvChanged(await tvapps.removePhoto(id, b.name))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/tv$/, async (b, [id]) => tvChanged(await tvapps.putOnTv(id, b.device))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/open$/, async (b, [id]) => tvChanged(await tvapps.open(id, b.device))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/remove$/, async (b, [id]) => tvChanged(await tvapps.remove(id, { fromTvs: b.fromTvs !== false }))],
   ];
+
+  function tvChanged(r) {
+    broadcast("tvapps", tvapps.list());
+    return r;
+  }
 
   // ── security ──
   const lanAddresses = () => (lan ? localNetworks().map((n) => n.address) : []);
@@ -363,7 +386,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     if (ext === ".html") {
       body = body
         .toString("utf8")
-        .replace("%%PATCH_BOOT%%", JSON.stringify({ token, demo, lan, version: VERSION, phone: onPhone() }).replace(/</g, "\\u003c"));
+        .replace("%%PATCH_BOOT%%", JSON.stringify({ token, demo, lan, version: VERSION, phone: onPhone(), tvPreview: previewToken }).replace(/</g, "\\u003c"));
     }
     send(res, 200, body, { "content-type": TYPES[ext] || "application/octet-stream", "cache-control": ext === ".html" ? "no-store" : "no-cache", ...(ext === ".html" ? { "content-security-policy": CSP } : {}) });
   }
@@ -397,6 +420,17 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       if (!sessions.has(cookie(req, "patch_session"))) return send(res, 401, loginPage(), { "content-type": "text/html; charset=utf-8" });
     }
 
+    // A TV app's preview in the dashboard (shown in a sandboxed frame, with its own token).
+    const preview = url.pathname.match(/^\/tvapp-preview\/([A-Za-z0-9_-]+)\/(a[0-9a-f]{10})\/(.*)$/);
+    if (preview) {
+      if (preview[1] !== previewToken || req.method !== "GET") return send(res, 404, "Not found");
+      res.removeHeader("x-frame-options");
+      return tvapps.serveFile(res, preview[2], decodeURIComponent(preview[3]), {
+        "content-security-policy": "default-src 'self' https: http: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'",
+        "x-frame-options": "SAMEORIGIN",
+      });
+    }
+
     if (!url.pathname.startsWith("/api/")) {
       if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method not allowed");
       return serveStatic(req, res, url.pathname);
@@ -406,6 +440,16 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     if (given !== token) return send(res, 403, { ok: false, message: "Missing or wrong app token. Reload the page." });
     const origin = req.headers.origin;
     if (origin && origin !== `http://${req.headers.host}`) return send(res, 403, { ok: false, message: "Cross-site request refused." });
+
+    if (url.pathname === "/api/uploads" && req.method === "POST") {
+      // Raw bytes (an app file, a photo), not JSON.
+      try {
+        const f = await uploads.save(req, { name: url.searchParams.get("name") || "file" });
+        return send(res, 200, { ok: true, upload: { id: f.id, name: f.name, size: f.size } });
+      } catch (err) {
+        return send(res, err.status || 500, { ok: false, message: err.message || "The file didn't arrive." });
+      }
+    }
 
     if (url.pathname === "/api/events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
@@ -473,8 +517,11 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     scanner,
     lanUrls: lan ? lanAddresses().map((a) => `http://${a}:${actualPort}/`) : [],
     accessCode: lan ? store.data.lan.accessCode : null,
+    tvapps,
+    uploads,
     async close() {
       timers.forEach(clearInterval);
+      await tvapps.close();
       for (const c of clients) c.end();
       await new Promise((r) => server.close(r));
     },

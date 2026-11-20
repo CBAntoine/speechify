@@ -3,7 +3,7 @@ import { request } from "../net/lanhttp.mjs";
 import { childText, findAll, findFirst, parseXml } from "../net/xml.mjs";
 import { fuzzyPick, normalizeMac, normalizeText } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { knownApp, parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const YOUTUBE = "837"; // YouTube's channel id on every Roku
 
@@ -95,7 +95,7 @@ export default {
         info: { firmware: info.software, model: info.modelNumber, network: info.network },
         actions: [
           ...(tv ? ["turn_on", "turn_off", "switch_input", "set_channel", "channel_up", "channel_down"] : []),
-          "launch_app", "press_button", "search", "type_text", "search_youtube", "play_youtube", "play", "pause", "volume_up", "volume_down", "mute", "rename", "set_room",
+          "launch_app", "press_button", "search", "type_text", "search_youtube", "play_youtube", "play", "pause", "volume_up", "volume_down", "mute", "list_apps", "install_app", "rename", "set_room",
         ],
       },
     ];
@@ -146,6 +146,25 @@ export default {
           if (!app) throw new DeviceError(`${value} isn't installed on ${device.name}. Installed apps include ${list.slice(0, 8).map((a) => a.name).join(", ")}.`);
           await post(ref, `/launch/${encodeURIComponent(app.id)}`);
           return done(`Opening ${app.name} on ${device.name}.`, { state: { ...device.state, on: true, app: app.name } });
+        }
+        case "list_apps": {
+          const list = await apps(ref.base);
+          return done(`${device.name} has ${list.length} channels: ${list.map((a) => a.name).join(", ")}.`, { apps: list.map((a) => ({ name: a.name, id: a.id })) });
+        }
+        case "install_app": {
+          // Roku calls apps "channels": open the channel's page in the Channel Store, or search for it.
+          const want = String(need(value, "channel")).trim();
+          const list = await apps(ref.base);
+          const known = knownApp(want);
+          const have = list.find((a) => (known?.roku && a.id === known.roku) || normalizeText(a.name) === normalizeText(want));
+          if (have) return done(`${have.name} is already on ${device.name}. Want me to open it?`, { installed: true });
+          if (known?.roku && /^\d+$/.test(known.roku)) {
+            await post(ref, `/install/${known.roku}`);
+            const label = known.names[0].replace(/\b\w/g, (c) => c.toUpperCase());
+            return done(`The ${label} page is open in the Roku Channel Store on ${device.name}. Press OK on the remote to add it, or tell me to.`, { state: { ...device.state, on: true, app: "Channel Store" } });
+          }
+          await post(ref, `/search/browse?keyword=${encodeURIComponent(want)}&type=channel`);
+          return done(`${device.name} is searching the Channel Store for “${want}”. Pick it with the remote, then choose Add channel.`, { state: { ...device.state, on: true } });
         }
         case "channel_up":
         case "channel_down":

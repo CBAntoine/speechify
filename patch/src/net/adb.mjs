@@ -260,11 +260,95 @@ export class AdbClient extends EventEmitter {
     return p;
   }
 
+  /**
+   * Copies a file onto the device (ADB's "sync" service: SEND path,mode → DATA… → DONE, answered by
+   * OKAY or FAIL). Used to hand the TV an app file before installing it.
+   */
+  push(data, remotePath, { mode = 0o644, timeout = 180_000 } = {}) {
+    const run = () =>
+      new Promise((resolve, reject) => {
+        if (!this.open) return reject(err("The connection to the device closed.", "ECONNRESET"));
+        const local = this.nextId++;
+        let remote = 0;
+        const stream = syncStream(data, remotePath, mode);
+        const size = Math.max(1024, this.maxData);
+        let offset = 0;
+        let reply = Buffer.alloc(0);
+        let finished = false;
+        const finish = (e, v) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          this.off("message", onMsg);
+          this.off("close", onClose);
+          if (remote) this.send(CMD.CLSE, local, remote);
+          e ? reject(e) : resolve(v);
+        };
+        const timer = setTimeout(() => finish(err("Sending the file to the device took too long.", "ETIMEDOUT")), timeout);
+        const onClose = () => finish(err("The connection to the device closed.", "ECONNRESET"));
+        const onMsg = (m) => {
+          if (m.arg1 !== local) return;
+          if (m.command === CMD.OKAY) {
+            // The device took the last piece (or opened the stream): send the next one.
+            remote = m.arg0;
+            if (offset < stream.length) {
+              const chunk = stream.subarray(offset, offset + size);
+              offset += chunk.length;
+              this.send(CMD.WRTE, local, remote, chunk);
+            }
+          } else if (m.command === CMD.WRTE) {
+            this.send(CMD.OKAY, local, remote);
+            reply = Buffer.concat([reply, m.data]);
+            if (reply.length < 8) return;
+            const id = reply.toString("latin1", 0, 4);
+            if (id === "OKAY") {
+              this.send(CMD.WRTE, local, remote, syncHead("QUIT", 0));
+              finish(null, true);
+            } else if (id === "FAIL") {
+              const n = reply.readUInt32LE(4);
+              if (reply.length >= 8 + n) finish(err(`The device refused the file: ${reply.toString("utf8", 8, 8 + n)}`, "EPUSH"));
+            } else finish(err("The device answered the file transfer with something unexpected.", "EPUSH"));
+          } else if (m.command === CMD.CLSE) {
+            remote = 0;
+            finish(err("The device stopped the file transfer.", "EPUSH"));
+          }
+        };
+        this.on("message", onMsg);
+        this.on("close", onClose);
+        this.send(CMD.OPEN, local, 0, "sync:\0");
+      });
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => {});
+    return p;
+  }
+
   close() {
     this.open = false;
     this.socket.end();
     setTimeout(() => this.socket.destroy(), 200).unref?.();
   }
+}
+
+/** One sync request header: four ASCII letters and a little-endian number. */
+export function syncHead(id, n) {
+  const b = Buffer.alloc(8);
+  b.write(id, 0, "latin1");
+  b.writeUInt32LE(n >>> 0, 4);
+  return b;
+}
+
+export const SYNC_DATA_MAX = 64 * 1024;
+
+/** The whole sync conversation for sending one file, before the device's answer. */
+export function syncStream(data, remotePath, mode = 0o644, mtime = Math.floor(Date.now() / 1000)) {
+  const spec = Buffer.from(`${remotePath},${0o100000 | mode}`, "utf8");
+  const parts = [syncHead("SEND", spec.length), spec];
+  for (let o = 0; o < data.length; o += SYNC_DATA_MAX) {
+    const c = data.subarray(o, o + SYNC_DATA_MAX);
+    parts.push(syncHead("DATA", c.length), c);
+  }
+  parts.push(syncHead("DONE", mtime));
+  return Buffer.concat(parts);
 }
 
 /** Quote a value for the device's shell. */

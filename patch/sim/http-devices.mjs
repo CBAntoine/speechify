@@ -257,6 +257,12 @@ export function rokuHandler(s) {
       s.searches.push(url.searchParams.get("keyword"));
       return send(200, "");
     }
+    m = p.match(/^\/install\/(\d+)$/);
+    if (m) {
+      // Opens the channel's page in the Channel Store.
+      (s.storePages ||= []).push(m[1]);
+      return send(200, "");
+    }
     return send(404, "");
   };
 }

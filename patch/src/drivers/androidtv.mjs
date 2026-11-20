@@ -2,13 +2,17 @@
 // Philips…), controlled over ADB once "ADB debugging" / "Network debugging" is switched on in the
 // device's developer options. Volume and play/pause also work over Google Cast when the device
 // has it, with or without ADB.
+import fsp from "node:fs/promises";
 import { AdbClient, newAdbKey, shellQuote } from "../net/adb.mjs";
 import { fireTvModel } from "../net/models.mjs";
+import { describeScreen, riskyButton } from "../net/phone.mjs";
+import { readUiTree } from "../net/uitree.mjs";
 import { watchUrl, youtubeSearchUrl } from "../net/youtube.mjs";
+import { apkInfo } from "../apk/index.mjs";
 import { fuzzyPick, normalizeText, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { APPS, knownApp, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { APPS, customAppNames, knownApp, parseChannel, pickIndex, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const KEYS = {
   power: "KEYCODE_POWER", home: "KEYCODE_HOME", back: "KEYCODE_BACK", menu: "KEYCODE_MENU", settings: "KEYCODE_SETTINGS", up: "KEYCODE_DPAD_UP",
@@ -25,7 +29,11 @@ const safePkg = (p) => /^[A-Za-z0-9_.]+$/.test(p);
 
 /** Friendly names for package ids (the TV only tells us the ids). */
 const PKG_NAMES = Object.fromEntries(APPS.flatMap((a) => (a.android || []).map((p) => [p, a.names[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Youtube/, "YouTube").replace(/Tv\b/, "TV")])));
-const appName = (pkg) => PKG_NAMES[pkg] || pkg.split(".").filter((x) => !/^(com|tv|org|android|amazon|google|app|apps|firetv|livingroom|leanback)$/.test(x)).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(" ") || pkg;
+// Names of apps Patch installed from a file (Android TV only tells other apps their ids).
+const knownLabels = new Map();
+const appName = (pkg) => customAppNames.get(pkg) || PKG_NAMES[pkg] || knownLabels.get(pkg) || pkg.split(".").filter((x) => !/^(com|tv|org|android|amazon|google|app|apps|firetv|livingroom|leanback)$/.test(x)).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(" ") || pkg;
+const isFireTv = (d) => d.brand === "Amazon" || /fire/i.test(`${d.info?.os || ""} ${d.model || ""}`);
+const LAUNCHERS = /launcher|tvlauncher|leanbacklauncher|launcherx|com\.google\.android\.apps\.tv\.launcherx|amazon\.tv\.launcher/i;
 
 // Live connections, closed after a minute of quiet.
 const clients = new Map();
@@ -127,8 +135,197 @@ async function liveState(client, device) {
   const wake = power.match(/mWakefulness=(\w+)/)?.[1];
   const pkg = focus.match(/\s([A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+/)?.[1];
   const st = { ...device.state, on: wake ? wake === "Awake" : true };
-  if (pkg) st.app = /launcher|tvlauncher|amazon\.tv\.launcher|leanbacklauncher|com\.google\.android\.apps\.tv\.launcherx/i.test(pkg) ? "Home screen" : appName(pkg);
+  if (pkg) st.app = LAUNCHERS.test(pkg) ? "Home screen" : appName(pkg);
   return st;
+}
+
+// ── Apps on the TV ──────────────────────────────────────────────────────────
+
+/** The apps in the TV's own apps list, with friendly names. */
+async function launchableApps(client, device) {
+  const cats = ["android.intent.category.LEANBACK_LAUNCHER", "android.intent.category.LAUNCHER"];
+  const out = await sh(client, cats.map((c) => `cmd package query-activities --brief -a android.intent.action.MAIN -c ${c} 2>/dev/null`).join("; "), 15_000).catch(() => "");
+  let pkgs = [...new Set([...out.matchAll(/(?:^|\s)([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/[A-Za-z0-9_.$]+/g)].map((m) => m[1]))];
+  if (!pkgs.length) {
+    // Older TVs (Fire OS 5) have no "cmd": the apps the person installed, plus the well-known ones.
+    const third = await sh(client, "pm list packages -3", 10_000);
+    const all = await packages(client, device);
+    pkgs = [...new Set([...third.split("\n").map((l) => l.replace(/^package:/, "").trim()), ...all.filter((p) => PKG_NAMES[p] || customAppNames.has(p))])];
+  }
+  return pkgs
+    .filter((p) => safePkg(p) && !LAUNCHERS.test(p))
+    .map((p) => ({ pkg: p, name: appName(p) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// What the store's button says when an app is free to install (never a price or "Buy").
+const STORE_BUTTON = /^(install|get|download|free|get app|install app|install on (this )?(device|tv))$/i;
+
+/** Open the app's page in the TV's own app store and choose Install when it's free. */
+async function storeInstall(client, device, name, ctx) {
+  const fire = isFireTv(device);
+  const known = knownApp(name);
+  const label = known ? known.names[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Youtube/, "YouTube").replace(/Tv\b/, "TV") : String(name).trim();
+  const link = storeLink(name, { fire });
+  const list = await packages(client, device);
+  const have = [link.pkg, ...(known?.android || [])].filter(Boolean).find((p) => list.includes(p));
+  if (have) return done(`${appName(have)} is already on ${device.name}. Want me to open it?`, { installed: true });
+  const pkg = link.pkg || (known?.android || []).find((p) => (fire ? /amazon|firetv/.test(p) : !/firetv/.test(p))) || known?.android?.[0] || null;
+  const url = pkg ? (fire ? `amzn://apps/android?p=${pkg}` : `market://details?id=${pkg}`) : fire ? `amzn://apps/android?s=${encodeURIComponent(link.query)}` : `market://search?q=${encodeURIComponent(link.query)}&c=apps`;
+  if (!(await view(client, url))) throw new DeviceError(`${device.name}'s app store didn't open. Open it with the remote and search for ${label} there.`, { code: "ENOSTORE" });
+  const store = fire ? "the Amazon Appstore" : "Google Play";
+  if (!pkg) return done(`${store} on ${device.name} is showing results for “${link.query}”. Ask me what's on the screen and I'll pick the right one, or choose it with the remote.`, { state: { ...device.state, on: true, app: "App store" } });
+  await sleep(3500);
+  const screen = await readScreen(client, device, ctx).catch(() => null);
+  // The button the remote is on, then real buttons, before plain text (a "Free" price label).
+  const candidates = (screen?.items || []).filter((it) => STORE_BUTTON.test(it.text) && !/greyed/.test(it.state || ""));
+  const button = candidates.find((it) => /selected/.test(it.state || "")) || candidates.find((it) => it.kind === "Button" || it.kind === "Item") || candidates[0];
+  if (!button) {
+    const priced = screen?.items.find((it) => /^(buy|[$£€]\s?\d|\d+[.,]\d\d\s?[$£€])/i.test(it.text));
+    return done(priced ? `The ${label} page is open in ${store} on ${device.name}. It costs money (“${priced.text}”), so choose it yourself if you want it.` : `The ${label} page is open in ${store} on ${device.name}. Choose Install with the remote, or say “select Install”.`, { state: { ...device.state, on: true, app: "App store" } });
+  }
+  if (/selected/.test(button.state || "")) await key(client, "KEYCODE_DPAD_CENTER");
+  else await sh(client, `input tap ${button.x} ${button.y}`);
+  for (let i = 0; i < 4; i++) {
+    await sleep(2000);
+    device.ref.packages = null;
+    if ((await packages(client, device)).includes(pkg)) return done(`${label} is installed on ${device.name}. Want me to open it?`, { installed: true });
+  }
+  return done(`${label} is downloading on ${device.name}. It'll be in the apps list in a minute or two.`, { state: { ...device.state, on: true, app: "App store" } });
+}
+
+const INSTALL_ERRORS = [
+  [/INSTALL_FAILED_UPDATE_INCOMPATIBLE|INCONSISTENT_CERTIFICATES/, (n) => `A different copy of ${n} is already on the TV, signed by someone else. Remove it first, then try again.`],
+  [/INSTALL_FAILED_VERSION_DOWNGRADE/, (n) => `A newer version of ${n} is already on the TV.`],
+  [/INSTALL_FAILED_NO_MATCHING_ABIS|CPU_ABI/, (n) => `${n} isn't made for this TV's kind of processor. Look for a version for ARM (most TVs) or for Android TV.`],
+  [/INSTALL_FAILED_OLDER_SDK/, (n) => `${n} needs a newer version of Android than this TV has.`],
+  [/INSUFFICIENT_STORAGE/, () => "The TV is out of space. Remove an app you don't use and try again."],
+  [/INSTALL_PARSE_FAILED|INVALID_APK|NOT_APK/, () => "That file isn't a working Android app."],
+  [/VERIFICATION|PLAY_PROTECT|USER_RESTRICTED|blocked/i, (n) => `The TV blocked ${n} (Play Protect or a parental setting). Check the TV's screen.`],
+];
+
+/** Copy an app file onto the TV and install it. Returns { package, name }. */
+async function sideload(client, device, apk, { label, ours = false, ctx } = {}) {
+  let info;
+  try {
+    info = apkInfo(apk);
+  } catch (err) {
+    throw new DeviceError(`That isn't an Android app file (APK): ${err.message}`, { code: "EVALUE" });
+  }
+  const name = label || info.label || appName(info.package);
+  const tmp = `/data/local/tmp/patch-${Date.now().toString(36)}.apk`;
+  await client.push(apk, tmp);
+  let out = await sh(client, `pm install -r ${tmp}`, 240_000).catch((e) => `Failure [${e.message}]`);
+  if (ours && /UPDATE_INCOMPATIBLE|INCONSISTENT_CERTIFICATES/.test(out)) {
+    // One of Patch's own apps, made earlier with another copy of Patch: replace it.
+    await sh(client, `pm uninstall ${info.package}`, 60_000).catch(() => "");
+    out = await sh(client, `pm install -r ${tmp}`, 240_000).catch((e) => `Failure [${e.message}]`);
+  }
+  await sh(client, `rm -f ${tmp}`).catch(() => "");
+  device.ref.packages = null;
+  if (/\bSuccess\b/.test(out)) {
+    if (!ours && name !== info.package) {
+      knownLabels.set(info.package, name);
+      await ctx?.saveSecret(["appLabels", info.package], name);
+    }
+    return { package: info.package, name };
+  }
+  const known = INSTALL_ERRORS.find(([re]) => re.test(out));
+  throw new DeviceError(known ? known[1](name) : `${device.name} didn't install ${name}: ${out.trim().split("\n").pop().slice(0, 160)}`, { code: "EINSTALL" });
+}
+
+const MAX_APK = 200 * 1024 * 1024;
+
+async function downloadApk(url) {
+  let res;
+  try {
+    res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(180_000) });
+  } catch {
+    throw new DeviceError("I couldn't download that app file. Check the link.", { code: "EDOWNLOAD" });
+  }
+  if (!res.ok) throw new DeviceError(`The app file's link answered ${res.status}.`, { code: "EDOWNLOAD" });
+  if (Number(res.headers.get("content-length") || 0) > MAX_APK) throw new DeviceError("That app file is too big (over 200 MB).", { code: "ETOOBIG" });
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_APK) throw new DeviceError("That app file is too big (over 200 MB).", { code: "ETOOBIG" });
+  if (buf.readUInt16BE(0) !== 0x504b) throw new DeviceError("That link isn't an Android app file (APK). For apps in the TV's store, just tell me the app's name.", { code: "EVALUE" });
+  return buf;
+}
+
+/** install_app: a name (from the store), an app file the person picked, a link to one, or one of Patch's own TV apps. */
+async function installApp(client, device, value, ctx) {
+  const v = String(need(value, "app")).trim();
+  if (/^tvapp:/i.test(v)) {
+    const made = await ctx.tvapps?.apk(v.slice(6));
+    if (!made) throw new DeviceError("I can't find that TV app in Patch any more.", { code: "ENOTFOUND" });
+    const r = await sideload(client, device, made.apk, { label: made.name, ours: true });
+    await launchPkg(client, r.package).catch(() => {});
+    return done(`${made.name} is on ${device.name} now, in its apps list, and it's opening.`, { installed: r.package, state: { ...device.state, on: true, app: made.name } });
+  }
+  if (/^upload:/i.test(v)) {
+    const file = ctx.uploads?.get(v.slice(7));
+    if (!file) throw new DeviceError("That app file isn't here any more. Choose it again.", { code: "ENOTFOUND" });
+    const r = await sideload(client, device, await fsp.readFile(file.path), { ctx });
+    return done(`${r.name} is installed on ${device.name}. Want me to open it?`, { installed: r.package });
+  }
+  const link = storeLink(v, { fire: isFireTv(device) });
+  if (/^https?:\/\//i.test(v) && !link.pkg) {
+    const r = await sideload(client, device, await downloadApk(v), { ctx });
+    return done(`${r.name} is installed on ${device.name}. Want me to open it?`, { installed: r.package });
+  }
+  return storeInstall(client, device, v, ctx);
+}
+
+async function uninstallApp(client, device, value) {
+  const v = String(need(value, "app")).trim();
+  const pkg = /^tvapp:/i.test(v) ? v.slice(6) : await findPackage(client, device, v);
+  const third = await sh(client, "pm list packages -3", 10_000);
+  if (!third.split("\n").some((l) => l.trim() === `package:${pkg}`)) {
+    if (/^tvapp:/i.test(v)) return done(`It wasn't on ${device.name}.`);
+    throw new DeviceError(`${appName(pkg)} came with ${device.name}, so it can't be removed. You can hide it from the home screen in the TV's settings.`, { code: "ESYSTEM" });
+  }
+  const out = await sh(client, `pm uninstall ${pkg}`, 60_000);
+  device.ref.packages = null;
+  if (!/\bSuccess\b/.test(out)) throw new DeviceError(`${device.name} didn't remove ${appName(pkg)}: ${out.trim().slice(0, 120)}`);
+  return done(`Removed ${appName(pkg)} from ${device.name}.`);
+}
+
+// ── The TV's screen ─────────────────────────────────────────────────────────
+
+/** What's on the TV's screen, from Android's own view of it. Remembered for "select the second one". */
+async function readScreen(client, device, ctx) {
+  const file = "/data/local/tmp/patch-screen.xml";
+  let xml = "";
+  for (let attempt = 0; attempt < 2 && !xml.includes("<hierarchy"); attempt++) {
+    const out = await sh(client, `uiautomator dump ${file} >/dev/null 2>&1; cat ${file} 2>/dev/null; rm -f ${file}`, 25_000).catch(() => "");
+    xml = out.slice(Math.max(0, out.indexOf("<?xml")));
+    if (!xml.includes("<hierarchy")) await sleep(800);
+  }
+  if (!xml.includes("<hierarchy")) throw new DeviceError(`I couldn't see ${device.name}'s screen just now (it may be playing a video). Try again in a moment.`, { code: "ESCREEN" });
+  const tree = readUiTree(xml);
+  const screen = { app: tree.package ? (LAUNCHERS.test(tree.package) ? "Home screen" : appName(tree.package)) : device.name, items: tree.items, more: tree.more, full: tree.full, at: Date.now() };
+  ctx.memory?.set(`tv-screen:${device.id}`, screen);
+  return screen;
+}
+
+async function selectOnScreen(client, device, value, ctx) {
+  const v = String(need(value, "thing to select")).trim();
+  const n = /^\d+$/.test(v) ? Number(v) - 1 : pickIndex(v);
+  let screen = ctx.memory?.get(`tv-screen:${device.id}`);
+  let item;
+  if (n != null) {
+    if (!screen || Date.now() - screen.at > 5 * 60_000) throw new DeviceError(`I need to look at ${device.name}'s screen first, so the numbers are right. Ask me what's on the screen.`, { code: "ESTALE" });
+    item = n === -1 ? screen.items.at(-1) : screen.items[n];
+    if (!item) throw new DeviceError(`There are only ${screen.items.length} things on the screen.`, { code: "EVALUE" });
+  } else {
+    screen = await readScreen(client, device, ctx);
+    item = fuzzyPick(v, screen.items, (it) => it.text);
+    if (!item) throw new DeviceError(`I can't see “${v}” on ${device.name}'s screen. It has: ${screen.items.slice(0, 8).map((it) => it.text).join(", ") || "nothing I can read"}.`, { code: "ENOTFOUND" });
+  }
+  if (riskyButton(item.text) && !ctx.confirmed) throw new DeviceError(`“${item.text}” on ${device.name} could buy, send or delete something.`, { code: "ECONFIRM" });
+  if (/selected/.test(item.state || "")) await key(client, "KEYCODE_DPAD_CENTER");
+  else await sh(client, `input tap ${item.x} ${item.y}`);
+  ctx.memory?.delete(`tv-screen:${device.id}`);
+  return done(`Selected “${item.text}” on ${device.name}.`);
 }
 
 /** Facts about the device from ADB (exact model, manufacturer, Android version). */
@@ -140,7 +337,7 @@ async function deviceFacts(client) {
 }
 
 const CAST_ACTIONS = ["set_volume", "volume_up", "volume_down", "mute", "unmute", "play", "pause", "stop"];
-const ADB_ACTIONS = ["turn_on", "turn_off", "launch_app", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "volume_up", "volume_down", "mute", "play", "pause"];
+const ADB_ACTIONS = ["turn_on", "turn_off", "launch_app", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "volume_up", "volume_down", "mute", "play", "pause", "list_apps", "install_app", "uninstall_app", "read_screen", "tap", "scroll", "search"];
 const TV_EXTRA = ["set_channel", "channel_up", "channel_down"];
 
 export function actionsFor({ kind, paired, cast: hasCast }) {
@@ -222,6 +419,7 @@ export default {
   },
 
   async act(device, action, value, ctx) {
+    for (const [p, n] of Object.entries(ctx.secrets.appLabels || {})) knownLabels.set(p, n);
     try {
       const paired = !!ctx.secrets.pairings?.[device.id]?.adb;
       if (device.ref.cast && CAST_ACTIONS.includes(action) && (!paired || ["set_volume", "unmute", "stop"].includes(action))) {
@@ -291,6 +489,43 @@ export default {
           const pkg = await findPackage(client, device, need(value, "app"));
           await launchPkg(client, pkg);
           return done(`Opening ${appName(pkg)} on ${device.name}.`, { state: { ...device.state, on: true, app: appName(pkg) } });
+        }
+        case "list_apps": {
+          const apps = await launchableApps(client, device);
+          return done(`${device.name} has ${apps.length} apps: ${apps.map((a) => a.name).join(", ")}.`, { apps: apps.map((a) => ({ name: a.name, id: a.pkg, ...(customAppNames.has(a.pkg) ? { madeWithPatch: true } : {}) })) });
+        }
+        case "install_app":
+          return await installApp(client, device, value, ctx);
+        case "uninstall_app":
+          return await uninstallApp(client, device, value);
+        case "read_screen": {
+          const screen = await readScreen(client, device, ctx);
+          const d = describeScreen(screen);
+          const thin = screen.items.length < 3 ? ` ${screen.app} draws its own picture, so I can only read a little of it; I can still press the remote's buttons.` : "";
+          return done(`${d.summary}${thin}`, { screen: d.text });
+        }
+        case "tap":
+          return await selectOnScreen(client, device, value, ctx);
+        case "scroll": {
+          const dir = normalizeText(value || "down");
+          const code = /up/.test(dir) ? "KEYCODE_DPAD_UP" : /left/.test(dir) ? "KEYCODE_DPAD_LEFT" : /right/.test(dir) ? "KEYCODE_DPAD_RIGHT" : "KEYCODE_DPAD_DOWN";
+          await key(client, code, code, code);
+          ctx.memory?.delete(`tv-screen:${device.id}`);
+          return done(`Moved ${code.replace("KEYCODE_DPAD_", "").toLowerCase()} on ${device.name}.`);
+        }
+        case "search": {
+          const q = String(need(value, "search")).trim();
+          const inApp = q.match(/^(.+?)\s+(?:in|on|using)\s+(?:the\s+)?(.+?)(?:\s+app)?$/i);
+          const pkg = inApp ? await findPackage(client, device, inApp[2]).catch(() => null) : null;
+          if (pkg) {
+            const out = await sh(client, `am start -a android.intent.action.SEARCH --es query ${shellQuote(inApp[1])} ${pkg}`);
+            if (!failed(out)) return done(`Searching ${appName(pkg)} for “${inApp[1]}” on ${device.name}.`, { state: { ...device.state, on: true, app: appName(pkg) } });
+            await launchPkg(client, pkg);
+            return done(`${appName(pkg)} is open on ${device.name}, but it doesn't take searches from Patch. Ask me what's on the screen and I'll find its search box.`, { state: { ...device.state, on: true, app: appName(pkg) } });
+          }
+          const out = await sh(client, `am start -a android.search.action.GLOBAL_SEARCH --es query ${shellQuote(q)}`);
+          if (!failed(out)) return done(`Searching ${device.name} for “${q}”.`);
+          throw new DeviceError(`${device.name} doesn't take searches from Patch. Tell me which app to search in, like “${q} in YouTube”.`, { code: "EUNSUPPORTED" });
         }
         case "type_text": {
           const text = String(need(value, "text")).replace(/[^\x20-\x7e]/g, "");

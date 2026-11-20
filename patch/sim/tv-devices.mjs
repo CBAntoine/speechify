@@ -9,6 +9,8 @@ import dgram from "node:dgram";
 import crypto from "node:crypto";
 import { acceptUpgrade } from "../src/net/websocket.mjs";
 import { AUTH, CMD, MessageParser, SHA1_PREFIX, encodeMessage, parseAndroidPublicKey } from "../src/net/adb.mjs";
+import { apkInfo } from "../src/apk/index.mjs";
+import { verifyV2 } from "../src/apk/sign.mjs";
 import { selfSigned } from "./selfsigned.mjs";
 import { httpServer } from "./http-devices.mjs";
 
@@ -49,6 +51,11 @@ export async function samsungTv(ip, s) {
     const m = url.pathname.match(/^\/api\/v2\/applications\/([^/]+)$/);
     if (m && req.method === "POST") {
       s.launched.push({ appId: decodeURIComponent(m[1]), via: "rest" });
+      return send(200, "true", "text/plain");
+    }
+    if (m && req.method === "PUT") {
+      // Installs a known app (a real TV shows its page and installs it).
+      s.installing = decodeURIComponent(m[1]);
       return send(200, "true", "text/plain");
     }
     return send(404, { error: "not found" });
@@ -115,6 +122,7 @@ export function lgState() {
     launchPoints: [
       { id: "youtube.leanback.v4", title: "YouTube" }, { id: "netflix", title: "Netflix" }, { id: "amazon", title: "Prime Video" },
       { id: "com.webos.app.browser", title: "Web Browser" }, { id: "com.webos.app.livetv", title: "Live TV" }, { id: "spotify-beehive", title: "Spotify" },
+      { id: "com.webos.app.discovery", title: "LG Content Store" },
     ],
     clientKey: null,
     accept: true,
@@ -263,8 +271,45 @@ export function fireTvState() {
     accept: true,
     prompts: 0,
     commands: [],
-    packages: ["com.amazon.tv.launcher", "com.amazon.firetv.youtube", "com.netflix.ninja", "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.hulu.livingroomplus", "com.amazon.cloud9", "com.spotify.tv.android", "com.android.settings"],
+    packages: ["com.amazon.tv.launcher", "com.amazon.firetv.youtube", "com.netflix.ninja", "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.hulu.livingroomplus", "com.amazon.cloud9", "com.spotify.tv.android", "com.android.settings", "com.amazon.venezia"],
+    // Apps that came with it (can't be removed); the rest were installed by the person.
+    system: ["com.amazon.tv.launcher", "com.amazon.firetv.youtube", "com.amazon.amazonvideo.livingroom", "com.amazon.cloud9", "com.android.settings", "com.amazon.venezia"],
+    files: {}, // pushed over ADB, by path
+    installed: {}, // app id → { label, versionCode, cert }
+    store: null, // the Appstore page that's open
+    taps: [],
   };
+}
+
+const STORE_NAMES = { "com.plexapp.android": "Plex", "org.videolan.vlc": "VLC for Fire" };
+const HOME_NAMES = { "com.amazon.firetv.youtube": "YouTube", "com.netflix.ninja": "Netflix", "com.amazon.amazonvideo.livingroom": "Prime Video", "com.disney.disneyplus": "Disney+", "com.hulu.livingroomplus": "Hulu", "com.amazon.cloud9": "Silk Browser", "com.spotify.tv.android": "Spotify", "com.plexapp.android": "Plex" };
+const xmlEsc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+/** What `uiautomator dump` would show: the home screen, an Appstore page, or an app drawing its own picture. */
+function fireScreen(s) {
+  const pkg = s.focus.split("/")[0];
+  const node = (a, kids = "") =>
+    `<node index="0" text="${xmlEsc(a.text || "")}" resource-id="" class="${a.cls || "android.widget.TextView"}" package="${pkg}" content-desc="${xmlEsc(a.desc || "")}" checkable="false" checked="false" clickable="${!!a.click}" enabled="true" focusable="${!!a.focus}" focused="${!!a.focused}" scrollable="${!!a.scroll}" long-clickable="false" password="false" selected="false" bounds="${a.b}">${kids}</node>`;
+  let body;
+  if (pkg === "com.amazon.venezia" && s.store?.pkg) {
+    const installed = s.packages.includes(s.store.pkg);
+    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: STORE_NAMES[s.store.pkg] || s.store.pkg, b: "[120,100][900,180]" }) + node({ text: "Free", b: "[120,200][300,240]" }) + node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: true, b: "[120,300][420,380]" }, node({ cls: "android.widget.Button", text: installed ? "Open" : "Get", b: "[140,310][400,370]" })) + node({ desc: "More like this", b: "[120,500][1800,1000]", scroll: true }));
+  } else if (pkg === "com.amazon.tv.launcher") {
+    const apps = s.packages.filter((p) => !["com.amazon.tv.launcher", "com.amazon.venezia", "com.android.settings"].includes(p));
+    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: "Home", b: "[100,40][300,90]" }) + apps.map((p, i) => node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: i === 0, b: `[${100 + i * 220},600][${300 + i * 220},720]` }, node({ desc: s.installed[p]?.label || HOME_NAMES[p] || p.split(".").at(-1), cls: "android.widget.ImageView", b: `[${110 + i * 220},610][${290 + i * 220},710]` }))).join(""));
+  } else {
+    body = node({ cls: "android.view.SurfaceView", b: "[0,0][1920,1080]" });
+  }
+  return `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0">${body}</hierarchy>`;
+}
+
+function storeGet(s) {
+  const pkg = s.store?.pkg;
+  if (!pkg || s.packages.includes(pkg)) return;
+  setTimeout(() => {
+    s.packages.push(pkg);
+    s.installed[pkg] = { label: STORE_NAMES[pkg] || pkg, versionCode: 1, cert: "store" };
+  }, 300);
 }
 
 function fireShell(s, cmd) {
@@ -272,9 +317,57 @@ function fireShell(s, cmd) {
   if (/getprop ro\.product\.manufacturer/.test(cmd)) return "Amazon|AFTKA|9|Kids Room Fire TV\n";
   if (/^dumpsys power/.test(cmd)) return `  mWakefulness=${s.awake ? "Awake" : "Asleep"}\n`;
   if (/^dumpsys window/.test(cmd)) return `  mCurrentFocus=Window{4a3b2c1 u0 ${s.focus}}\n  mFocusedApp=AppWindowToken{5d4e3f2 token=Token{6e5f4a3 ActivityRecord{7f6a5b4 u0 ${s.focus} t12}}}\n`;
+  if (/^pm list packages -3$/.test(cmd)) return s.packages.filter((p) => !s.system.includes(p)).map((p) => `package:${p}`).join("\n") + "\n";
   if (/^pm list packages/.test(cmd)) return s.packages.map((p) => `package:${p}`).join("\n") + "\n";
-  let m = cmd.match(/^input keyevent (\S+)$/);
+  if (/^cmd package query-activities/.test(cmd)) return s.packages.filter((p) => p !== "com.amazon.tv.launcher").map((p) => `  ${p}/.MainActivity`).join("\n") + "\n";
+  if (/^uiautomator dump/.test(cmd)) return fireScreen(s);
+  if (/android\.search\.action\.GLOBAL_SEARCH/.test(cmd)) return "Error: Activity not started, unable to resolve Intent { act=android.search.action.GLOBAL_SEARCH }\n";
+  let m = cmd.match(/^pm install -r (\S+)$/);
   if (m) {
+    const file = s.files[m[1]];
+    if (!file) return "Failure [INSTALL_FAILED_INVALID_URI]\n";
+    let info;
+    try {
+      info = apkInfo(file);
+    } catch {
+      return "Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse]\n";
+    }
+    const cert = verifyV2(file).cert || "unsigned";
+    const prev = s.installed[info.package];
+    if (prev && prev.cert !== cert) return "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package signatures do not match]\n";
+    if (prev && prev.versionCode > info.versionCode) return "Failure [INSTALL_FAILED_VERSION_DOWNGRADE]\n";
+    s.installed[info.package] = { label: info.label, versionCode: info.versionCode, cert, size: file.length };
+    if (!s.packages.includes(info.package)) s.packages.push(info.package);
+    return "Success\n";
+  }
+  m = cmd.match(/^pm uninstall (\S+)$/);
+  if (m) {
+    if (!s.packages.includes(m[1]) || s.system.includes(m[1])) return "Failure [DELETE_FAILED_INTERNAL_ERROR]\n";
+    s.packages = s.packages.filter((p) => p !== m[1]);
+    delete s.installed[m[1]];
+    return "Success\n";
+  }
+  m = cmd.match(/^rm -f (\S+)$/);
+  if (m) {
+    delete s.files[m[1]];
+    return "";
+  }
+  m = cmd.match(/^input tap (\d+) (\d+)$/);
+  if (m) {
+    s.taps.push([Number(m[1]), Number(m[2])]);
+    if (s.focus.startsWith("com.amazon.venezia/") && Number(m[2]) > 300 && Number(m[2]) < 380) storeGet(s);
+    return "";
+  }
+  m = cmd.match(/^am start -a android\.intent\.action\.VIEW -d '(amzn:\/\/apps\/android\?[^']*)'$/);
+  if (m) {
+    const u = new URL(m[1]);
+    s.focus = "com.amazon.venezia/.details.DetailsActivity";
+    s.store = { pkg: u.searchParams.get("p"), search: u.searchParams.get("s") };
+    return `Starting: Intent { act=android.intent.action.VIEW dat=${m[1]} }\n`;
+  }
+  m = cmd.match(/^input keyevent (\S+)$/);
+  if (m) {
+    if (m[1] === "KEYCODE_DPAD_CENTER" && s.focus.startsWith("com.amazon.venezia/")) storeGet(s);
     if (m[1] === "KEYCODE_SLEEP") s.awake = false;
     if (m[1] === "KEYCODE_WAKEUP") s.awake = true;
     if (m[1] === "KEYCODE_HOME") s.focus = "com.amazon.tv.launcher/.ui.HomeActivity_vNext";
@@ -308,6 +401,7 @@ export async function fireTv(ip, s) {
   const server = net.createServer((sock) => {
     let token = null;
     let authed = false;
+    const streams = new Map();
     const send = (c, a0, a1, d) => sock.writable && sock.write(encodeMessage(c, a0, a1, d));
     const banner = "device::ro.product.name=kara;ro.product.model=AFTKA;ro.product.device=kara;features=shell_v2,cmd\0";
     const challenge = () => {
@@ -342,11 +436,48 @@ export async function fireTv(ip, s) {
         return;
       }
       if (!authed) return;
+      if (m.command === CMD.WRTE && streams.has(m.arg1)) {
+        // ADB "sync": SEND path,mode → DATA… → DONE (answered OKAY) → QUIT.
+        const st = streams.get(m.arg1);
+        send(CMD.OKAY, m.arg1, st.remote);
+        st.buf = Buffer.concat([st.buf, m.data]);
+        while (st.buf.length >= 8) {
+          const id = st.buf.toString("latin1", 0, 4);
+          const n = st.buf.readUInt32LE(4);
+          if ((id === "SEND" || id === "DATA") && st.buf.length < 8 + n) break;
+          if (id === "SEND") {
+            const spec = st.buf.toString("utf8", 8, 8 + n);
+            st.path = spec.slice(0, spec.lastIndexOf(","));
+            st.parts = [];
+            st.buf = st.buf.subarray(8 + n);
+          } else if (id === "DATA") {
+            st.parts.push(Buffer.from(st.buf.subarray(8, 8 + n)));
+            st.buf = st.buf.subarray(8 + n);
+          } else if (id === "DONE") {
+            s.files[st.path] = Buffer.concat(st.parts);
+            st.buf = st.buf.subarray(8);
+            send(CMD.WRTE, m.arg1, st.remote, Buffer.from("OKAY\0\0\0\0", "latin1"));
+          } else {
+            streams.delete(m.arg1);
+            send(CMD.CLSE, m.arg1, st.remote);
+            break;
+          }
+        }
+        return;
+      }
+      if (m.command === CMD.CLSE) {
+        streams.delete(m.arg1);
+        return;
+      }
       if (m.command === CMD.OPEN) {
         const remote = m.arg0;
         const local = crypto.randomInt(1, 1 << 30);
         const service = m.data.toString("utf8").replace(/\0$/, "");
         send(CMD.OKAY, local, remote);
+        if (service === "sync:") {
+          streams.set(local, { remote, buf: Buffer.alloc(0), path: null, parts: [] });
+          return;
+        }
         const out = service.startsWith("shell:") ? fireShell(s, service.slice(6)) : "";
         if (out) send(CMD.WRTE, local, remote, Buffer.from(out));
         setTimeout(() => send(CMD.CLSE, local, remote), 5);

@@ -136,7 +136,7 @@ function tvState(j) {
   return { on: p ? p === "on" : true, power: p || null };
 }
 
-const FULL = ["turn_on", "turn_off", "volume_up", "volume_down", "mute", "set_channel", "channel_up", "channel_down", "launch_app", "switch_input", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "play", "pause", "rename", "set_room"];
+const FULL = ["turn_on", "turn_off", "volume_up", "volume_down", "mute", "set_channel", "channel_up", "channel_down", "launch_app", "switch_input", "press_button", "type_text", "search_youtube", "play_youtube", "web_search", "open_website", "play", "pause", "list_apps", "install_app", "rename", "set_room"];
 
 export default {
   id: "samsung",
@@ -255,6 +255,25 @@ export default {
           const app = await findApp(ws, device, need(value, "app"));
           await launch(ws, device, app.id, { type: app.type });
           return done(`Opening ${app.name} on ${device.name}.`, { state: { ...device.state, on: true, app: app.name } });
+        }
+        case "list_apps": {
+          const list = await installedApps(ws);
+          if (!list.length) throw new DeviceError(`${device.name} didn't share its list of apps.`, { code: "EUNSUPPORTED" });
+          return done(`${device.name} has ${list.length} apps: ${list.map((a) => a.name).join(", ")}.`, { apps: list.map((a) => ({ name: a.name, id: a.id })) });
+        }
+        case "install_app": {
+          const want = String(need(value, "app")).trim();
+          const list = await installedApps(ws);
+          const known = knownApp(want);
+          const have = list.find((a) => known?.samsung?.includes(a.id) || normalizeText(a.name) === normalizeText(want));
+          if (have) return done(`${have.name} is already on ${device.name}. Want me to open it?`, { installed: true });
+          const id = known?.samsung?.[0];
+          if (id) {
+            // Samsung TVs install a known app when asked (it may show its page and ask first).
+            const res = await request({ url: `http://${device.ref.ip}:8001/api/v2/applications/${encodeURIComponent(id)}`, method: "PUT", body: "", timeout: 5000 }).catch(() => null);
+            if (res && res.status < 400) return done(`${device.name} is adding ${known.names[0].replace(/\b\w/g, (c) => c.toUpperCase())}. If the TV asks, choose Install.`, { state: { ...device.state, on: true } });
+          }
+          throw new DeviceError(`I can't add ${want} to ${device.name} from here. On the TV, open Apps, search for ${want} and choose Install. I can type the name for you once the search box is open.`, { code: "EUNSUPPORTED" });
         }
         case "type_text": {
           const text = String(need(value, "text"));

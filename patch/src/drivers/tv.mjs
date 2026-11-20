@@ -73,7 +73,39 @@ export const APPS = [
   { key: "browser", names: ["browser", "web browser", "internet", "silk", "chrome"], roku: "", samsung: ["org.tizen.browser"], lg: ["com.webos.app.browser"], android: ["com.amazon.cloud9", "com.android.chrome", "org.chromium.chrome"] },
   { key: "livetv", names: ["live tv", "tv", "antenna", "tv guide", "guide"], roku: "tvinput.dtv", samsung: [], lg: ["com.webos.app.livetv"], android: ["com.google.android.tv", "com.android.tv", "com.amazon.tv.livetv"] },
   { key: "settings", names: ["settings"], roku: "", samsung: [], lg: ["com.palm.app.settings"], android: ["com.android.tv.settings", "com.amazon.tv.settings.v2"] },
+  { key: "vlc", names: ["vlc", "vlc player", "vlc media player"], roku: "", samsung: [], lg: [], android: ["org.videolan.vlc"] },
+  { key: "twitch", names: ["twitch"], roku: "", samsung: [], lg: [], android: ["tv.twitch.android.app", "tv.twitch.android.viewer"] },
+  { key: "tubi", names: ["tubi", "tubi tv"], roku: "41468", samsung: [], lg: [], android: ["com.tubitv"] },
+  { key: "crunchyroll", names: ["crunchyroll"], roku: "2595", samsung: [], lg: [], android: ["com.crunchyroll.crunchyroid"] },
+  { key: "sling", names: ["sling", "sling tv"], roku: "46041", samsung: [], lg: [], android: ["com.sling"] },
+  { key: "espn", names: ["espn"], roku: "34376", samsung: [], lg: [], android: ["com.espn.score_center", "com.espn.gtv"] },
+  { key: "iplayer", names: ["bbc iplayer", "iplayer"], roku: "", samsung: [], lg: [], android: ["uk.co.bbc.iplayer"] },
+  { key: "itvx", names: ["itvx", "itv x", "itv"], roku: "", samsung: [], lg: [], android: ["air.ITVMobilePlayer"] },
+  { key: "youtubekids", names: ["youtube kids"], roku: "", samsung: [], lg: [], android: ["com.google.android.youtube.tvkids"] },
+  { key: "amazonmusic", names: ["amazon music"], roku: "", samsung: [], lg: [], android: ["com.amazon.music.tv", "com.amazon.mp3"] },
+  { key: "steamlink", names: ["steam link", "steam"], roku: "", samsung: [], lg: [], android: ["com.valvesoftware.steamlink"] },
+  { key: "moonlight", names: ["moonlight"], roku: "", samsung: [], lg: [], android: ["com.limelight"] },
+  { key: "jellyfin", names: ["jellyfin"], roku: "592369", samsung: [], lg: [], android: ["org.jellyfin.androidtv"] },
+  { key: "downloader", names: ["downloader"], roku: "", samsung: [], lg: [], android: ["com.esaba.downloader"] },
+  { key: "tvbro", names: ["tv bro", "tvbro"], roku: "", samsung: [], lg: [], android: ["com.phlox.tvwebbrowser"] },
 ];
+
+/** Names of the TV apps made with Patch, by their app id (kept up to date by Patch's app maker). */
+export const customAppNames = new Map();
+
+/**
+ * What to look for in a TV's app store: "Plex", a Google Play link, market://details?id=…,
+ * amzn://apps/android?p=… or an app id like "org.videolan.vlc" → { pkg, query }.
+ */
+export function storeLink(value) {
+  const v = String(value ?? "").trim();
+  let m = v.match(/^(?:https?:\/\/play\.google\.com\/store\/apps\/details|market:\/\/details)\?(?:.*&)?id=([A-Za-z][\w]*(?:\.[\w]+)+)/i);
+  if (m) return { pkg: m[1], query: m[1] };
+  m = v.match(/^amzn:\/\/apps\/android\?(?:.*&)?p=([A-Za-z][\w]*(?:\.[\w]+)+)/i);
+  if (m) return { pkg: m[1], query: m[1] };
+  if (/^[a-z][a-z0-9_]*(\.[a-z0-9_]+){2,}$/i.test(v) && !/\.(com|org|net|co|uk|tv|io|de|fr)$/i.test(v)) return { pkg: v, query: v };
+  return { pkg: null, query: v.replace(/^(the|an?)\s+/i, "").replace(/\s+app$/i, "") };
+}
 
 /** The well-known app a spoken name refers to ("disney plus" → the Disney+ entry), or null. */
 export function knownApp(name) {

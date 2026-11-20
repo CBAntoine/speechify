@@ -58,6 +58,10 @@ export const ACTIONS = {
   tap: { label: "Tap", value: "text" },
   scroll: { label: "Scroll", value: "choice" },
   play_music: { label: "Play music", value: "text" },
+  // TVs: their apps (and the TV apps made with Patch).
+  list_apps: { label: "List apps" },
+  install_app: { label: "Add an app", value: "text" },
+  uninstall_app: { label: "Remove an app", value: "text" },
 };
 
 export const ACTION_NAMES = Object.keys(ACTIONS);
@@ -90,6 +94,16 @@ export function riskOf(device, action, value) {
       return POWER_KINDS.has(device.kind) ? `${device.name} is a smart ${device.kind === "strip" ? "power strip" : "plug"}, so turning it off cuts power to whatever is plugged into it.` : null;
     case "set_mode":
       return device.kind === "thermostat" && /off/i.test(String(value)) ? `This turns the heating/cooling off.` : null;
+    case "uninstall_app": {
+      const v = String(value ?? "").trim();
+      return /^tvapp:/i.test(v) ? null : `This removes ${v || "that app"} from ${device.name}, along with anything saved in it.`;
+    }
+    case "install_app": {
+      // From the TV's own store it's fine; an app file from anywhere else could be anything.
+      const v = String(value ?? "").trim();
+      const fromStore = /^(https?:\/\/play\.google\.com\/store\/apps\/|market:|amzn:)/i.test(v);
+      return /^upload:/i.test(v) || (/^https?:\/\//i.test(v) && !fromStore) ? `This installs an app file that doesn't come from ${device.name}'s app store. Only install apps from people you trust.` : null;
+    }
     default:
       return null;
   }
