@@ -218,3 +218,35 @@ export function fromOsrm(res: OsrmResponse, mode: TravelMode): RouteResult | nul
     via,
   };
 }
+
+export interface NominatimHit {
+  display_name: string;
+  name?: string;
+  lat: string;
+  lon: string;
+  category?: string;
+  class?: string;
+  type?: string;
+  boundingbox?: [string, string, string, string];
+  address?: Record<string, string>;
+}
+
+/** "Ocean Drive, South Beach, Miami Beach" from a Nominatim jsonv2 hit. */
+function nominatimLabel(h: NominatimHit): string {
+  const a = h.address ?? {};
+  const place = a.city || a.town || a.village || a.hamlet || a.suburb || a.county;
+  const parts = [h.name || h.display_name.split(",")[0], a.neighbourhood || a.suburb, place].filter(Boolean);
+  return [...new Set(parts)].slice(0, 3).join(", ");
+}
+
+export function fromNominatim(raw: NominatimHit[]): GeocodeHit[] {
+  return raw.map((h) => ({
+    name: h.name || h.display_name.split(",")[0],
+    label: nominatimLabel(h),
+    lng: Number(h.lon),
+    lat: Number(h.lat),
+    kind: h.type || h.category || h.class || "place",
+    // Nominatim's boundingbox is [minLat, maxLat, minLng, maxLng].
+    bbox: h.boundingbox ? [Number(h.boundingbox[2]), Number(h.boundingbox[0]), Number(h.boundingbox[3]), Number(h.boundingbox[1])] : null,
+  }));
+}

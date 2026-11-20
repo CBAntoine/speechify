@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { SITE } from "@/lib/site";
 import { clientIp, rateLimit } from "@/lib/server/rate-limit";
-import { FLORIDA_BBOX, type GeocodeHit } from "@/lib/geo-utils";
+import { FLORIDA_BBOX, fromNominatim, type GeocodeHit, type NominatimHit } from "@/lib/geo-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -14,18 +14,6 @@ export const dynamic = "force-dynamic";
  */
 const GEOCODER = (process.env.GEOCODER_URL || "https://nominatim.openstreetmap.org").replace(/\/$/, "");
 const GEOCODER_KEY = process.env.GEOCODER_KEY; // LocationIQ-style ?key=
-
-interface NominatimHit {
-  display_name: string;
-  name?: string;
-  lat: string;
-  lon: string;
-  category?: string;
-  class?: string;
-  type?: string;
-  boundingbox?: [string, string, string, string];
-  address?: Record<string, string>;
-}
 
 const cache = new Map<string, GeocodeHit[]>();
 let nextSlot = 0;
@@ -41,13 +29,6 @@ async function politeFetch(url: string) {
     headers: { "User-Agent": `${SITE.name}/1.0 (+${SITE.url})`, Referer: SITE.url, "Accept-Language": "en" },
     signal: AbortSignal.timeout(7000),
   });
-}
-
-function label(h: NominatimHit): string {
-  const a = h.address ?? {};
-  const place = a.city || a.town || a.village || a.hamlet || a.suburb || a.county;
-  const parts = [h.name || h.display_name.split(",")[0], a.neighbourhood || a.suburb, place].filter(Boolean);
-  return [...new Set(parts)].slice(0, 3).join(", ");
 }
 
 export async function GET(req: Request) {
@@ -76,16 +57,7 @@ export async function GET(req: Request) {
     const res = await politeFetch(`${GEOCODER}/search?${params}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = (await res.json()) as NominatimHit[];
-    const results: GeocodeHit[] = raw.map((h) => ({
-      name: h.name || h.display_name.split(",")[0],
-      label: label(h),
-      lng: Number(h.lon),
-      lat: Number(h.lat),
-      kind: h.type || h.category || h.class || "place",
-      bbox: h.boundingbox
-        ? [Number(h.boundingbox[2]), Number(h.boundingbox[0]), Number(h.boundingbox[3]), Number(h.boundingbox[1])]
-        : null,
-    }));
+    const results: GeocodeHit[] = fromNominatim(raw);
     if (cache.size > 1000) cache.delete(cache.keys().next().value!);
     cache.set(key, results);
     return NextResponse.json({ ok: true, results }, { headers });

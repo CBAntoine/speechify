@@ -480,6 +480,8 @@ export function streetLayers(): AddLayerObject[] {
       ...src,
       "source-layer": "building",
       minzoom: 13,
+      // OpenMapTiles flags building parts that duplicate a taller outline.
+      filter: ["!=", ["get", "hide_3d"], true],
       paint: {
         "fill-extrusion-color": [
           "interpolate",
