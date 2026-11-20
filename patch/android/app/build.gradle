@@ -10,9 +10,8 @@ def keystorePath = System.getenv("PATCH_KEYSTORE")
 android {
     namespace "app.patch.home"
     compileSdk 34
-    if (System.getenv("ANDROID_NDK_HOME_FOR_PATCH")) {
-        ndkPath System.getenv("ANDROID_NDK_HOME_FOR_PATCH")
-    }
+    // The NDK builds the small bridge to Node.js (downloaded by the build if this machine doesn't have it).
+    ndkVersion System.getenv("PATCH_NDK_VERSION") ?: "27.2.12479018"
 
     defaultConfig {
         applicationId "app.patch.home"

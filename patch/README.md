@@ -1,6 +1,6 @@
 # Patch: talk to everything on your WiFi
 
-Patch is a small app that runs on your computer, finds every device on your home WiFi, tells you exactly what each one is, and lets you control them and tune up your network by talking or typing to it. The voice is an ElevenLabs agent called **Patch**. It already exists in your ElevenLabs account, with its tools and tests.
+Patch is a small app that runs on your computer, or on its own on an Android phone, finds every device on your home WiFi, tells you exactly what each one is, and lets you control them and tune up your network by talking or typing to it. The voice is an ElevenLabs agent called **Patch**. It already exists in your ElevenLabs account, with its tools and tests.
 
 > "What exactly is on my WiFi?" · "Put the living room TV on channel 7.1." · "Search YouTube for cooking videos on the bedroom TV." · "Play the second one." · "Look up tomorrow's weather on the TV." · "Turn off the kitchen lights." · "Is anything on my network unsafe?" · "Run a tune-up and fix what you can."
 
@@ -98,7 +98,22 @@ Channels: on Roku TVs, Samsung, LG and Android TVs with an antenna, Patch tunes 
 - **The agent** is private (signed tokens only), keeps no voice recordings, keeps transcripts for 30 days, and is capped at 200 conversations a day and 15 minutes per conversation.
 - The manufacturer list (to label devices like "Espressif" or "Sonos") is downloaded once from the public IEEE registry; nothing about your network is sent. You can switch it off in Settings.
 
-## Phones and tablets
+## On your Android phone
+
+Patch also runs on an Android phone by itself, with no computer needed. The app carries Patch's own server, so the phone finds what's on your WiFi, runs your TVs, lights and plugs, and you can talk or type to it.
+
+1. On the phone, open the [Patch for Android release](https://github.com/CBAntoine/speechify/releases/tag/patch-android) and tap **Patch.apk**.
+2. Open the download. The first time, Android asks you to allow installs from your browser (or Files app): allow it, then tap **Install**. If Google Play Protect says it doesn't recognise the app, choose **More details → Install anyway**.
+3. Open **Patch** from your apps while you're on your home WiFi. It scans straight away.
+4. **Voice:** add your ElevenLabs key in **Settings** as on a computer, then tap **Talk to Patch** and allow the microphone.
+
+Good to know:
+- "Search the web on my phone" or "play it here" opens the browser or the YouTube app.
+- Patch works while it's open on screen; in the background Android pauses it, so it doesn't use your battery.
+- It needs Android 7 or newer, and it only scans WiFi (never the mobile-data network).
+- Each new version is signed afresh, so to update, uninstall Patch and install the new one. You'll add your ElevenLabs key and connect your TVs again.
+
+### Opening a computer's Patch from another phone or tablet
 
 Start with `npm run lan` (or tick the option in Settings and restart). Patch prints an address like `http://192.168.1.23:4545` and a 6-digit access code. Browsers only allow the microphone on secure (HTTPS) pages or on the computer itself, so on phones you can use the dashboard and type to Patch, and talk to it on the computer.
 
@@ -129,12 +144,16 @@ patch/
   public/               dashboard (app.js) and voice panel (voice.js): plain ES modules, no build step
   sim/                  simulated home network used by demo mode and tests
   agent/prompt.md       the agent's system prompt (kept in sync with ElevenLabs)
+  android/              the Android app: a WebView plus Node.js for Android running server.mjs
+  src/platform.mjs      computer or phone: what the Android app passes in, "this phone", links via the app
   test/                 node:test suites
 ```
 
-`npm test` runs 48 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes and the server's security checks.
+`npm test` runs 53 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes, the server's security checks, and running inside the phone app.
 
 **Adding a device type:** create `src/drivers/<name>.mjs` exporting `{ id, detect(host, ctx), refresh(device, ctx), act(device, action, value, ctx) }`, use action names from `src/drivers/common.mjs`, register it in `src/drivers/index.mjs`, and add a simulated device in `sim/` with a test.
+
+**The Android app** (`android/`): a small Java app that runs Patch's own server on Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile), Node 18) and shows the dashboard in a WebView. A tiny JNI bridge (`app/src/main/cpp`) starts Node and sends its output to logcat (`adb logcat -s Patch`). The app passes in what Android hides from programs (WiFi address, router, DNS servers, the phone's name) as `PATCH_*` variables and keeps `network.json` current as the phone changes networks. Pages and videos for "this phone" reach the dashboard as an `open-url` event, and it calls `window.PatchAndroid.openUrl`. The workflow `.github/workflows/patch-android.yml` runs the tests on Node 18, builds the APK, tries it on an Android 14 emulator (server, scan, dashboard and links, through Chrome DevTools) and publishes it. To build it yourself, you need the Android SDK and NDK. Run `npm ci` and `node android/prepare-assets.mjs`, unzip nodejs-mobile's Android build into `android/app/libnode`, then run `gradle -p android :app:assembleRelease`. To let new versions install over old ones, give the workflow a signing key as the `PATCH_KEYSTORE_B64` and `PATCH_KEYSTORE_PASSWORD` repository secrets.
 
 **The ElevenLabs agent:** `agent_3201m7wq24r6eq39fk3eq5w5fmf2` ("Patch - Home Network Voice Assistant"): Claude Haiku 5.5, voice "Danny – Calm, Clear & Helpful", the ten client tools above, and fourteen attached behaviour tests (including channels, YouTube search and pick, web search on this computer, TV pairing and describing devices exactly). If you change a tool's name or parameters in `public/voice.js`, change the matching tool in ElevenLabs too.
 

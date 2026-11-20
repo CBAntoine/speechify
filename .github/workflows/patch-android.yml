@@ -39,13 +39,19 @@ jobs:
       - name: Install
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      # The simulated home network serves web pages on port 80, like real devices do.
+      - name: Let tests use low port numbers
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=0
+
       - name: Run every test file
         run: |
+          failed=""
           for f in test/*.test.mjs; do
             echo "::group::$f"
-            node --test "$f"
+            node --test "$f" || failed="$failed $f"
             echo "::endgroup::"
           done
+          if [ -n "$failed" ]; then echo "Failed:$failed"; exit 1; fi
 
   android:
     name: Build the app and try it in an Android emulator
@@ -80,10 +86,8 @@ jobs:
           unzip -q nodejs-mobile.zip -d patch/android/app/libnode
           ls -la patch/android/app/libnode/bin/*
 
-      - name: Use the newest Android NDK on this machine
-        run: |
-          echo "NDK: $ANDROID_NDK_LATEST_HOME"
-          echo "ANDROID_NDK_HOME_FOR_PATCH=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: Android NDKs on this machine
+        run: ls "$ANDROID_HOME/ndk" || true
 
       - name: Build the test app (for the emulator)
         working-directory: patch/android
@@ -91,7 +95,7 @@ jobs:
           PATCH_VERSION_CODE: ${{ github.run_number }}
           PATCH_VERSION_NAME: 1.0.${{ github.run_number }}
         run: |
-          gradle --no-daemon --stacktrace :app:assembleRelease -PpatchAbis=x86_64 -PpatchDebugWebView=true
+          gradle --no-daemon :app:assembleRelease -PpatchAbis=x86_64 -PpatchDebugWebView=true
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/patch-test-x86_64.apk"
 
@@ -113,7 +117,7 @@ jobs:
             keytool -genkeypair -keystore "$PATCH_KEYSTORE" -storepass "$PATCH_KEYSTORE_PASSWORD" -alias patch \
               -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Patch"
           fi
-          gradle --no-daemon --stacktrace :app:assembleRelease -PpatchAbis=arm64-v8a,armeabi-v7a
+          gradle --no-daemon :app:assembleRelease -PpatchAbis=arm64-v8a,armeabi-v7a
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/Patch.apk"
           ls -la "$GITHUB_WORKSPACE/out"
 
