@@ -389,7 +389,6 @@ code {
   height: var(--nav-h);
   background: rgba(7, 7, 13, 0.72);
   backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   border-bottom: 1px solid var(--line);
 }
 .site-header__inner {
@@ -572,7 +571,9 @@ code {
     right: 6px;
   }
 }
-.map-canvas .maplibregl-ctrl-attrib {
+/* .maplibregl-ctrl adds specificity: maplibre-gl.css loads after this file and
+   would otherwise paint the plain-text parts of the credits black. */
+.map-canvas .maplibregl-ctrl.maplibregl-ctrl-attrib {
   background: rgba(5, 8, 16, 0.72) !important;
   color: var(--text-3);
   font-size: 10.5px;
@@ -786,7 +787,6 @@ code {
   background: var(--surface);
   border: 1px solid var(--line);
   backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -1479,7 +1479,6 @@ a.ticker__item:hover {
   border: 1px solid rgba(255, 79, 154, 0.22);
   box-shadow: 0 0 60px rgba(255, 79, 154, 0.12), var(--shadow);
   backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   overflow: hidden;
   opacity: 0;
   visibility: hidden;
@@ -2442,6 +2441,28 @@ a.tip-card__src:hover {
     width: auto;
     transform: translateY(20px);
   }
+  .voice-panel__head {
+    padding: 10px 8px 10px 14px;
+    gap: 10px;
+  }
+  .voice-panel .orb {
+    width: 36px;
+    height: 36px;
+  }
+  .voice-panel__controls {
+    padding-top: 10px;
+  }
+  .voice-panel .mic-btn {
+    height: 46px;
+  }
+  .voice-panel .round-btn {
+    width: 46px;
+    height: 46px;
+  }
+  /* Once a conversation starts, the transcript needs the room more than the fine print. */
+  .voice-panel:has(.line, .voice-notice) .voice-panel__fine {
+    display: none;
+  }
   .voice-panel .voice-intro p {
     font-size: 14px;
   }
@@ -2532,7 +2553,6 @@ a.tip-card__src:hover {
   border-radius: var(--r);
   box-shadow: var(--shadow);
   backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   padding: 14px 16px 12px;
   font-family: var(--font-body);
 }
@@ -2715,7 +2735,6 @@ a.tip-card__src:hover {
   border-radius: var(--r);
   box-shadow: var(--shadow);
   backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
   padding: 12px 14px;
 }
 .route-card__head {
