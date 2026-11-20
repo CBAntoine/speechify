@@ -76,11 +76,29 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
-      - name: Copy Patch's server and dashboard into the app
+      - name: Build the TV app template
         working-directory: patch
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          node android/prepare-assets.mjs
+          (cd android && gradle --no-daemon :tvapp:assembleRelease)
+          mkdir -p tvapp "$GITHUB_WORKSPACE/out"
+          cp android/tvapp/build/outputs/apk/release/tvapp-release.apk tvapp/template.apk
+          cp tvapp/template.apk "$GITHUB_WORKSPACE/out/PatchTVApp.apk"
+
+      - name: Check TV apps made by Patch with Android's own tools
+        working-directory: patch
+        run: |
+          node android/ci/make-tvapps.mjs tvapp/template.apk "$GITHUB_WORKSPACE/out"
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          for f in tvapp-notes.apk tvapp-notes-v2.apk tvapp-quiz.apk; do
+            echo "── $f"
+            "$BT/apksigner" verify --verbose --min-sdk-version 21 "$GITHUB_WORKSPACE/out/$f" | grep -E "^(Verifies|Verified using v[12])"
+            "$BT/aapt2" dump badging "$GITHUB_WORKSPACE/out/$f" | grep -E "^(package|application-label|leanback-launchable-activity|sdkVersion|targetSdkVersion)"
+          done
+
+      - name: Copy Patch's server and dashboard into the app
+        working-directory: patch
+        run: node android/prepare-assets.mjs
 
       - name: Download Node.js for Android
         run: |
@@ -168,8 +186,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete patch-android --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create patch-android out/Patch.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+          gh release create patch-android out/Patch.apk out/PatchTVApp.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Patch for Android" \
             --notes "Patch running on your Android phone: it finds everything on your Wi-Fi and runs your TVs, lights and plugs, by voice or by typing.
 
-          To install: on your phone, tap Patch.apk below to download it, open it, and allow installing if Android asks. Needs Android 7 or newer. Built from ${GITHUB_SHA::7}."
+          To install: on your phone, tap Patch.apk below to download it, open it, and allow installing if Android asks. Needs Android 7 or newer. Built from ${GITHUB_SHA::7}.
+
+          PatchTVApp.apk is the template Patch makes your own TV apps from. You don't need to install it: Patch on a computer downloads it when you make a TV app."

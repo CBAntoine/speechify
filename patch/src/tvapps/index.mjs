@@ -111,6 +111,7 @@ export class TvApps {
   publicApp(a) {
     return {
       id: a.id,
+      package: a.package,
       name: a.name,
       kind: a.kind,
       kindLabel: KINDS[a.kind].label,

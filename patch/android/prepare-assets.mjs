@@ -8,8 +8,9 @@ import { fileURLToPath } from "node:url";
 
 const PATCH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(PATCH, "android/app/src/main/assets/patch");
-// What the phone needs: the server, the dashboard, and the ElevenLabs voice library (one file).
-const ITEMS = ["server.mjs", "package.json", "src", "public", "node_modules/@elevenlabs/client/dist/lib.iife.js", "node_modules/@elevenlabs/client/LICENSE"];
+// What the phone needs: the server, the dashboard, the ElevenLabs voice library (one file), and the
+// template Patch makes TV apps from (tvapp/template.apk, built first by the Android build).
+const ITEMS = ["server.mjs", "package.json", "src", "public", "tvapp/template.apk", "node_modules/@elevenlabs/client/dist/lib.iife.js", "node_modules/@elevenlabs/client/LICENSE"];
 
 const sdk = path.join(PATCH, "node_modules/@elevenlabs/client/dist/lib.iife.js");
 if (!fs.existsSync(sdk)) {
@@ -34,6 +35,7 @@ const copy = (rel) => {
   files++;
 };
 ITEMS.forEach(copy);
+if (!fs.existsSync(path.join(PATCH, "tvapp/template.apk"))) console.warn("No TV app template (tvapp/template.apk): TV apps will download it when first made.");
 
 const version = hash.digest("hex").slice(0, 16);
 fs.writeFileSync(path.join(OUT, "version.txt"), `${version}\n`);

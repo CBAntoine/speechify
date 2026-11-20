@@ -3,3 +3,6 @@
 .data-demo/
 .env
 node_modules/
+
+# The TV app template, built by the Android build (see android/tvapp).
+/tvapp/*.apk

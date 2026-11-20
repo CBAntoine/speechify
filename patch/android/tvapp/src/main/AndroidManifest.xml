@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The label, app id and version are placeholders: Patch writes each TV app's own (src/apk/index.mjs). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- A TV app that also opens on phones and tablets. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!-- App shortcuts list and open the TV's other apps; videos open in its YouTube app. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:banner="@drawable/banner"
+        android:hardwareAccelerated="true"
+        android:icon="@drawable/icon"
+        android:label="Patch TV app template"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+        android:usesCleartextTraffic="true"
+        tools:ignore="HardcodedText,GoogleAppIndexingWarning">
+        <activity
+            android:name=".AppActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
