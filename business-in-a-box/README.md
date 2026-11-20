@@ -31,6 +31,7 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 - [ ] Leads: 15 of 20 merged into `leads/leads.csv` (9 ready, 3 need contact details, 3 on hold). Remaining email lookups and 5 more venues wait for the Firecrawl daily reset.
 - [x] UGC videos: two faceless versions with ElevenLabs voiceover in `video/`
 - [x] Landing page with fee calculator in `site/` (set the booking link before publishing)
+- [x] Outreach sequence complete in `02` (emails 1–3, voicemail, call openers, CAN-SPAM rules). Personalised drafts for the 9 ready leads are in `leads/outreach-drafts.md` (git-ignored, not sent).
 
 ## Facts used, all checked 2026-11-20
 
