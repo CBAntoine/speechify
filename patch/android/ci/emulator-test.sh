@@ -10,7 +10,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PKG=app.patch.home
 BASE=http://127.0.0.1:4545
 
-patch_log() { adb logcat -d -s Patch:V AndroidRuntime:E DEBUG:V libc:F | tail -n "${1:-200}"; }
+# The emulator's graphics driver also writes to the app's output; leave its chatter out.
+patch_log() { adb logcat -d -s Patch:V AndroidRuntime:E DEBUG:V libc:F | grep -v -E "s_gl|glUtils|EGL|Vulkan|eglMakeCurrent" | tail -n "${1:-200}"; }
 fail() {
   echo "FAILED: $*"
   echo "---- Patch's log ----"

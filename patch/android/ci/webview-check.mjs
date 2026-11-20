@@ -1,6 +1,6 @@
 // Looks inside Patch's screen on the emulator through Chrome DevTools (test builds only): the dashboard
 // loads without script errors, lists this phone, opens a device's panel, and the back button closes it.
-// Saves small screenshots, and prints them into the build log (base64 between PATCH_SHOT markers).
+// Saves small screenshots next to the other test results.
 // Usage: node webview-check.mjs <folder for results>   (with the WebView's DevTools forwarded to port 9222)
 import fs from "node:fs";
 import path from "node:path";
@@ -54,9 +54,7 @@ const shot = async (name) => {
   const { w, h, dpr } = await run("({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio })");
   const { data } = await send("Page.captureScreenshot", { format: "jpeg", quality: 62, clip: { x: 0, y: 0, width: w, height: h, scale: 1 / dpr } });
   fs.writeFileSync(path.join(out, `${name}.jpg`), Buffer.from(data, "base64"));
-  console.log(`PATCH_SHOT_BEGIN ${name}`);
-  for (let i = 0; i < data.length; i += 4000) console.log(data.slice(i, i + 4000));
-  console.log(`PATCH_SHOT_END ${name}`);
+  console.log(`Screenshot: ${name}.jpg`);
 };
 
 await send("Runtime.enable");
