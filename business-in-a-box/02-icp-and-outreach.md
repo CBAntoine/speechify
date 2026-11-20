@@ -10,7 +10,7 @@ An independent, owner-run, general-admission venue in Austin, Nashville, Chicago
 |---|---|---|---|
 | 1 | Sells tickets through **Eventbrite** | This is the proof of pain. Self-serve Eventbrite venues get no fee rebates, so every buyer fee leaves the building. | An eventbrite.com link on the venue's own site (saved as evidence) |
 | 2 | **4.4+ stars and 300+ Google reviews** | Shows there are regulars and a real crowd, not a hobby room | Google Maps data |
-| 3 | **2+ ticketed shows a week** | Marquee earns per ticket. We only onboard venues selling 400+ tickets a month, and target 800+. | Upcoming events on their calendar or Eventbrite organiser page |
+| 3 | **2+ ticketed shows a week** | Doorkeep earns per ticket. We only onboard venues selling 400+ tickets a month, and target 800+. | Upcoming events on their calendar or Eventbrite organiser page |
 | 4 | **General admission** | Reserved seating needs the paid Hi.Events Enterprise licence | Seat maps on their ticket pages |
 | 5 | **Independent, owner-operated** | One person can say yes. No corporate procurement and no exclusive ticketing contract. | Not a chain or group with 3+ locations |
 
@@ -71,7 +71,7 @@ These are starting assumptions to test. Log every dial with its hour and adjust 
 - **Instagram DM:** venues live on Instagram. Send a short note pointing at the email after the first email bounces or goes unanswered.
 - **In person:** a weekday afternoon drop-in with a printed "fee receipt" for one of their real shows converts far better than cold email in nightlife.
 
-**Cadence (10 business days):** D1 email → D2 call → D4 Instagram DM → D6 call + email 2 (their personal fee maths) → D10 breakup email.
+**Cadence (10 business days):** D1 email → D2 call → D4 Instagram DM → D6 call + email 2 (their personal fee numbers) → D10 breakup email.
 
 ## First-touch scripts
 
@@ -82,16 +82,16 @@ These are starting assumptions to test. Log every dial with its hour and adjust 
 >
 > I set up branded box offices for independent venues: your domain, your Stripe account, one all-in price that's still lower for your fans. You keep about $1.05 a ticket, roughly $[X]k a year at your volume. No monthly fee: I earn 75¢ only when you sell. Live in 7 days.
 >
-> Want me to run the maths on your last month of shows? Takes 10 minutes.
+> Want me to run the numbers on your last month of shows? Takes 10 minutes.
 >
-> — [Name], Marquee
+> — [Name], Doorkeep
 
 **Cold-call opener (under 20 seconds)**
-> "Hi [First name], it's [Name] with Marquee. I'll be quick because I know doors are later. I help rooms like [Venue] sell tickets on their own site and keep the booking fee Eventbrite is collecting now. No monthly fee, and for a room your size it's usually five figures a year. Worth ten minutes on Thursday to see your own numbers?"
+> "Hi [First name], it's [Name] with Doorkeep. I'll be quick because I know doors are later. I help rooms like [Venue] sell tickets on their own site and keep the booking fee Eventbrite is collecting now. No monthly fee, and for a room your size it's usually five figures a year. Worth ten minutes on Thursday to see your own numbers?"
 
 **Instagram DM**
-> "Love what you're booking at [Venue]. Sent [First name] a quick email about keeping your ticket fees instead of Eventbrite. Happy to share the maths here if that's easier."
+> "Love what you're booking at [Venue]. Sent [First name] a quick email about keeping your ticket fees instead of Eventbrite. Happy to share the numbers here if that's easier."
 
 ## What to measure
 
-Dials → connects → conversations → fee-maths calls booked → venues live. Track connect rate by hour, so the calling window above gets replaced with real data after the first 50 dials.
+Dials → connects → conversations → fee-check calls booked → venues live. Track connect rate by hour, so the calling window above gets replaced with real data after the first 50 dials.

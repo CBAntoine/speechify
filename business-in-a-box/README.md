@@ -1,6 +1,6 @@
-# Business in a box: Marquee
+# Business in a box: Doorkeep
 
-A done-for-you ticketing business for independent US venues, built on the open-source [Hi.Events](https://github.com/HiEventsDev/Hi.Events) platform. Marquee gives a venue its own branded box office, so it stops sending fans through Eventbrite and keeps its own booking fee. There's no monthly fee: Marquee earns 75¢ per paid ticket (50¢ under $20), built into an all-in price that's still lower for fans.
+A done-for-you ticketing business for independent US venues, built on the open-source [Hi.Events](https://github.com/HiEventsDev/Hi.Events) platform. Doorkeep gives a venue its own branded box office, so it stops sending fans through Eventbrite and keeps its own booking fee. There's no monthly fee: Doorkeep earns 75¢ per paid ticket (50¢ under $20), built into an all-in price that's still lower for fans.
 
 This follows the "business in a box" process: offer ideas → niche and ICP → offer brief and style guide → verified leads → creatives, with an approval checkpoint between stages.
 

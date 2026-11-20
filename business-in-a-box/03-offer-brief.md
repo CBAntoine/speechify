@@ -1,9 +1,9 @@
-# 03 · Offer brief: Marquee
+# 03 · Offer brief: Doorkeep
 
-> **Marquee: own the door.**
+> **Doorkeep: own the door.**
 > A branded box office on your own website. Your Stripe account, your customer list, one honest all-in price, and a booking fee you keep. **No monthly fee:** we earn 75¢ only when you sell, and your fans still pay less than on the big ticket sites. Live in 7 days.
 
-*"Marquee" is a working brand name. Run a USPTO trademark search before buying a domain or printing anything.*
+*"Doorkeep" replaced the earlier working name "Marquee", which has 33 live US trademarks (see `07-getting-started.md`). A USPTO knockout search on 2026-11-20 found no live marks for Doorkeep or Doorkeeper in classes 9, 35, 41 or 42. That's a screen, not clearance: have a trademark attorney clear it before filing, and confirm the domain at a registrar.*
 
 ## What the venue gets
 
@@ -40,16 +40,16 @@ How the fan's price is built for a $25 show: face value $25.00, plus a booking f
 
 ## The ROI maths (per venue)
 
-Assumptions: $25 average ticket, 2 tickets per order, a $2.75 booking fee ($2.00 venue + 75¢ Marquee) inside a $27.75 all-in price, and Stripe US at 2.9% + 30¢ per order. Source rates: Eventbrite US 3.7% + $1.79 per ticket plus 2.9% processing; Stripe 2.9% + 30¢. Both checked 2026-11-20.
+Assumptions: $25 average ticket, 2 tickets per order, a $2.75 booking fee ($2.00 venue + 75¢ Doorkeep) inside a $27.75 all-in price, and Stripe US at 2.9% + 30¢ per order. Source rates: Eventbrite US 3.7% + $1.79 per ticket plus 2.9% processing; Stripe 2.9% + 30¢. Both checked 2026-11-20.
 
 **Per ticket today (Eventbrite, fees passed to the fan):** the fan pays $28.54, of which **$3.54 is fees**. The venue keeps **$0** of it.
 
-**Per ticket with Marquee:**
+**Per ticket with Doorkeep:**
 - Fan pays $27.75 all-in, **79¢ less** than on Eventbrite.
-- Stripe takes about 95¢ and Marquee takes 75¢.
+- Stripe takes about 95¢ and Doorkeep takes 75¢.
 - Venue keeps **$1.05 per ticket**, with no monthly fee.
 
-| Tickets/week | Tickets/yr | Venue keeps/yr | Marquee earns/yr |
+| Tickets/week | Tickets/yr | Venue keeps/yr | Doorkeep earns/yr |
 |---|---|---|---|
 | 100 | 5,200 | $5,435 | $3,900 |
 | 200 | 10,400 | $10,871 | $7,800 |
@@ -59,7 +59,7 @@ Assumptions: $25 average ticket, 2 tickets per order, a $2.75 booking fee ($2.00
 
 **Fans pay less than on Eventbrite at every price checked:** $12, $15, $20, $25 and $40 tickets. At $40+ the venue should raise its own fee to $3 (see `06-most-profitable-route.md`).
 
-**If the venue absorbs Eventbrite's fees today:** at 300 tickets/week it pays about $53.7k/yr. With Marquee and no fee added for fans, it pays only Stripe plus our 75¢, about $25.4k/yr, **saving about $28.3k/yr**.
+**If the venue absorbs Eventbrite's fees today:** at 300 tickets/week it pays about $53.7k/yr. With Doorkeep and no fee added for fans, it pays only Stripe plus our 75¢, about $25.4k/yr, **saving about $28.3k/yr**.
 
 Recompute with each venue's own prices and volume before quoting: `python3 tools/roi.py` (inputs at the top of the file).
 
@@ -80,14 +80,14 @@ Recompute with each venue's own prices and volume before quoting: `python3 tools
 - **One Hi.Events install per venue** (all-in-one Docker image) on a small dedicated server, so one venue's Friday never touches another's. Keeping one install per venue also avoids Hi.Events' platform licence for multi-organiser installs (see `06-most-profitable-route.md`).
 - **Transactional email** through an email provider (a Resend connector is already available in this workspace).
 - **Nightly off-server backups** and **uptime monitoring** with alerts to the operator's phone.
-- **Usage billing:** a monthly job reads paid-ticket counts from each install (reports or REST API) and invoices through Stripe Billing on Marquee's own account.
-- **Estimated cost per venue:** $30–60/mo in server, email and backups. At 300 tickets/week Marquee earns about $975/mo per venue, so **about 95% gross margin**. Price the real stack before launch.
+- **Usage billing:** a monthly job reads paid-ticket counts from each install (reports or REST API) and invoices through Stripe Billing on Doorkeep's own account.
+- **Estimated cost per venue:** $30–60/mo in server, email and backups. At 300 tickets/week Doorkeep earns about $975/mo per venue, so **about 95% gross margin**. Price the real stack before launch.
 
 ## Compliance and licence obligations
 
 - **FTC Rule on Unfair or Deceptive Fees** (in force since May 12, 2025): live-event ticket prices must show the total price, mandatory fees included, upfront. Configure every venue for all-in display. Our 75¢ is part of the booking fee inside that price.
 - **Hi.Events AGPL-3.0 extra terms:** keep the "Powered by Hi.Events" link on public pages and emails, and publish any code changes. One organiser per install. **Get written confirmation from licence@hi.events that managed single-venue installs are fine on the free edition before the first paid venue.**
-- **Payments:** card payments run through Stripe on the venue's own account. The venue is the merchant of record and handles its own refunds and disputes. Marquee invoices only its own per-ticket fee.
+- **Payments:** card payments run through Stripe on the venue's own account. The venue is the merchant of record and handles its own refunds and disputes. Doorkeep invoices only its own per-ticket fee.
 - **No fake social proof:** testimonials and case studies only from real, consenting venues (FTC rule on consumer reviews and testimonials).
 
 ## Risks to manage
@@ -95,7 +95,7 @@ Recompute with each venue's own prices and volume before quoting: `python3 tools
 | Risk | Mitigation |
 |---|---|
 | Outage during a Friday on-sale | Server per venue, monitoring, a runbook, and a fallback "sold at the door" plan |
-| Venue loses Eventbrite marketplace discovery | Keep 1–2 discovery listings on Eventbrite; move regulars and own promotion to Marquee |
+| Venue loses Eventbrite marketplace discovery | Keep 1–2 discovery listings on Eventbrite; move regulars and own promotion to Doorkeep |
 | Chargebacks surprise the venue | Explain at kickoff; turn on Stripe Radar and clear refund-policy text |
 | Unpaid usage invoices | Card on file, charged automatically on the 1st; pause new on-sales after a failed payment |
 | Big venues prefer to raise their own fee and pay us flat | The monthly-cap lever, used only when pushed |

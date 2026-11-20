@@ -19,7 +19,7 @@ All figures come from `tools/route_model.py`: $25 tickets, 2 per order, a $2.00 
 
 ## 1. Pricing: per ticket beats flat at every venue size
 
-| Model | Tickets/wk | Fan pays | Fan saves vs Eventbrite | Marquee revenue/yr | Venue net gain/yr |
+| Model | Tickets/wk | Fan pays | Fan saves vs Eventbrite | Doorkeep revenue/yr | Venue net gain/yr |
 |---|---|---|---|---|---|
 | Flat $249/$449 | 100 | $27.00 | $1.54 | $2,988 | $2,560 |
 | Flat $249/$449 | 300 | $27.00 | $1.54 | $2,988 | $13,657 |
@@ -35,7 +35,7 @@ All figures come from `tools/route_model.py`: $25 tickets, 2 per order, a $2.00 
 
 **Fans still pay less at every price we checked** (venue fee $2.00, our fee 50¢ under $20 and 75¢ from $20):
 
-| Ticket | Eventbrite fee | Marquee all-in fee | Fan saves | Venue keeps |
+| Ticket | Eventbrite fee | Doorkeep all-in fee | Fan saves | Venue keeps |
 |---|---|---|---|---|
 | $12 | $2.66 | $2.50 | $0.16 | $1.43 |
 | $15 | $2.86 | $2.50 | $0.36 | $1.34 |
@@ -50,7 +50,7 @@ At $40+ tickets the venue should raise its own fee to $3. That's still well unde
 ## 2. Delivery: one install per venue, never a shared platform
 
 - **A shared install for several venues** needs the Hi.Events platform licence. It starts at €3,999/yr, is about 2% of sales at €200k and falls to 1% at €3M ([hi.events/licensing](https://hi.events/licensing)). At 24 venues that's **at least €30k/yr**, and sales above €3M are priced by quote.
-- **One install per venue** on the free AGPL edition costs **€0 in licences**. Keep the "Powered by Hi.Events" link and publish any code changes. Each venue is the merchant of record on its own Stripe account, so Marquee never holds anyone's money.
+- **One install per venue** on the free AGPL edition costs **€0 in licences**. Keep the "Powered by Hi.Events" link and publish any code changes. Each venue is the merchant of record on its own Stripe account, so Doorkeep never holds anyone's money.
 - **Trade-off:** automatic per-sale platform fees are a feature of the platform licence. So we bill usage monthly: count paid tickets per install through the Hi.Events reports or REST API, then charge the card on file with Stripe Billing.
 - **Before launch:** get written confirmation from licence@hi.events that managed single-venue installs on the free edition are fine. The licensing FAQ covers multi-organiser installs but doesn't mention agencies running separate installs.
 
@@ -69,7 +69,7 @@ Under per-ticket pricing, profit scales with volume. An 800-tickets/week room is
 2. **Nightly listening rooms and jazz clubs**
 3. **Music bars with 2–4 ticketed nights**
 
-Lead lists get `est_tickets_week` and `est_marquee_revenue` columns, and the call list is sorted by them.
+Lead lists get `est_tickets_week` and `est_doorkeep_revenue` columns, and the call list is sorted by them.
 
 ## 4. The upsell that compounds: "Fill the Room"
 

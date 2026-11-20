@@ -1,4 +1,4 @@
-# Marquee route model: compares pricing models per venue and a 12-month founder scenario.
+# Doorkeep route model: compares pricing models per venue and a 12-month founder scenario.
 # Run: python3 route_model.py
 P, TPO = 25.00, 2                      # avg ticket face value, tickets per order
 ST_PCT, ST_FIX = 0.029, 0.30           # Stripe US per order
@@ -42,7 +42,7 @@ models = [("Flat $249/$449 mo", flat),
           ("$0.50/ticket", lambda tw: per_ticket(tw, 0.50)),
           ("$0.75/ticket", lambda tw: per_ticket(tw, 0.75)),
           ("$1.00/ticket", lambda tw: per_ticket(tw, 1.00))]
-print("| Model | Tickets/wk | Fan pays | Fan saves vs EB | Marquee revenue/yr | Marquee profit/yr | Venue net gain/yr |")
+print("| Model | Tickets/wk | Fan pays | Fan saves vs EB | Doorkeep revenue/yr | Doorkeep profit/yr | Venue net gain/yr |")
 print("|---|---|---|---|---|---|---|")
 for name, fn in models:
     for tw in (100, 300, 800):
@@ -66,12 +66,12 @@ print(f"\nShared install for 24 venues: GMV ${gmv_usd:,.0f}/yr -> platform licen
 # --- Check 1: does the fan still pay less than Eventbrite at every ticket price? ---
 def eb_fee(p):
     return (p * (1 + EB_PCT) + EB_FIX) / (1 - EB_PROC) - p
-print("\nFan fee vs Eventbrite by ticket price (venue fee $2.00; Marquee 50c under $20, 75c from $20):")
+print("\nFan fee vs Eventbrite by ticket price (venue fee $2.00; Doorkeep 50c under $20, 75c from $20):")
 for p in (12, 15, 20, 25, 40):
     ours = 0.50 if p < 20 else 0.75
     fan_fee = 2.00 + ours
     stripe = (ST_PCT * (p + fan_fee) * TPO + ST_FIX) / TPO
-    print(f"  ${p:>2} ticket: Eventbrite fee ${eb_fee(p):.2f} | Marquee all-in fee ${fan_fee:.2f} "
+    print(f"  ${p:>2} ticket: Eventbrite fee ${eb_fee(p):.2f} | Doorkeep all-in fee ${fan_fee:.2f} "
           f"(fan saves ${eb_fee(p) - fan_fee:.2f}) | venue keeps ${fan_fee - stripe - ours:.2f}/ticket")
 
 # --- Check 2: licence downside per venue at 300 tickets/week ---
