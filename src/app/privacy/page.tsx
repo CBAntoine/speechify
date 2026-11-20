@@ -30,6 +30,10 @@ export default function Privacy() {
             manage ad personalisation in your Google settings. Where required, we&apos;ll ask for consent first.
           </li>
           <li>
+            <strong>Visitor statistics:</strong> we count page views with Vercel Web Analytics, which uses no cookies and
+            doesn&apos;t identify you across sites.
+          </li>
+          <li>
             <strong>Affiliate links:</strong> retailers such as Amazon may set cookies when you click a product link, so they
             can attribute purchases to us.
           </li>

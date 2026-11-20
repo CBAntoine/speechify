@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/unbounded";
 import "@fontsource-variable/jetbrains-mono";
@@ -72,6 +73,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${PUBLIC_CONFIG.adsenseClient}`}
           />
         )}
+        {/* Cookie-free visitor counts; switch on under Analytics in the Vercel project. */}
+        <Analytics />
       </body>
     </html>
   );
