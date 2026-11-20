@@ -460,7 +460,7 @@ function controlsHtml(d) {
   if (has(d, "search_youtube"))
     rows.push(`<div class="control-row" style="display:block"><label>YouTube</label><form class="inline-form" data-form="search_youtube" data-id="${id}"><input name="value" placeholder="Search YouTube on ${esc(d.self ? "this computer" : "this TV")}"><button class="btn btn--sm">${icon("search", 14)} Search</button></form><div class="yt-results" id="ytResults">${ytResultsHtml(d.id)}</div></div>`);
   if (has(d, "web_search"))
-    rows.push(`<div class="control-row"><label>Web</label><form class="inline-form" data-form="web_search" data-id="${id}"><input name="value" placeholder="Search the internet${d.self ? "" : " on the TV"}"><button class="btn btn--sm">Search</button></form></div>`);
+    rows.push(`<div class="control-row"><label>Web</label><form class="inline-form" data-form="web_search" data-id="${id}"><input name="value" placeholder="Search the web"><button class="btn btn--sm">Search</button></form></div>`);
   if (has(d, "open_website")) rows.push(`<div class="control-row"><label>Website</label><form class="inline-form" data-form="open_website" data-id="${id}"><input name="value" placeholder="e.g. bbc.co.uk"><button class="btn btn--sm">Open</button></form></div>`);
   if (has(d, "type_text")) rows.push(`<div class="control-row"><label>Type</label><form class="inline-form" data-form="type_text" data-id="${id}"><input name="value" placeholder="Types into the box open on the TV"><button class="btn btn--sm">Type</button></form></div>`);
   if (has(d, "search")) rows.push(`<div class="control-row"><label>Search</label><form class="inline-form" data-form="search" data-id="${id}"><input name="value" placeholder="A show or movie"><button class="btn btn--sm">Search</button></form></div>`);
