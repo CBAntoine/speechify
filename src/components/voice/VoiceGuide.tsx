@@ -29,10 +29,10 @@ type SessionResponse =
   | { ok: false; error: "quota" | "unconfigured" | "upstream"; message: string; tier?: "free" | "crew"; limit?: number };
 
 const QUICK_PROMPTS = [
-  "What's new in Leonida today?",
-  "Show me every confirmed Easter egg",
   "Where's the egg nest?",
-  "Best tips for early money",
+  "Zoom into Ocean Drive",
+  "Route me from the egg nest to the rooftop sweep",
+  "What's new in Leonida today?",
 ];
 
 export default function VoiceGuide() {

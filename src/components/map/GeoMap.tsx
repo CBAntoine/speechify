@@ -7,7 +7,7 @@ import { CATEGORIES, GEO, LOCATIONS, REGIONS, isPlaced, locationById, regionById
 import { mapStore, type MapState } from "@/lib/map-store";
 import { CATEGORY_GLYPHS } from "@/components/icons";
 import { STREET_MAX_ZOOM, STREET_TILES_URL, addStreetLayers, buildStyle, removeStreetLayers } from "./map-style";
-import { locationPopup, placePopup } from "./popups";
+import { locationPopup, placePopup, regionPopup } from "./popups";
 import { bboxOf } from "@/lib/geo-utils";
 import { drawRoute, previousFocus, trackFocus } from "@/lib/spots";
 
@@ -53,8 +53,11 @@ function layoutInsets(container: HTMLElement, opts: { popup?: boolean } = {}) {
     return clampInsets({ left, right, top: 40 + popupRoom, bottom: 80 + (route ? ROUTE_CARD_H : 0) }, container);
   }
   const sheetH = mapStore.get().sheetOpen ? Math.round(container.clientHeight * SHEET_OPEN) : SHEET_COLLAPSED;
+  // While talking, Sol's drawer covers the bottom of the map: frame the spot above it.
+  const drawer = voiceOpen ? (container.closest(".explorer")?.querySelector<HTMLElement>(".voice-panel")?.offsetHeight ?? 0) : 0;
   return clampInsets(
-    { left: 16, right: 16, top: 64 + (route ? ROUTE_CARD_H - 40 : 0) + (opts.popup ? 190 : 0), bottom: sheetH + 16 },
+    // right: clear of the map buttons, so a centred popup doesn't run under them
+    { left: 16, right: 64, top: 64 + (route ? ROUTE_CARD_H - 40 : 0) + (opts.popup ? 190 : 0), bottom: Math.max(sheetH, drawer) + 16 },
     container,
   );
 }
@@ -401,7 +404,7 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
               [w, s],
               [e, n],
             ],
-            fitOptions(),
+            { ...fitOptions(), padding: layoutInsets(container, { popup: true }) },
           );
           return;
         }
@@ -468,7 +471,13 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
             });
           }
         }
-        if (!prev || prev.selectedId !== s.selectedId || prev.place !== s.place || prev.popupNonce !== s.popupNonce) {
+        if (
+          !prev ||
+          prev.selectedId !== s.selectedId ||
+          prev.place !== s.place ||
+          prev.selectedRegion !== s.selectedRegion ||
+          prev.popupNonce !== s.popupNonce
+        ) {
           trackFocus(s);
           showPopup(s);
         }
@@ -536,10 +545,16 @@ export default function GeoMap({ cooperative = false, editMode = false }: Props)
         } else if (s.place) {
           at = [s.place.lng, s.place.lat];
           html = placePopup(s.place, { narrow: container.clientWidth < 700, from: previousFocus() });
+        } else if (s.selectedRegion) {
+          const r = regionById(s.selectedRegion);
+          if (r) {
+            at = r.label;
+            html = regionPopup(r, LOCATIONS.filter((l) => l.region === r.id), { narrow: container.clientWidth < 700 });
+          }
         }
         if (!at) return;
         const narrow = container.clientWidth < 1024;
-        const here = { name: loc?.name ?? s.place!.name, lng: at[0], lat: at[1], locationId: loc?.id };
+        const here = { name: loc?.name ?? s.place?.name ?? regionById(s.selectedRegion)?.name ?? "", lng: at[0], lat: at[1], locationId: loc?.id };
         // Phones: always above the spot, clear of the bottom sheet and the Ask Sol button.
         popup = new ml.Popup({ className: "na-popup na-popup--rich", offset: 26, maxWidth: "330px", focusAfterOpen: false, ...(narrow ? { anchor: "bottom" as const } : {}) })
           .setLngLat(at)

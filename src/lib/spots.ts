@@ -45,13 +45,23 @@ function strongPinMatch(q: string): MapLocation | undefined {
   return bestScore >= 0.99 || (bestScore >= 0.66 && qw.length >= 3) ? best : undefined;
 }
 
-function strictRegion(q: string): Region | undefined {
-  const n = norm(q);
-  return REGIONS.find((r) => {
-    const name = norm(r.name);
-    const short = norm(r.name.replace(/national park/i, ""));
-    return r.id === q || n === name || n === short || n === norm(r.id) || n.includes(name);
-  });
+/** Only an exact region name or id counts ("Vice City", "vice-city", "the Keys" style short names). */
+function exactRegion(q: string): Region | undefined {
+  const n = norm(q).replace(/^the /, "");
+  return REGIONS.find((r) =>
+    [r.id, r.name, r.short, r.name.replace(/national park/i, "")].some((v) => v && norm(v).replace(/^the /, "") === n),
+  );
+}
+
+/** "Ocean Drive, Vice City" → "Ocean Drive": in-game names mean nothing to a real-world geocoder. */
+function stripRegionNames(q: string): string {
+  let out = q;
+  for (const r of REGIONS) {
+    for (const v of [r.name, r.short]) {
+      if (v) out = out.replace(new RegExp(`\\b${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), " ");
+    }
+  }
+  return out.replace(/\s*,\s*(,\s*)*/g, ", ").replace(/^[\s,]+|[\s,]+$/g, "").replace(/\s{2,}/g, " ");
 }
 
 // ---------- Regions (point in polygon) and nearby pins ----------
@@ -146,13 +156,16 @@ export async function resolveSpot(raw: string): Promise<Spot> {
     return { ok: true, kind: "here", end: here };
   }
 
-  const byId = locationById(q) ?? strongPinMatch(q);
+  const byId = locationById(q);
   if (byId) return isPlaced(byId) ? pinSpot(byId) : { ok: false, reason: "unplaced", loc: byId };
 
-  const region = strictRegion(q);
+  const region = exactRegion(q);
   if (region) return { ok: true, kind: "region", region, end: { name: region.name, lng: region.label[0], lat: region.label[1] } };
 
-  const hit = await geocode(q);
+  const strong = strongPinMatch(q);
+  if (strong) return isPlaced(strong) ? pinSpot(strong) : { ok: false, reason: "unplaced", loc: strong };
+
+  const hit = await geocode(stripRegionNames(q) || q);
   if (hit && hit !== "unavailable") {
     const p: LngLat = [hit.lng, hit.lat];
     const place: PlaceFocus = {

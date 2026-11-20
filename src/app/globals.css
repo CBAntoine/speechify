@@ -2432,13 +2432,18 @@ a.tip-card__src:hover {
     opacity: 0;
     pointer-events: none;
   }
+  /* A drawer, not a full-screen sheet: the map stays visible while Sol flies it. */
   .voice-panel {
     left: 8px;
     right: 8px;
-    top: 8px;
+    top: auto;
     bottom: 8px;
+    height: min(48%, 420px);
     width: auto;
     transform: translateY(20px);
+  }
+  .voice-panel .voice-intro p {
+    font-size: 14px;
   }
   .explorer:has(.voice-panel.is-open) .map-tools {
     right: 12px;
@@ -2571,6 +2576,9 @@ a.tip-card__src:hover {
 .pop__title {
   font: 600 16px/1.25 var(--font-display);
   margin: 0 0 6px;
+}
+.pop--narrow {
+  width: min(296px, calc(100vw - 120px));
 }
 .pop--narrow .pop__text {
   display: -webkit-box;

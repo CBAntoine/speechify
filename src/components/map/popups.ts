@@ -1,6 +1,6 @@
 import { CATEGORIES, CONFIDENCE, gridRef, locationById, regionById } from "@/lib/data";
 import { formatDistance, haversineM } from "@/lib/geo-utils";
-import type { MapLocation } from "@/lib/types";
+import type { MapLocation, Region } from "@/lib/types";
 import type { PlaceFocus, RouteEnd } from "@/lib/map-store";
 
 /** Popup markup is built from our data and geocoder answers: escape everything. */
@@ -79,5 +79,22 @@ export function placePopup(place: PlaceFocus, opts: { narrow: boolean; from?: Ro
       : ""
   }
   <div class="pop__actions">${routeButton(opts.from, place)}</div>
+</div>`;
+}
+
+export function regionPopup(region: Region, pins: MapLocation[], opts: { narrow: boolean }) {
+  const top = pins.slice(0, opts.narrow ? 2 : 4);
+  return `<div class="pop${opts.narrow ? " pop--narrow" : ""}" style="--c:${region.color}">
+  <div class="pop__meta"><span class="pop__cat">Region</span><span class="pop__conf" style="--cc:${region.color}">${pins.length} ${pins.length === 1 ? "pin" : "pins"}</span></div>
+  <h3 class="pop__title">${esc(region.name)}</h3>
+  <p class="pop__text">${esc(region.tagline)}</p>
+  ${
+    top.length
+      ? `<ul class="pop__list">${top
+          .map((l) => `<li><button type="button" class="pop__link" data-act="pin" data-id="${esc(l.id)}">${esc(l.name)}</button><span>${esc(CONFIDENCE[l.confidence].label)}</span></li>`)
+          .join("")}</ul>`
+      : ""
+  }
+  <div class="pop__actions"><button type="button" class="pop__btn pop__btn--primary" data-act="guide">Region guide</button></div>
 </div>`;
 }

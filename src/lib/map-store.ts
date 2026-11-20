@@ -113,7 +113,8 @@ export const mapStore = {
       selectedRegion: id,
       selectedId: null,
       place: id ? null : state.place,
-      sheetOpen: id ? true : state.sheetOpen,
+      popupNonce: ++nonce,
+      sheetOpen: id && !isNarrow() ? true : state.sheetOpen,
       fly: id && opts.fly !== false ? { kind: "region", id, nonce: ++nonce } : state.fly,
     });
   },
