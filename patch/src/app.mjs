@@ -20,6 +20,7 @@ import { DEFAULT_AGENT_ID, DEFAULT_PORT, VERSION } from "./defaults.mjs";
 import { YOUTUBE_API } from "./net/youtube.mjs";
 import { localNetworks } from "./net/interfaces.mjs";
 import { safeJson } from "./util.mjs";
+import { onPhone, setPhoneOpener } from "./platform.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -129,6 +130,12 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const c of clients) c.write(msg);
   };
+  // In the phone app, pages and videos for "this phone" go to the open dashboard, which hands them to Android.
+  setPhoneOpener((url) => {
+    if (!clients.size) return false;
+    broadcast("open-url", { url });
+    return true;
+  });
   let devTimer = null;
   const knownNew = new Set();
   inventory.on("change", () => {
@@ -252,7 +259,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
 
   const routes = [
     ["GET", /^\/api\/state$/, async () => ({
-      app: { version: VERSION, demo, lan, platform: process.platform },
+      app: { version: VERSION, demo, lan, platform: onPhone() ? "android" : process.platform },
       setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
       network: scanner.network ? { cidr: scanner.network.cidr, gateway: scanner.network.gateway, address: scanner.network.address, iface: scanner.network.iface } : null,
       scan: { running: !!scanner.running, last: scanner.lastScan },
@@ -356,7 +363,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     if (ext === ".html") {
       body = body
         .toString("utf8")
-        .replace("%%PATCH_BOOT%%", JSON.stringify({ token, demo, lan, version: VERSION }).replace(/</g, "\\u003c"));
+        .replace("%%PATCH_BOOT%%", JSON.stringify({ token, demo, lan, version: VERSION, phone: onPhone() }).replace(/</g, "\\u003c"));
     }
     send(res, 200, body, { "content-type": TYPES[ext] || "application/octet-stream", "cache-control": ext === ".html" ? "no-store" : "no-cache", ...(ext === ".html" ? { "content-security-policy": CSP } : {}) });
   }

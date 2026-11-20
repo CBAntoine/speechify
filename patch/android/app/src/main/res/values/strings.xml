@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Patch</string>
+    <string name="starting">Starting Patch…</string>
+    <string name="lost_patch">Patch stopped answering. Tap Try again.</string>
+    <string name="too_slow">Patch is taking too long to start. Tap Try again, or close Patch and open it again.</string>
+    <string name="try_again">Try again</string>
+    <string name="no_browser">There\'s no app on this phone that can open that.</string>
+</resources>

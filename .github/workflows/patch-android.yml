@@ -1,0 +1,168 @@
+name: Patch for Android
+
+# Builds Patch's Android app (Patch running on the phone itself: its server, dashboard and voice),
+# tries it in an Android emulator, and publishes Patch.apk on the "Patch for Android" release.
+on:
+  push:
+    paths:
+      - "patch/**"
+      - ".github/workflows/patch-android.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Node.js for Android, from the nodejs-mobile project (checked against this fingerprint).
+  NODEJS_MOBILE_VERSION: "18.20.4"
+  NODEJS_MOBILE_SHA256: "bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af"
+
+jobs:
+  node18:
+    name: Patch's tests on the phone's Node.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: patch
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODEJS_MOBILE_VERSION }}
+
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run every test file
+        run: |
+          for f in test/*.test.mjs; do
+            echo "::group::$f"
+            node --test "$f"
+            echo "::endgroup::"
+          done
+
+  android:
+    name: Build the app and try it in an Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Copy Patch's server and dashboard into the app
+        working-directory: patch
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node android/prepare-assets.mjs
+
+      - name: Download Node.js for Android
+        run: |
+          curl -sSfL -o nodejs-mobile.zip "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v${NODEJS_MOBILE_VERSION}/nodejs-mobile-v${NODEJS_MOBILE_VERSION}-android.zip"
+          echo "${NODEJS_MOBILE_SHA256}  nodejs-mobile.zip" | sha256sum -c -
+          unzip -q nodejs-mobile.zip -d patch/android/app/libnode
+          ls -la patch/android/app/libnode/bin/*
+
+      - name: Use the newest Android NDK on this machine
+        run: |
+          echo "NDK: $ANDROID_NDK_LATEST_HOME"
+          echo "ANDROID_NDK_HOME_FOR_PATCH=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+
+      - name: Build the test app (for the emulator)
+        working-directory: patch/android
+        env:
+          PATCH_VERSION_CODE: ${{ github.run_number }}
+          PATCH_VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          gradle --no-daemon --stacktrace :app:assembleRelease -PpatchAbis=x86_64 -PpatchDebugWebView=true
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/patch-test-x86_64.apk"
+
+      - name: Build the phone app
+        working-directory: patch/android
+        env:
+          PATCH_VERSION_CODE: ${{ github.run_number }}
+          PATCH_VERSION_NAME: 1.0.${{ github.run_number }}
+          # Optional: the repository's own signing key, so new versions install over old ones.
+          KEYSTORE_B64: ${{ secrets.PATCH_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PATCH_KEYSTORE_PASSWORD }}
+        run: |
+          export PATCH_KEYSTORE="$RUNNER_TEMP/patch.jks"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$PATCH_KEYSTORE"
+            export PATCH_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
+          else
+            export PATCH_KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+            keytool -genkeypair -keystore "$PATCH_KEYSTORE" -storepass "$PATCH_KEYSTORE_PASSWORD" -alias patch \
+              -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Patch"
+          fi
+          gradle --no-daemon --stacktrace :app:assembleRelease -PpatchAbis=arm64-v8a,armeabi-v7a
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/Patch.apk"
+          ls -la "$GITHUB_WORKSPACE/out"
+
+      - name: Let the emulator use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Try the app on an Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 6000M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: bash patch/android/ci/emulator-test.sh out/patch-test-x86_64.apk out/emulator
+
+      - name: Keep the apps and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch-android-${{ github.run_number }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish Patch.apk
+    # Only when Patch's tests pass on the phone's Node.js and the app works in the emulator.
+    needs: [node18, android]
+    if: github.ref == 'refs/heads/ccr-61b282c9-yrog50' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: patch-android-${{ github.run_number }}
+          path: out
+
+      - name: Replace the "Patch for Android" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete patch-android --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create patch-android out/Patch.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Patch for Android" \
+            --notes "Patch running on your Android phone: it finds everything on your Wi-Fi and runs your TVs, lights and plugs, by voice or by typing.
+
+          To install: on your phone, tap Patch.apk below to download it, open it, and allow installing if Android asks. Needs Android 7 or newer. Built from ${GITHUB_SHA::7}."

@@ -3,6 +3,8 @@ import { icon } from "./icons.js";
 import { createVoice } from "./voice.js";
 
 const BOOT = JSON.parse(document.getElementById("boot").textContent || "{}");
+// Inside the Patch app on an Android phone, Patch (and everything it keeps) lives on the phone.
+const HERE = BOOT.phone ? "this phone" : "this computer";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -317,7 +319,8 @@ function exportCsv() {
 }
 
 function renderViewToggle() {
-  $("#exportBtn").hidden = state.view !== "list";
+  // Spreadsheet downloads need a computer's browser (the phone app can't save them).
+  $("#exportBtn").hidden = state.view !== "list" || !!BOOT.phone;
   for (const b of document.querySelectorAll("[data-view]")) {
     b.setAttribute("aria-pressed", String(b.dataset.view === state.view));
     b.innerHTML = icon(b.dataset.view === "list" ? "list" : "grid", 17);
@@ -665,7 +668,7 @@ function detailsHtml(d) {
   return `
     <div class="panel"><h3>What it is</h3>${kv(identity)}</div>
     ${care.length ? `<div class="panel"><h3>Care</h3><div class="btns">${care.join("")}</div><div id="diagOut"></div></div>` : ""}
-    ${d.setup?.kind === "password" || d.hasPassword || (d.driver === "shelly" && !d.parent) ? `<div class="panel"><h3>Device password</h3><form class="inline-form" data-form="credentials" data-id="${id}"><input name="password" type="password" placeholder="${d.hasPassword ? "Saved. Type a new one to change it" : "The password set on the device"}" autocomplete="off"><button class="btn btn--sm">Save</button></form><p style="color:var(--muted);font-size:12.5px;margin:8px 0 0">Stored only on this computer, in Patch's data folder.</p></div>` : ""}
+    ${d.setup?.kind === "password" || d.hasPassword || (d.driver === "shelly" && !d.parent) ? `<div class="panel"><h3>Device password</h3><form class="inline-form" data-form="credentials" data-id="${id}"><input name="password" type="password" placeholder="${d.hasPassword ? "Saved. Type a new one to change it" : "The password set on the device"}" autocomplete="off"><button class="btn btn--sm">Save</button></form><p style="color:var(--muted);font-size:12.5px;margin:8px 0 0">Stored only on ${HERE}, in Patch's data folder.</p></div>` : ""}
     <div class="panel"><h3>Where</h3><div class="control-row"><label>Room</label><form class="inline-form" data-form="room" data-id="${id}"><input name="value" value="${esc(d.room || "")}" placeholder="e.g. Living room" list="roomList"><button class="btn btn--sm">Save</button></form><datalist id="roomList">${rooms.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></div>
       <div class="control-row"><label>Dashboard</label><button class="btn btn--sm btn--ghost" data-ui="hide" data-id="${id}">${icon("eyeOff", 14)} ${d.hidden ? "Show on dashboard" : "Hide from dashboard"}</button></div></div>
     ${network.length ? `<div class="panel"><h3>On the network</h3>${kv(network)}</div>` : ""}`;
@@ -808,7 +811,7 @@ async function openSettings(focus) {
       <h3>Voice (ElevenLabs)</h3>
       <label class="field"><span>API key</span>
         <div class="row"><input name="elevenlabsApiKey" type="password" autocomplete="off" placeholder="${s.elevenlabs.hasKey ? `Saved (${esc(s.elevenlabs.keyHint)}). Paste a new one to replace it` : "sk_…"}" ${s.elevenlabs.fromEnv ? "disabled" : ""}><button class="btn btn--voice">Save & test</button></div>
-        <small>Create one at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer">elevenlabs.io → Developers → API keys</a> with the <b>ElevenLabs Agents</b> permission (Write). It's stored only on this computer and is used to start each conversation.${s.elevenlabs.fromEnv ? " It's currently set by the ELEVENLABS_API_KEY environment variable." : ""}</small>
+        <small>Create one at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer">elevenlabs.io → Developers → API keys</a> with the <b>ElevenLabs Agents</b> permission (Write). It's stored only on ${HERE} and is used to start each conversation.${s.elevenlabs.fromEnv ? " It's currently set by the ELEVENLABS_API_KEY environment variable." : ""}</small>
         <div class="check" id="elCheck"></div>
       </label>
       <details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Advanced</summary>
@@ -820,7 +823,7 @@ async function openSettings(focus) {
       <p style="margin:0 0 10px;color:var(--text-2);font-size:13.5px">With a free YouTube key, Patch can find videos for you ("play lo-fi beats on the TV") and read out the results. Without one, TVs show YouTube's own search results instead.</p>
       <label class="field"><span>YouTube Data API key</span>
         <div class="row"><input name="youtubeApiKey" type="password" autocomplete="off" placeholder="${s.youtube?.hasKey ? `Saved (${esc(s.youtube.keyHint)}). Paste a new one to replace it` : "AIza…"}" ${s.youtube?.fromEnv ? "disabled" : ""}><button class="btn btn--primary">Save & test</button></div>
-        <small>Free from the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">Google Cloud console</a>: create a project, enable <b>YouTube Data API v3</b>, then APIs &amp; Services → Credentials → Create API key. About 100 searches a day are free. The key stays on this computer.</small>
+        <small>Free from the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">Google Cloud console</a>: create a project, enable <b>YouTube Data API v3</b>, then APIs &amp; Services → Credentials → Create API key. About 100 searches a day are free. The key stays on ${HERE}.</small>
         <div class="check" id="ytCheck"></div>
       </label>
     </form>
@@ -834,7 +837,7 @@ async function openSettings(focus) {
     <form data-form="settings-net" class="panel">
       <h3>Network</h3>
       <label class="field"><span>Network to scan</span><input name="subnet" value="${esc(s.network.subnet)}" placeholder="Automatic"><small>Only needed if Patch picks the wrong network, e.g. <code>192.168.1.0/24</code>. Patch only ever scans private home addresses.</small></label>
-      <label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="lanEnabled" ${s.lan.enabled ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Let phones and tablets on my WiFi open Patch (asks for an access code${s.lan.active ? `: <code>${esc(s.lan.accessCode)}</code>` : ""}). Needs a restart. Voice works on this computer; other devices can type.</span></label>
+${BOOT.phone ? "" : `<label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="lanEnabled" ${s.lan.enabled ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Let phones and tablets on my WiFi open Patch (asks for an access code${s.lan.active ? `: <code>${esc(s.lan.accessCode)}</code>` : ""}). Needs a restart. Voice works on this computer; other devices can type.</span></label>`}
       <label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="vendorLookup" ${s.features.vendorLookup ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Look up who made each device (downloads the public IEEE manufacturer list once; nothing about your network is sent).</span></label>
       <button class="btn">Save</button><div class="check" id="netCheck"></div>
       <p style="color:var(--muted);font-size:12.5px;margin:12px 0 0">Settings and saved passwords live in <code>${esc(s.dataDir)}</code>.</p>
@@ -1151,6 +1154,11 @@ function connectEvents() {
     const n = JSON.parse(e.data);
     toast(n.text);
   });
+  // Phone app: "search the web on this phone" etc. The app hands the page to Android (browser, YouTube app…).
+  es.addEventListener("open-url", (e) => {
+    const { url } = JSON.parse(e.data);
+    if (/^https?:\/\//i.test(url) && window.PatchAndroid?.openUrl) window.PatchAndroid.openUrl(url);
+  });
   es.onerror = () => {
     // The browser retries on its own; if Patch was restarted the token changed, so reload.
     fetch("/api/state", { headers: { "x-patch-token": BOOT.token } })
@@ -1164,6 +1172,7 @@ function connectEvents() {
 // ── start ─────────────────────────────────────────────
 
 export const ui = {
+  phone: !!BOOT.phone,
   api,
   esc,
   toast,
@@ -1194,6 +1203,15 @@ export const ui = {
 };
 
 const voice = createVoice(ui);
+$("#voiceFine").textContent = `Voice by ElevenLabs. Your devices are controlled from ${HERE}, never from the cloud.`;
+// The phone's back button (the Patch app asks first): close what's open before leaving Patch.
+window.__patchBack = () => {
+  if ($("#modal").classList.contains("is-open") || $("#drawer").classList.contains("is-open")) {
+    closeOverlays();
+    return true;
+  }
+  return voice.closeSheet();
+};
 // Demo mode only: lets automated checks call the exact tool handlers the voice agent uses.
 if (BOOT.demo) window.__patch = { voice, ui };
 

@@ -1,9 +1,11 @@
-// Which network is "the WiFi"? Finds this computer's address, subnet and router on macOS, Windows and Linux.
+// Which network is "the WiFi"? Finds this computer's address, subnet and router on macOS, Windows and Linux,
+// and on Android phones (where the Patch app passes in what Android hides: see platform.mjs).
 import os from "node:os";
 import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
 import dns from "node:dns";
 import { inCidr, intToIp, ipToInt, isPrivateIPv4, normalizeMac, parseCidr, prefixFromNetmask } from "../util.mjs";
+import { networkFromEnv, onPhone } from "../platform.mjs";
 
 export function run(cmd, args, timeout = 4000) {
   return new Promise((resolve) => {
@@ -13,14 +15,20 @@ export function run(cmd, args, timeout = 4000) {
   });
 }
 
-// Virtual adapters (VPNs, Docker, VMs) that are never the home WiFi.
-const VIRTUAL = /^(docker|br-|veth|virbr|vboxnet|vmnet|utun|tun|tap|wg|tailscale|zt|ham|llw|awdl|anpi|ap\d|bridge|gif|stf|lo)/i;
+// Virtual adapters (VPNs, Docker, VMs) and a phone's mobile-data and Wi-Fi Direct links: never the home WiFi.
+const VIRTUAL = /^(docker|br-|veth|virbr|vboxnet|vmnet|utun|tun|tap|wg|tailscale|zt|ham|llw|awdl|anpi|ap\d|bridge|gif|stf|lo|rmnet|r_rmnet|ccmni|ccinet|clat|v4-|dummy|p2p|seth|pdp|rndis|ifb|sit|ip6tnl|ipsec|epdg|aware|nan\d)/i;
 const VIRTUAL_WIN = /(virtual|vmware|virtualbox|hyper-v|vethernet|wsl|loopback|tailscale|zerotier|wireguard|vpn|bluetooth)/i;
 
 /** Private IPv4 networks this computer is on, best guess first. */
 export function localNetworks() {
   const out = [];
-  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+  let interfaces = {};
+  try {
+    interfaces = os.networkInterfaces();
+  } catch {
+    // Newer Android versions refuse to list network interfaces to apps; the Patch app passes the Wi-Fi in.
+  }
+  for (const [name, addrs] of Object.entries(interfaces)) {
     for (const a of addrs || []) {
       if (a.family !== "IPv4" && a.family !== 4) continue;
       if (a.internal || !isPrivateIPv4(a.address) || a.address.startsWith("127.")) continue;
@@ -40,7 +48,17 @@ export function localNetworks() {
       });
     }
   }
-  const score = (n) => (n.virtual ? -100 : 0) + (n.linkLocal ? -50 : 0) + (n.wireless ? 10 : 0) + (n.address.startsWith("192.168.") ? 3 : 0) + (n.prefix >= 16 ? 2 : 0);
+  // The Android app knows which network is the Wi-Fi for certain: trust it over guesses.
+  const { wifi } = networkFromEnv();
+  if (wifi) {
+    const seen = out.find((n) => n.address === wifi.address);
+    if (seen) seen.fromApp = true;
+    else {
+      const c = parseCidr(wifi.cidr);
+      out.push({ iface: "wlan0", address: wifi.address, netmask: null, prefix: wifi.prefix, cidr: c.cidr, broadcast: intToIp(c.broadcast), mac: null, virtual: false, linkLocal: false, wireless: true, fromApp: true });
+    }
+  }
+  const score = (n) => (n.fromApp ? 50 : 0) + (n.virtual ? -100 : 0) + (n.linkLocal ? -50 : 0) + (n.wireless ? 10 : 0) + (n.address.startsWith("192.168.") ? 3 : 0) + (n.prefix >= 16 ? 2 : 0);
   return out.sort((a, b) => score(b) - score(a));
 }
 
@@ -74,6 +92,8 @@ export function parseWindowsRoute(text) {
 }
 
 export async function defaultGateway() {
+  const fromApp = networkFromEnv().gateway;
+  if (fromApp) return { gateway: fromApp, iface: null };
   try {
     if (process.platform === "linux") {
       const r = parseLinuxRoute(await fs.readFile("/proc/net/route", "utf8"));
@@ -114,7 +134,8 @@ export async function homeNetwork({ override, gatewayOverride } = {}) {
     }
   }
   if (!net && gw) net = nets.find((n) => inCidr(gw.gateway, n.cidr)) ?? null;
-  if (!net) net = nets.find((n) => !n.virtual) ?? nets[0] ?? null;
+  // A phone off Wi-Fi only has mobile data: never scan the phone company's network.
+  if (!net) net = nets.find((n) => !n.virtual) ?? (onPhone() ? null : nets[0]) ?? null;
   if (!net) return null;
   let gateway = gatewayOverride || (gw && inCidr(gw.gateway, net.cidr) ? gw.gateway : null);
   if (!gateway) {
@@ -122,7 +143,8 @@ export async function homeNetwork({ override, gatewayOverride } = {}) {
     const c = parseCidr(net.cidr);
     gateway = intToIp(c.network + 1);
   }
-  return { ...net, gateway, dns: dns.getServers().filter((s) => /^\d+\.\d+\.\d+\.\d+$/.test(s)) };
+  const appDns = networkFromEnv().dns;
+  return { ...net, gateway, dns: appDns.length ? appDns : dns.getServers().filter((s) => /^\d+\.\d+\.\d+\.\d+$/.test(s)) };
 }
 
 export const sameSubnet = (ip, net) => !!net && inCidr(ip, net.cidr);

@@ -1,0 +1,87 @@
+plugins {
+    id "com.android.application"
+}
+
+// Processor types to build for: 64-bit and 32-bit ARM phones by default; the emulator test uses x86_64.
+def abiList = (findProperty("patchAbis") ?: "arm64-v8a,armeabi-v7a").toString().split(",")
+// A signing key from the build machine, if there is one (otherwise Android's debug key).
+def keystorePath = System.getenv("PATCH_KEYSTORE")
+
+android {
+    namespace "app.patch.home"
+    compileSdk 34
+    if (System.getenv("ANDROID_NDK_HOME_FOR_PATCH")) {
+        ndkPath System.getenv("ANDROID_NDK_HOME_FOR_PATCH")
+    }
+
+    defaultConfig {
+        applicationId "app.patch.home"
+        minSdk 24
+        targetSdk 34
+        versionCode((System.getenv("PATCH_VERSION_CODE") ?: "1") as int)
+        versionName System.getenv("PATCH_VERSION_NAME") ?: "1.0"
+        ndk {
+            abiFilters(*abiList)
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+        // The emulator test inspects the dashboard through Chrome's DevTools; real builds don't allow that.
+        resValue "bool", "patch_debug_webview", (findProperty("patchDebugWebView") ?: "false").toString()
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+
+    // nodejs-mobile's libnode.so, unpacked into app/libnode by the build (not kept in git: it's ~60 MB per processor type).
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["libnode/bin"]
+        }
+    }
+
+    // Keep the engine compressed in the APK (a smaller download); Android unpacks it when installing.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    signingConfigs {
+        patch {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword System.getenv("PATCH_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("PATCH_KEY_ALIAS") ?: "patch"
+                keyPassword System.getenv("PATCH_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystorePath ? signingConfigs.patch : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // Keep every file of Patch's server, whatever its name.
+        ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

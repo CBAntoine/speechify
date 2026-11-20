@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark: matches the dashboard's dark colours (the dashboard follows the phone's dark mode). -->
+    <style name="Patch" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/patch_bg</item>
+        <item name="android:colorAccent">@color/patch_accent</item>
+        <item name="android:statusBarColor">@color/patch_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

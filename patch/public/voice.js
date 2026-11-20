@@ -21,7 +21,7 @@ function loadSdk() {
 
 function friendlyError(msg) {
   const m = String(msg || "");
-  if (/permission|NotAllowed|denied/i.test(m)) return "Microphone access was blocked. Allow the microphone for this page in your browser, or type instead.";
+  if (/permission|NotAllowed|denied/i.test(m)) return window.PatchAndroid ? "Patch isn't allowed to use the microphone. Allow it when your phone asks (or in Settings → Apps → Patch → Permissions), or type instead." : "Microphone access was blocked. Allow the microphone for this page in your browser, or type instead.";
   if (/NotFound|no.*device|Requested device not found/i.test(m)) return "No microphone found. You can still type to Patch.";
   if (/secure context|getUserMedia/i.test(m)) return "Your browser only allows the microphone on this computer (localhost). On other devices, type instead.";
   if (/401|403|auth/i.test(m)) return "ElevenLabs didn't accept the session. Check your API key in Settings.";
@@ -129,7 +129,7 @@ export function createVoice(ui) {
     const now = new Date();
     const intro = [
       `Context: it is ${now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}, ${now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}.`,
-      s.app?.demo ? "Patch is running in DEMO mode on a simulated home network (say so if asked; it's for trying things out)." : "Patch is running on the person's computer on their home network.",
+      s.app?.demo ? "Patch is running in DEMO mode on a simulated home network (say so if asked; it's for trying things out)." : ui.phone ? "Patch is running on the person's Android phone (the Patch app) on their home Wi-Fi. \"This phone\", \"my phone\" or \"here\" means the phone running Patch." : "Patch is running on the person's computer on their home network.",
       s.network ? `Network ${s.network.cidr}, router at ${s.network.gateway}.` : "",
       s.tuneup ? `Last tune-up score: ${s.tuneup.score} (${s.tuneup.grade}).` : "No tune-up has been run yet.",
       mode === "text" ? "This is a typed chat: keep answers short and skimmable." : "",
@@ -498,6 +498,13 @@ export function createVoice(ui) {
 
   return {
     refresh: render,
+    /** Phone back button: tuck the panel away if it's open as a sheet. True if it was. */
+    closeSheet() {
+      if (!els.panel.classList.contains("is-open")) return false;
+      els.panel.classList.remove("is-open");
+      render();
+      return true;
+    },
     /** "Ask Patch": open the panel (on small screens) and put the cursor in the message box. */
     open() {
       openPanel();

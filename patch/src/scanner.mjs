@@ -23,6 +23,7 @@ import { wsdDiscover } from "./net/wsd.mjs";
 import { factsFor, probeIdentity } from "./identify.mjs";
 import { webUrlFor } from "./drivers/generic.mjs";
 import { SELF_ACTIONS } from "./drivers/self.mjs";
+import { onPhone, phoneIdentity } from "./platform.mjs";
 import { inCidr, isPrivateIPv4, isRandomizedMac, mapLimit, prettyHostname, settleWithin, sortIps, subnetHosts } from "./util.mjs";
 
 export const SERVICE_PORTS = [21, 22, 23, 53, 80, 139, 443, 445, 548, 554, 631, 1400, 1883, 3000, 3001, 3389, 5000, 5001, 5555, 5900, 7000, 8001, 8002, 8008, 8009, 8060, 8080, 8123, 8443, 9100, 9123, 9999, 32400, 55443, 62078];
@@ -32,6 +33,31 @@ function newHost(ip) {
 }
 
 const PLATFORM = { darwin: "Mac", win32: "Windows PC", linux: "Linux computer" };
+
+/** The device Patch itself runs on: this computer, or the phone inside the Patch app. */
+export function selfDevice(net, { phone = onPhone(), identity = phoneIdentity() } = {}) {
+  const base = { id: "self:computer", driver: "self", self: true, ip: net.address, mac: net.mac || null, state: {}, actions: SELF_ACTIONS };
+  if (phone) {
+    const { name, brand, model, android } = identity;
+    const platform = android ? `Android ${android}` : "Android";
+    return {
+      ...base,
+      kind: "phone",
+      name: name || [brand, model].filter(Boolean).join(" ") || "This phone",
+      brand,
+      model: "This phone (running Patch)",
+      info: { platform, modelNumber: model, what: `${[brand, model].filter(Boolean).join(" ") || "Phone"} running Patch (${platform})` },
+    };
+  }
+  return {
+    ...base,
+    kind: "computer",
+    name: prettyHostname(os.hostname()) || "This computer",
+    brand: PLATFORM[process.platform] || null,
+    model: "This computer (running Patch)",
+    info: { platform: `${os.type()} ${os.release()}` },
+  };
+}
 
 export class Scanner extends EventEmitter {
   /**
@@ -151,7 +177,7 @@ export class Scanner extends EventEmitter {
     const o = this.o;
     this.progress("Finding your network…", 2);
     const net = await this.currentNetwork();
-    if (!net) throw new Error("This computer doesn't seem to be on a home network: it has no private IPv4 address.");
+    if (!net) throw new Error(onPhone() ? "This phone isn't on Wi-Fi. Connect it to your home Wi-Fi, then scan again." : "This computer doesn't seem to be on a home network: it has no private IPv4 address.");
     this.network = net;
     const ips = subnetHosts(net.cidr, { max: 1024, around: net.address || net.gateway }).filter((ip) => ip !== net.address);
     const hosts = new Map();
@@ -276,22 +302,7 @@ export class Scanner extends EventEmitter {
     const results = [];
     await mapLimit(alive, 12, async (ip) => results.push(...(await this.#identify(hosts.get(ip), ctx))));
     for (const d of DRIVERS) if (d.extra) results.push(...(await settleWithin(d.extra(ctx), 20_000, [])));
-    if (net.address && o.includeSelf !== false) {
-      results.push({
-        id: "self:computer",
-        driver: "self",
-        self: true,
-        kind: "computer",
-        name: prettyHostname(os.hostname()) || "This computer",
-        brand: PLATFORM[process.platform] || null,
-        model: "This computer (running Patch)",
-        ip: net.address,
-        mac: net.mac || null,
-        state: {},
-        info: { platform: `${os.type()} ${os.release()}` },
-        actions: SELF_ACTIONS,
-      });
-    }
+    if (net.address && o.includeSelf !== false) results.push(selfDevice(net));
 
     const first = !this.store.data.history.firstScanAt;
     for (const dev of results) this.inventory.upsert(dev, { scanId });

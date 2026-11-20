@@ -175,7 +175,7 @@ export class Inventory extends EventEmitter {
   /** What the dashboard and the voice agent get (no driver internals). */
   toPublic(d) {
     const m = this.meta(d.id);
-    const what = d.self ? `${d.brand || "Computer"} running Patch${d.info?.platform ? ` (${d.info.platform})` : ""}` : describeDevice(d);
+    const what = d.self ? d.info?.what || `${d.brand || "Computer"} running Patch${d.info?.platform ? ` (${d.info.platform})` : ""}` : describeDevice(d);
     return {
       id: d.id,
       name: this.displayName(d),
@@ -224,9 +224,10 @@ export class Inventory extends EventEmitter {
     const raw = String(query || "").trim();
     if (!raw) return { none: true, suggestions: [] };
     if (this.devices.has(raw)) return { device: this.devices.get(raw) };
-    // "this computer", "here", "my browser": the computer Patch is running on.
+    // "this computer", "here", "my browser": the computer Patch is running on. In the phone app, "my phone" too.
     const self = [...this.devices.values()].find((d) => d.self);
-    if (self && /^((this|my|the)\s+(own\s+)?(computer|pc|laptop|mac|desktop|browser|machine|screen)(\s+here)?|here|right here|my browser|the browser|on here)$/i.test(raw)) return { device: self };
+    const selfWords = self?.kind === "phone" ? "phone|mobile|cell\\s*phone|handset|android|device|browser|screen" : "computer|pc|laptop|mac|desktop|browser|machine|screen";
+    if (self && new RegExp(`^((this|my|the)\\s+(own\\s+)?(${selfWords})(\\s+here)?|here|right here|my browser|the browser|on here)$`, "i").test(raw)) return { device: self };
     const byIp = [...this.devices.values()].filter((d) => d.ip === raw && !d.parent);
     if (byIp.length === 1) return { device: byIp[0] };
 

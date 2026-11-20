@@ -6,10 +6,12 @@
 //   --no-open   don't open the browser automatically
 import path from "node:path";
 import fs from "node:fs";
+import dns from "node:dns";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startApp } from "./src/app.mjs";
 import { DEFAULT_PORT } from "./src/defaults.mjs";
+import { networkFromEnv, onPhone } from "./src/platform.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -19,9 +21,20 @@ const value = (f) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-if (Number(process.versions.node.split(".")[0]) < 20) {
+// The Android app carries its own Node.js 18; on computers Patch asks for 20 or newer.
+if (Number(process.versions.node.split(".")[0]) < (onPhone() ? 18 : 20)) {
   console.error(`Patch needs Node.js 20 or newer (you have ${process.version}). Get the LTS version from https://nodejs.org`);
   process.exit(1);
+}
+
+// In the Android app, the phone's DNS servers come from the app (Android doesn't show them to programs).
+const appDns = networkFromEnv().dns;
+if (appDns.length) {
+  try {
+    dns.setServers(appDns);
+  } catch {
+    /* keep the defaults */
+  }
 }
 
 // Optional .env file next to this script (ELEVENLABS_API_KEY=..., PATCH_SUBNET=...)

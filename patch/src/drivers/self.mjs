@@ -1,5 +1,7 @@
-// The computer Patch runs on: web searches, websites and YouTube open in its default browser.
+// The computer (or phone) Patch runs on: web searches, websites and YouTube open in its default browser.
+// On a phone the Patch app hands the address to Android, which opens the browser or the YouTube app.
 import { execFile } from "node:child_process";
+import { onPhone, openOnPhone } from "../platform.mjs";
 import { describeResults, searchYouTube, videoIdFrom, watchUrl, webSearchUrl, youtubeSearchUrl } from "../net/youtube.mjs";
 import { DeviceError, done, need, unsupported } from "./common.mjs";
 import { pickIndex, websiteOrSearch } from "./tv.mjs";
@@ -8,6 +10,10 @@ import { pickIndex, websiteOrSearch } from "./tv.mjs";
 export function openInBrowser(url) {
   const u = new URL(url);
   if (!/^https?:$/.test(u.protocol)) throw new DeviceError("I only open web pages (http or https).");
+  if (onPhone()) {
+    if (!openOnPhone(u.href)) throw new DeviceError("Open the Patch app on this phone, then ask again.");
+    return Promise.resolve();
+  }
   const [cmd, args] =
     process.platform === "darwin" ? ["open", [u.href]] : process.platform === "win32" ? ["rundll32.exe", ["url.dll,FileProtocolHandler", u.href]] : ["xdg-open", [u.href]];
   return new Promise((resolve, reject) => {
@@ -20,9 +26,14 @@ export function openInBrowser(url) {
 
 export const SELF_ACTIONS = ["web_search", "open_website", "search_youtube", "play_youtube", "rename", "set_room"];
 
+// "in this computer's browser" / "on this phone"
+const where = () => (onPhone() ? "on this phone" : "in this computer's browser");
+
 export default {
   id: "self",
-  label: "This computer",
+  get label() {
+    return onPhone() ? "This phone" : "This computer";
+  },
 
   async act(device, action, value, ctx) {
     const open = ctx.openUrl || openInBrowser;
@@ -30,12 +41,12 @@ export default {
       case "web_search": {
         const q = String(need(value, "search"));
         await open(webSearchUrl(q));
-        return done(`Searching the web for “${q}” in this computer's browser.`);
+        return done(`Searching the web for “${q}” ${where()}.`);
       }
       case "open_website": {
         const url = websiteOrSearch(value);
         await open(url);
-        return done(`Opened ${url.replace(/^https:\/\//, "").replace(/\/$/, "")} in this computer's browser.`);
+        return done(`Opened ${url.replace(/^https:\/\//, "").replace(/\/$/, "")} ${where()}.`);
       }
       case "search_youtube": {
         const q = String(need(value, "search"));
@@ -48,7 +59,7 @@ export default {
             ctx.memory?.set("yt:last", results);
           }
         }
-        return done(`YouTube's results for “${q}” are open in this computer's browser.${results?.length ? ` The top ones are: ${describeResults(results, 3)}.` : ""}`, { results: results?.map(({ id, title, channel, duration }) => ({ id, title, channel, duration })) });
+        return done(`YouTube's results for “${q}” are open ${where()}.${results?.length ? ` The top ones are: ${describeResults(results, 3)}.` : ""}`, { results: results?.map(({ id, title, channel, duration }) => ({ id, title, channel, duration })) });
       }
       case "play_youtube": {
         const v = String(need(value, "video")).trim();
@@ -69,10 +80,10 @@ export default {
         }
         if (!id) {
           await open(youtubeSearchUrl(v));
-          return done(`I opened YouTube's results for “${v}” in this computer's browser; click the one you want. (With a YouTube key in Settings I can pick it for you.)`);
+          return done(`I opened YouTube's results for “${v}” ${where()}; ${onPhone() ? "tap" : "click"} the one you want. (With a YouTube key in Settings I can pick it for you.)`);
         }
         await open(watchUrl(id));
-        return done(`Playing ${title ? `“${title}”` : "the video"} in this computer's browser.`);
+        return done(`Playing ${title ? `“${title}”` : "the video"} ${where()}.`);
       }
       default:
         throw unsupported(device, action);
