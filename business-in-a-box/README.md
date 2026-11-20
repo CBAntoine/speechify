@@ -12,6 +12,7 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 | [`04-style-guide.md`](04-style-guide.md) | Palette hex codes with contrast ratios, type, motifs, copy rules, ad specs, the five planned statics |
 | [`05-ugc-scripts.md`](05-ugc-scripts.md) | Two 9:16 UGC scripts with timings and on-screen text |
 | [`06-most-profitable-route.md`](06-most-profitable-route.md) | Most profitable route: per-ticket pricing, one install per venue, busiest rooms first, plus the routes that lost |
+| [`07-getting-started.md`](07-getting-started.md) | Research findings (market size, the real competitor, the name, sales tax, hosting) and the launch plan, plus the licence email and discovery-call script |
 | [`tools/roi.py`](tools/roi.py) | Per-venue fee and ROI calculator |
 | [`tools/route_model.py`](tools/route_model.py) | Pricing route model: flat vs per-ticket, fan-price check, licence downside, 12-month scenario |
 | `leads/` | Lead lists. **Git-ignored on purpose:** they hold named people's contact details and this repo is public. |
@@ -21,7 +22,8 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 - [x] Checkpoint 1: offer chosen (venue ticketing, US)
 - [x] ICP, offer brief, ROI maths, style guide, UGC scripts
 - [x] Most profitable route worked out (06) and adopted: per-ticket pricing, docs updated
-- [ ] Checkpoint 2: approve 5 sample leads
+- [x] Getting-started research and launch plan (07)
+- [ ] Checkpoint 2: approve 5 sample leads (pulled; waiting for your review), choose the name, choose how to widen targeting
 - [ ] Pull 15 more leads (20 total)
 - [ ] 5 static Meta ads
 - [ ] UGC videos (needs an avatar tool, or the faceless voiceover route)

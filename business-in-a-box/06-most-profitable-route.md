@@ -84,6 +84,7 @@ Weekly show emails to the venue's own list, plus retargeting ads built on the pi
 | Law-firm private AI, $599/mo | $7,188 minus AI usage costs | High: data, accuracy, ethics rules | High: long trust-based sale |
 | Inns direct booking, $199/mo | $2,388 | High: availability sync with OTAs | Medium |
 | Shared multi-venue platform | Same as per-ticket | Lower ops | Same, but at least €30k/yr licence at 24 venues |
+| Run venues on Hi.Events' own cloud (1.25% + 60¢) | Same | No ops | Fans pay both fees: $28.66 all-in on a $25 ticket, above Eventbrite's $28.54 |
 
 ## 6. Risks of this route
 
