@@ -3,7 +3,7 @@ import { SettingsForm } from "@/components/settings/SettingsForm";
 import { PageHead } from "@/components/ui";
 import { integrations } from "@/lib/config";
 import { NICHES } from "@/lib/niches";
-import { dataDir, readDb } from "@/lib/store";
+import { readDb, storageInfo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings" };
@@ -18,7 +18,7 @@ export default async function SettingsPage() {
         profile={db.profile}
         integrations={integrations()}
         niches={NICHES.map((n) => ({ id: n.id, label: n.label }))}
-        dataDir={await dataDir()}
+        storage={await storageInfo()}
         passwordSet={Boolean(process.env.APP_PASSWORD)}
         sampleCount={sampleCount}
       />

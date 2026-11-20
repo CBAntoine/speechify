@@ -15,6 +15,8 @@ export interface SearchInput {
   /** Audit the websites of the first N results. */
   audit?: number;
   source?: "auto" | "google" | "osm" | "sample";
+  /** Search around coordinates (e.g. the phone's GPS) instead of geocoding `location`. */
+  near?: { lat: number; lon: number };
 }
 
 export interface SearchResult {
@@ -154,7 +156,11 @@ export function sampleProspects(niche: Niche, location: string, n: number): Pros
 
 export async function findBusinesses(input: SearchInput): Promise<SearchResult> {
   const niche = resolveNiche(input.niche);
-  const location = input.location.trim();
+  const near =
+    input.near && Number.isFinite(input.near.lat) && Number.isFinite(input.near.lon) && Math.abs(input.near.lat) <= 90 && Math.abs(input.near.lon) <= 180
+      ? input.near
+      : undefined;
+  const location = input.location.trim() || (near ? "your location" : "");
   if (!location) throw new Error("Add a city or area to search in");
   const limit = Math.max(1, Math.min(input.limit ?? 20, 60));
   const radiusKm = Math.max(1, Math.min(input.radiusKm ?? 12, 50));
@@ -170,10 +176,10 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
     source = "sample";
     note = "Sample businesses (fictional) so you can try the workflow offline.";
   } else if ((wanted === "auto" && placesEnabled()) || wanted === "google") {
-    prospects = await searchPlaces({ niche, location, limit });
+    prospects = await searchPlaces({ niche, location, limit, near: near ? { ...near, radiusKm } : undefined });
     source = "google_places";
   } else {
-    center = (await geocode(location)) ?? undefined;
+    center = near ? { lat: near.lat, lon: near.lon, label: "your location" } : ((await geocode(location)) ?? undefined);
     if (!center) throw new Error(`Couldn't find "${location}" on the map. Try "City, State".`);
     if (niche.id === "custom" && !niche.osmName) throw new Error("Pick a niche from the list for map search");
     prospects = await searchOsm({ niche, center, radiusKm, limit });

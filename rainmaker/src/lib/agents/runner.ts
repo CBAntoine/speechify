@@ -6,7 +6,7 @@ import { claude, describeError, FALLBACK, MODEL } from "@/lib/claude/client";
 import { templateOutreach } from "@/lib/claude/outreach";
 import { getNiche, matchNiche, NICHES } from "@/lib/niches";
 import { addActivity, getLead, getProfile, listDrafts, listLeads } from "@/lib/repo";
-import { newId, readDb, update } from "@/lib/store";
+import { getStoredRun, listStoredRuns, newId, putStoredRun, readDb, update } from "@/lib/store";
 import type { AgencyProfile, AgentRun, RunEvent } from "@/lib/types";
 import { getAgent, type AgentDef, type AgentId } from "./roster";
 import { executeTool, toolsFor, TOOLS, type ToolContext } from "./tools";
@@ -48,12 +48,29 @@ function scheduleSave(l: Live) {
 }
 
 async function persistRun(run: AgentRun) {
-  const copy = structuredClone(run);
-  await update((db) => {
-    const i = db.runs.findIndex((r) => r.id === run.id);
-    if (i >= 0) db.runs[i] = copy;
-    else db.runs.unshift(copy);
-  });
+  try {
+    await putStoredRun(structuredClone(run));
+  } catch (err) {
+    console.error("[rainmaker] could not save run", err);
+  }
+}
+
+/** No events for this long means the server running it is gone. */
+const STALE_MS = 8 * 60_000;
+
+function settle(run: AgentRun): AgentRun {
+  if (run.status !== "running" && run.status !== "waiting") return run;
+  const last = run.events[run.events.length - 1]?.at ?? run.startedAt;
+  if (Date.now() - Date.parse(last) < STALE_MS) return run;
+  return { ...run, status: "stopped", error: run.error ?? "This run stopped responding. The server may have restarted or hit its time limit." };
+}
+
+async function stopRequestedElsewhere(runId: string): Promise<boolean> {
+  try {
+    return Boolean((await readDb()).stopRequests?.includes(runId));
+  } catch {
+    return false;
+  }
 }
 
 async function flush(l: Live) {
@@ -67,12 +84,13 @@ async function flush(l: Live) {
 export async function getRun(id: string): Promise<AgentRun | undefined> {
   const l = live.get(id);
   if (l) return structuredClone(l.run);
-  return (await readDb()).runs.find((r) => r.id === id);
+  const stored = await getStoredRun(id);
+  return stored ? settle(stored) : undefined;
 }
 
 export async function listRuns(): Promise<AgentRun[]> {
-  const stored = (await readDb()).runs;
-  return stored.map((r) => (live.has(r.id) ? structuredClone(live.get(r.id)!.run) : r));
+  const stored = await listStoredRuns(40);
+  return stored.map((r) => (live.has(r.id) ? structuredClone(live.get(r.id)!.run) : settle(r)));
 }
 
 function kickoff(profile: AgencyProfile, goal: string): string {
@@ -127,8 +145,10 @@ export async function startRun(agentId: string, goal: string): Promise<{ run: Ag
 export async function followUp(runId: string, text: string): Promise<{ run: AgentRun; done: Promise<void> }> {
   let l = live.get(runId);
   if (!l) {
-    const stored = (await readDb()).runs.find((r) => r.id === runId);
-    if (!stored) throw new Error("Run not found");
+    const found = await getStoredRun(runId);
+    if (!found) throw new Error("Run not found");
+    const stored = settle(found);
+    if (stored.status === "running" || stored.status === "waiting") throw new Error("The agent is still working. Wait for it to finish or stop it.");
     const def = getAgent(stored.agentId);
     if (!def) throw new Error("Unknown agent");
     if (stored.runtime === "messages") throw new Error("This run's conversation is gone (server restarted). Start a new run.");
@@ -151,7 +171,23 @@ export async function followUp(runId: string, text: string): Promise<{ run: Agen
 
 export async function stopRun(runId: string): Promise<void> {
   const l = live.get(runId);
-  if (!l || !l.busy) return;
+  if (!l) {
+    // The run may be executing on another server instance: leave a stop
+    // request it checks between steps, and interrupt a Managed Agents
+    // session directly.
+    const stored = await getStoredRun(runId);
+    if (!stored || (stored.status !== "running" && stored.status !== "waiting")) return;
+    await update((db) => {
+      db.stopRequests = [...(db.stopRequests ?? []).filter((x) => x !== runId), runId];
+    });
+    if (stored.runtime === "managed" && stored.sessionId) {
+      await claude()
+        .beta.sessions.events.send(stored.sessionId, { events: [{ type: "user.interrupt" }] })
+        .catch(() => undefined);
+    }
+    return;
+  }
+  if (!l.busy) return;
   l.stopRequested = true;
   l.abort.abort();
   emit(l, { kind: "status", text: "Stopping…" });
@@ -170,6 +206,7 @@ async function execute(l: Live, text: string, first: boolean): Promise<void> {
     else if (l.run.runtime === "messages") await runMessages(l, text, first);
     // The demo script parses the user's own words, not the full kickoff.
     else await runDemo(l, l.run.goal);
+    if (!l.stopRequested && (await stopRequestedElsewhere(l.run.id))) l.stopRequested = true;
     if (l.run.status === "running" || l.run.status === "waiting") l.run.status = l.stopRequested ? "stopped" : "done";
   } catch (err) {
     if (l.stopRequested) {
@@ -182,6 +219,11 @@ async function execute(l: Live, text: string, first: boolean): Promise<void> {
   } finally {
     l.busy = false;
     l.run.endedAt = now();
+    if (l.stopRequested) {
+      await update((db) => {
+        db.stopRequests = (db.stopRequests ?? []).filter((x) => x !== l.run.id);
+      }).catch(() => undefined);
+    }
     if (!l.run.summary) {
       const last = [...l.run.events].reverse().find((e) => e.kind === "message");
       l.run.summary = last?.text?.slice(0, 600);
@@ -408,7 +450,10 @@ async function runMessages(l: Live, message: string, first: boolean) {
   if (first) l.messages = [];
   l.messages.push({ role: "user", content: message });
   for (let turn = 0; turn < 40; turn++) {
-    if (l.stopRequested) return;
+    if (l.stopRequested || (await stopRequestedElsewhere(l.run.id))) {
+      l.stopRequested = true;
+      return;
+    }
     const res = await c.beta.messages.create(
       {
         model: MODEL,

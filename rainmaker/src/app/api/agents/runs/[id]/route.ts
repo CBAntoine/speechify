@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { followUp, getRun, stopRun } from "@/lib/agents/runner";
 import { HttpError, readBody, route, type IdParams } from "@/lib/http";
 
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 export const GET = route(async (_req: Request, { params }: IdParams) => {
   const run = await getRun((await params).id);

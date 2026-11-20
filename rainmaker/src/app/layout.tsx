@@ -2,41 +2,41 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/bricolage-grotesque";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 import { ToastProvider } from "@/components/client";
-import { integrations } from "@/lib/config";
-import { readDb } from "@/lib/store";
-
-export const dynamic = "force-dynamic";
+import { INSTALL_CAPTURE_SCRIPT, PwaSetup } from "@/components/pwa";
 
 export const metadata: Metadata = {
   title: { default: "Rainmaker", template: "%s · Rainmaker" },
   description: "Find local-business clients, run your pipeline and build tailored ads with Claude agents.",
+  applicationName: "Rainmaker",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Rainmaker", statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f5f2" },
     { media: "(prefers-color-scheme: dark)", color: "#111110" },
   ],
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const db = await readDb();
-  const i = integrations();
-  const inbox = db.drafts.filter((d) => d.status === "pending").length;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_CAPTURE_SCRIPT }} />
+      </head>
       <body>
-        <ToastProvider>
-          <div className="app">
-            <Sidebar inbox={inbox} claude={i.claude} runtime={i.agentRuntime} agencyName={db.profile.agencyName} />
-            <main className="main">{children}</main>
-          </div>
-        </ToastProvider>
+        <ToastProvider>{children}</ToastProvider>
+        <PwaSetup />
       </body>
     </html>
   );

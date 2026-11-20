@@ -291,5 +291,7 @@ export interface Db {
     environmentId?: string;
     agents: Record<string, ManagedAgentRecord>;
   };
+  /** Run ids someone asked to stop (works across server instances). */
+  stopRequests?: string[];
   seeded: boolean;
 }

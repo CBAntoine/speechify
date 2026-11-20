@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Check, ExternalLink, Globe, Lightbulb, LoaderCircle, MapPin, Megaphone, Phone, Plus, Radar, Search,
-  SearchCheck, Star, X,
+  ArrowRight, Check, ChevronDown, Crosshair, ExternalLink, Globe, Lightbulb, LoaderCircle, MapPin, Megaphone, Phone, Plus, Radar,
+  Search, SearchCheck, Star, X,
 } from "lucide-react";
 import { api, Drawer, useToast } from "@/components/client";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
@@ -60,6 +60,8 @@ export function ProspectFinder({
   const [custom, setCustom] = useState(known ? "" : initial.niche);
   const [location, setLocation] = useState(initial.location);
   const [radius, setRadius] = useState(12);
+  const [near, setNear] = useState<{ lat: number; lon: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export function ProspectFinder({
   const search = useCallback(
     async (source?: "sample") => {
       const nicheText = niche === "custom" ? custom.trim() : niche;
-      if (!nicheText || !location.trim()) {
+      if (!nicheText || (!location.trim() && !near)) {
         toast("Pick a niche and a city first", "error");
         return;
       }
@@ -86,9 +88,12 @@ export function ProspectFinder({
       const t1 = setTimeout(() => setPhase("Checking their websites for gaps…"), 3500);
       const t2 = setTimeout(() => setPhase("Scoring who needs you most…"), 11000);
       try {
-        const res = await api<Result>("/api/prospects/search", { method: "POST", json: { niche: nicheText, location, radiusKm: radius, limit: 24, audit: 10, source } });
+        const res = await api<Result>("/api/prospects/search", {
+          method: "POST",
+          json: { niche: nicheText, location: near ? "" : location, ...(near ? { lat: near.lat, lon: near.lon } : {}), radiusKm: radius, limit: 24, audit: 10, source },
+        });
         setResult(res);
-        const q = new URLSearchParams({ niche: nicheText, location });
+        const q = new URLSearchParams(near ? { niche: nicheText } : { niche: nicheText, location });
         router.replace(`/prospects?${q}`, { scroll: false });
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -100,8 +105,28 @@ export function ProspectFinder({
         setPhase("");
       }
     },
-    [niche, custom, location, radius, places, router, toast]
+    [niche, custom, location, near, radius, places, router, toast]
   );
+
+  function locateMe() {
+    if (!("geolocation" in navigator)) {
+      toast("This browser can't share your location", "error");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setNear({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setLocation("Near me");
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        toast(err.code === err.PERMISSION_DENIED ? "Location is blocked. Allow it for this site in Chrome's settings." : "Couldn't get your location. Try typing a city.", "error");
+      },
+      { enableHighAccuracy: false, timeout: 12_000, maximumAge: 120_000 }
+    );
+  }
 
   useEffect(() => {
     if (initial.go && !started.current && initial.location) {
@@ -189,11 +214,34 @@ export function ProspectFinder({
             </label>
             <label className="field">
               <span>City or area</span>
-              <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Austin, TX" required />
+              <span style={{ position: "relative", display: "block" }}>
+                <input
+                  className="input"
+                  style={{ paddingRight: 44 }}
+                  value={location}
+                  onChange={(e) => {
+                    setLocation(e.target.value);
+                    setNear(null);
+                  }}
+                  placeholder="e.g. Austin, TX"
+                  enterKeyHint="search"
+                  required
+                />
+                <button
+                  type="button"
+                  className="btn ghost icon sm"
+                  style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", color: near ? "var(--brand)" : undefined }}
+                  onClick={locateMe}
+                  aria-label="Search near my location"
+                  title="Search near me"
+                >
+                  {locating ? <LoaderCircle size={16} className="spin" /> : <Crosshair size={16} />}
+                </button>
+              </span>
             </label>
             <label className="field">
               <span>Radius</span>
-              <select className="select" value={radius} onChange={(e) => setRadius(Number(e.target.value))} disabled={places}>
+              <select className="select" value={radius} onChange={(e) => setRadius(Number(e.target.value))} disabled={places && !near}>
                 {[5, 12, 25, 40].map((r) => (
                   <option key={r} value={r}>
                     {r} km
@@ -211,7 +259,7 @@ export function ProspectFinder({
               <input className="input" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="e.g. tattoo studio, wedding photographer" />
             </label>
           )}
-          <div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
+          <div className="row wrap filters-scroll" style={{ marginTop: 12, gap: 6 }}>
             <span className="faint small" style={{ marginRight: 4 }}>
               Show only:
             </span>
@@ -229,6 +277,26 @@ export function ProspectFinder({
             ))}
           </div>
         </form>
+
+        {nicheInfo && (
+          <details className="niche-mobile">
+            <summary className="card niche-summary">
+              <span className="icon-tile">
+                <DynIcon name={nicheInfo.icon} size={15} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b>What works for {nicheInfo.plural}</b>
+                <span className="faint small" style={{ display: "block" }}>
+                  Offers, customer value, sources
+                </span>
+              </span>
+              <ChevronDown size={18} className="faint chev" />
+            </summary>
+            <div style={{ marginTop: 10 }}>
+              <NichePanel n={nicheInfo} />
+            </div>
+          </details>
+        )}
 
         {loading && (
           <div className="stack" style={{ gap: 12 }}>

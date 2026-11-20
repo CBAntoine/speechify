@@ -109,9 +109,9 @@ export function AgentAvatar({ icon, color, size = "md" }: { icon: string; color:
   );
 }
 
-export function PageHead({ title, sub, actions }: { title: string; sub?: ReactNode; actions?: ReactNode }) {
+export function PageHead({ title, sub, actions, keepTitle }: { title: string; sub?: ReactNode; actions?: ReactNode; keepTitle?: boolean }) {
   return (
-    <div className="page-head">
+    <div className={`page-head ${keepTitle ? "keep-title" : ""}`}>
       <div>
         <h1>{title}</h1>
         {sub && <p>{sub}</p>}

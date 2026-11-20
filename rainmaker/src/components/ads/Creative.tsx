@@ -149,8 +149,8 @@ export const CreativeSvg = forwardRef<SVGSVGElement, { creative: Creative; busin
   }
 );
 
-/** Render an SVG element to a PNG and download it. */
-export async function downloadPng(svg: SVGSVGElement, filename: string, width: number, height: number) {
+/** Render an SVG element to a PNG blob at full size. */
+export async function renderPng(svg: SVGSVGElement, width: number, height: number): Promise<Blob> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
@@ -171,12 +171,39 @@ export async function downloadPng(svg: SVGSVGElement, filename: string, width: n
     ctx.drawImage(img, 0, 0, width, height);
     const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
     if (!blob) throw new Error("Couldn't create the PNG");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    return blob;
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Render an SVG element to a PNG and download it. */
+export async function downloadPng(svg: SVGSVGElement, filename: string, width: number, height: number) {
+  const blob = await renderPng(svg, width, height);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** Send the PNG to another app (WhatsApp, Instagram, Gmail…) with the phone's share sheet. */
+export async function sharePng(svg: SVGSVGElement, filename: string, width: number, height: number, text?: string): Promise<"shared" | "downloaded" | "cancelled"> {
+  const blob = await renderPng(svg, width, height);
+  const file = new File([blob], filename, { type: "image/png" });
+  const data: ShareData = { files: [file], ...(text ? { text } : {}) };
+  if (typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(data)) {
+    try {
+      await navigator.share(data);
+      return "shared";
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return "cancelled";
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return "downloaded";
 }

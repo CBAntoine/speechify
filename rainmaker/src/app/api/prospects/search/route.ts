@@ -4,13 +4,15 @@ import { HttpError, readBody, route } from "@/lib/http";
 export const maxDuration = 120;
 
 export const POST = route(async (req: Request) => {
-  const b = await readBody<{ niche?: string; location?: string; limit?: number; radiusKm?: number; audit?: number; source?: "auto" | "google" | "osm" | "sample" }>(req);
+  const b = await readBody<{ niche?: string; location?: string; limit?: number; radiusKm?: number; audit?: number; source?: "auto" | "google" | "osm" | "sample"; lat?: number; lon?: number }>(req);
   if (!b.niche?.trim()) throw new HttpError(400, "Pick a niche");
-  if (!b.location?.trim()) throw new HttpError(400, "Add a city or area");
+  const near = typeof b.lat === "number" && typeof b.lon === "number" ? { lat: b.lat, lon: b.lon } : undefined;
+  if (!b.location?.trim() && !near) throw new HttpError(400, "Add a city or area");
   try {
     const result = await findBusinesses({
       niche: b.niche,
-      location: b.location,
+      location: b.location ?? "",
+      near,
       limit: b.limit,
       radiusKm: b.radiusKm,
       audit: b.audit ?? 8,

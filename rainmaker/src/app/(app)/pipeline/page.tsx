@@ -18,7 +18,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
     <div className="page wide">
       <PageHead
         title="Pipeline"
-        sub={`${open.length} open deals worth ${money(open.reduce((a, l) => a + (l.value ?? 0), 0))}/month. Drag cards between stages; click one for its audit, outreach and ads.`}
+        sub={`${open.length} open deals worth ${money(open.reduce((a, l) => a + (l.value ?? 0), 0))}/month. Open a card for its audit, outreach and ads.`}
       />
       <Board
         initialLeads={db.leads}

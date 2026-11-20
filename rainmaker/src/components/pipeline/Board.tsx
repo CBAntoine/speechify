@@ -42,6 +42,8 @@ export function Board({
   const [nicheFilter, setNicheFilter] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<Stage | null>(null);
+  // Phones show one stage at a time; start on the first stage with deals.
+  const [activeStage, setActiveStage] = useState<Stage>(() => STAGES.find((s) => initialLeads.some((l) => l.stage === s.id))?.id ?? "new");
   const [openId, setOpenId] = useState<string | undefined>(openLeadId);
   const [adding, setAdding] = useState(false);
 
@@ -74,7 +76,7 @@ export function Board({
   return (
     <>
       <div className="row wrap" style={{ marginBottom: 14, gap: 8 }}>
-        <div className="tabs">
+        <div className="tabs desktop-only">
           <button className="tab" aria-selected={view === "board"} onClick={() => setView("board")}>
             <Columns3 size={14} /> Board
           </button>
@@ -109,6 +111,16 @@ export function Board({
           </Empty>
         </div>
       ) : view === "board" ? (
+        <>
+        <div className="stage-tabs" role="tablist" aria-label="Stages">
+          {STAGES.map((s) => (
+            <button key={s.id} role="tab" className="stage-tab" aria-selected={activeStage === s.id} onClick={() => setActiveStage(s.id)}>
+              <span className="stage-dot" style={{ background: COLORS[s.id] }} />
+              {s.label}
+              <b>{filtered.filter((l) => l.stage === s.id).length}</b>
+            </button>
+          ))}
+        </div>
         <div className="board">
           {STAGES.map((s) => {
             const items = filtered.filter((l) => l.stage === s.id).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
@@ -116,7 +128,7 @@ export function Board({
             return (
               <section
                 key={s.id}
-                className={`column ${over === s.id ? "over" : ""}`}
+                className={`column ${over === s.id ? "over" : ""} ${activeStage === s.id ? "active" : ""}`}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setOver(s.id);
@@ -142,10 +154,13 @@ export function Board({
                     const n = niche(l.niche);
                     const pending = pendingFor(l.id);
                     return (
-                      <button
+                      <article
                         key={l.id}
                         className={`deal ${dragId === l.id ? "dragging" : ""}`}
                         draggable
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Open ${l.name}`}
                         onDragStart={(e) => {
                           setDragId(l.id);
                           e.dataTransfer.setData("text/plain", l.id);
@@ -153,6 +168,12 @@ export function Board({
                         }}
                         onDragEnd={() => setDragId(null)}
                         onClick={() => setOpenId(l.id)}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            setOpenId(l.id);
+                          }
+                        }}
                       >
                         <div className="row" style={{ alignItems: "flex-start", gap: 10, width: "100%" }}>
                           <div style={{ minWidth: 0, flex: 1 }}>
@@ -178,15 +199,38 @@ export function Board({
                           <span className="spacer" />
                           <span className="nowrap">{timeAgo(l.lastContactAt ?? l.updatedAt)}</span>
                         </div>
-                      </button>
+                        <div className="row mobile-only" style={{ gap: 8, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+                          <label className="row small faint" style={{ gap: 8, width: "100%" }}>
+                            Move to
+                            <select
+                              className="select move-select"
+                              value={l.stage}
+                              onChange={(e) => void move(l.id, e.target.value as Stage)}
+                              aria-label={`Move ${l.name} to another stage`}
+                            >
+                              {STAGES.map((st) => (
+                                <option key={st.id} value={st.id}>
+                                  {st.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </article>
                     );
                   })}
-                  {items.length === 0 && <div className="faint small" style={{ padding: "18px 8px", textAlign: "center" }}>Drop a lead here</div>}
+                  {items.length === 0 && (
+                    <div className="faint small" style={{ padding: "18px 8px", textAlign: "center" }}>
+                      <span className="desktop-only">Drop a lead here</span>
+                      <span className="mobile-only">No leads in {s.label} yet</span>
+                    </div>
+                  )}
                 </div>
               </section>
             );
           })}
         </div>
+        </>
       ) : (
         <div className="card" style={{ overflowX: "auto" }}>
           <table className="table">

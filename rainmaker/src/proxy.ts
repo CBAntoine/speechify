@@ -1,35 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isPublicPath, SESSION_COOKIE, verifySession } from "@/lib/auth";
 
-// Password gate. Set APP_PASSWORD before deploying anywhere public: without
-// it, anyone with the URL could use your CRM and spend your API credits.
-// The browser shows its built-in login box (HTTP Basic auth); any username works.
+// Sign-in gate. Set APP_PASSWORD before deploying anywhere public: without it,
+// anyone with the URL could use your CRM and spend your API credits.
+// Signing in once keeps a phone signed in for 180 days.
 
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const password = process.env.APP_PASSWORD;
   if (!password) return NextResponse.next();
-  const header = request.headers.get("authorization") ?? "";
-  if (header.startsWith("Basic ")) {
-    try {
-      const decoded = atob(header.slice(6));
-      const pass = decoded.slice(decoded.indexOf(":") + 1);
-      if (safeEqual(pass, password)) return NextResponse.next();
-    } catch {
-      /* fall through to the challenge */
-    }
-  }
-  return new NextResponse("Sign in to Rainmaker", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="Rainmaker", charset="UTF-8"' },
-  });
+  const { pathname, search } = request.nextUrl;
+  if (isPublicPath(pathname)) return NextResponse.next();
+  if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value, password)) return NextResponse.next();
+  if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+  return NextResponse.redirect(url);
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ExternalLink, Globe, LoaderCircle, Mail, Megaphone, MessageSquare, Phone, PhoneCall, RefreshCw, Save, Send, Trash, Video, Wand, X } from "lucide-react";
+import { ExternalLink, Globe, LoaderCircle, Mail, MapPinned, Megaphone, MessageSquare, Phone, PhoneCall, RefreshCw, Save, Send, Share2, Trash, Video, Wand, X } from "lucide-react";
 import { api, CopyButton, Drawer, useToast } from "@/components/client";
+import { shareOrCopy, useCanShare } from "@/components/pwa";
+import { topSignals } from "@/lib/prospecting/score";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
 import { DynIcon, ScoreRing, TierBadge } from "@/components/ui";
 import { timeAgo, money } from "@/lib/format";
@@ -53,6 +55,7 @@ export function LeadDrawer({
   const [piece, setPiece] = useState<Piece>("email");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const shareable = useCanShare();
 
   useEffect(() => {
     if (!lead) return;
@@ -184,6 +187,7 @@ export function LeadDrawer({
       <div className="drawer-body stack" style={{ gap: 20 }}>
         {tab === "overview" && (
           <>
+            <QuickActions lead={lead} />
             <section className="stack" style={{ gap: 10 }}>
               <div className="grid-2">
                 <label className="field">
@@ -318,6 +322,26 @@ export function LeadDrawer({
                     <Send size={14} /> Save to Inbox
                   </button>
                   <CopyButton text={piece === "email" ? `Subject: ${subject}\n\n${body}` : body} />
+                  {piece === "email" && lead.email && (
+                    <a className="btn sm" href={`mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}>
+                      <Mail size={14} /> Email app
+                    </a>
+                  )}
+                  {piece === "sms" && lead.phone && (
+                    <a className="btn sm" href={`sms:${lead.phone.replace(/[^\d+]/g, "")}?body=${encodeURIComponent(body)}`}>
+                      <MessageSquare size={14} /> Messages
+                    </a>
+                  )}
+                  {piece === "call" && lead.phone && (
+                    <a className="btn sm" href={`tel:${lead.phone.replace(/[^\d+]/g, "")}`}>
+                      <Phone size={14} /> Call now
+                    </a>
+                  )}
+                  {shareable && (
+                    <button className="btn sm" onClick={() => void shareOrCopy({ title: piece === "email" ? subject : undefined, text: body })}>
+                      <Share2 size={14} /> Share
+                    </button>
+                  )}
                   <button className="btn sm ghost" onClick={() => void write()} disabled={busy === "write"}>
                     {busy === "write" ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Rewrite
                   </button>
@@ -420,5 +444,60 @@ export function LeadDrawer({
         )}
       </div>
     </Drawer>
+  );
+}
+
+/** Big tap targets for what you do from a phone: call, text, email, drive there. */
+function QuickActions({ lead }: { lead: Lead }) {
+  const toast = useToast();
+  const phone = lead.phone?.replace(/[^\d+]/g, "");
+  const dest = lead.lat !== undefined && lead.lon !== undefined ? `${lead.lat},${lead.lon}` : [lead.name, lead.address ?? lead.city].filter(Boolean).join(" ");
+  const summary = [
+    lead.name,
+    lead.address ?? lead.city,
+    lead.phone,
+    lead.website,
+    ...topSignals(lead.signals, 3).map((s) => `• ${s.label}`),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return (
+    <div className="quick-actions">
+      {phone && (
+        <a className="quick-action" href={`tel:${phone}`}>
+          <Phone size={20} /> Call
+        </a>
+      )}
+      {phone && (
+        <a className="quick-action" href={`sms:${phone}`}>
+          <MessageSquare size={20} /> Text
+        </a>
+      )}
+      {lead.email && (
+        <a className="quick-action" href={`mailto:${encodeURIComponent(lead.email)}`}>
+          <Mail size={20} /> Email
+        </a>
+      )}
+      {lead.website && (
+        <a className="quick-action" href={lead.website} target="_blank" rel="noreferrer">
+          <Globe size={20} /> Website
+        </a>
+      )}
+      {dest && (
+        <a className="quick-action" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`} target="_blank" rel="noreferrer">
+          <MapPinned size={20} /> Directions
+        </a>
+      )}
+      <button
+        type="button"
+        className="quick-action"
+        onClick={async () => {
+          const r = await shareOrCopy({ title: lead.name, text: summary });
+          if (r === "copied") toast("Lead details copied");
+        }}
+      >
+        <Share2 size={20} /> Share
+      </button>
+    </div>
   );
 }

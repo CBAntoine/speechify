@@ -43,7 +43,13 @@ export function placesEnabled(): boolean {
   return Boolean(process.env.GOOGLE_PLACES_API_KEY);
 }
 
-export async function searchPlaces(params: { niche: Niche; location: string; limit: number }): Promise<Prospect[]> {
+export async function searchPlaces(params: {
+  niche: Niche;
+  location: string;
+  limit: number;
+  /** Search around a point (the phone's location) instead of a named place. */
+  near?: { lat: number; lon: number; radiusKm: number };
+}): Promise<Prospect[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) throw new Error("GOOGLE_PLACES_API_KEY is not set");
   const out: Prospect[] = [];
@@ -57,8 +63,11 @@ export async function searchPlaces(params: { niche: Niche; location: string; lim
         "X-Goog-FieldMask": FIELDS,
       },
       body: JSON.stringify({
-        textQuery: `${params.niche.query} in ${params.location}`,
+        textQuery: params.near ? params.niche.query : `${params.niche.query} in ${params.location}`,
         pageSize: 20,
+        ...(params.near
+          ? { locationBias: { circle: { center: { latitude: params.near.lat, longitude: params.near.lon }, radius: Math.min(50_000, params.near.radiusKm * 1000) } } }
+          : {}),
         ...(pageToken ? { pageToken } : {}),
       }),
       signal: AbortSignal.timeout(15_000),

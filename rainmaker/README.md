@@ -32,7 +32,8 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | `AGENT_RUN_BUDGET_USD` | Hard spending cap per agent run (default $3). |
 | `GOOGLE_PLACES_API_KEY` | Google Places API (New): better coverage plus ratings and review counts, which unlock the review-gap signals. |
 | `RESEND_API_KEY` + `RESEND_FROM` | Send approved emails from the Inbox, from your own verified domain. Without them, "Open in my email" fills in your own mail app. |
-| `APP_PASSWORD` | Puts the whole app behind a password. **Set it before you deploy anywhere public.** |
+| `APP_PASSWORD` | Puts the whole app behind a sign-in page. **Set it before you deploy anywhere public.** |
+| `DATABASE_URL` | Postgres for cloud hosting (required on Vercel). Without it, data goes to a local JSON file. |
 
 ## The screens
 
@@ -102,19 +103,56 @@ The tools:
 - Every call sets **server-side refusal fallback** (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`): if the model declines a request on policy grounds, the API retries on a fallback model inside the same call. Remove `FALLBACK` in `src/lib/claude/client.ts` to turn it off.
 - Platform limits are enforced after generation (Google headlines ≤30 characters, descriptions ≤90, Meta headlines ≤40), and the UI shows counters.
 
-## Deploying
+## Use it on your Android phone
 
-Rainmaker keeps its data in one JSON file (`.data/db.json`, or `DATA_DIR`). Agent runs keep going after the request that started them, so it runs best as **one long-lived Node server**: your own machine, a VPS, Railway, Render or Fly with a persistent disk.
+Rainmaker installs on Android as an app: Chrome adds it to your home screen and app drawer, and it opens full screen like a normal app. Your phone needs to reach it over the internet, so you host it once (free tiers work). You can do every step below from your phone's browser.
 
-```bash
-npm run build && npm start      # port 3100
-```
+**1. Put the code on your main branch.** Merge the `ccr-461324e6-fulfni` branch into `main` on GitHub.
 
-On Vercel or other serverless hosts the app builds and runs, but:
-- The filesystem is temporary, so data falls back to `/tmp` and is lost when an instance recycles.
-- Each agent run is limited by the function's maximum duration.
+**2. Create a Vercel project for Rainmaker.**
+- On vercel.com, choose **Add New → Project**, import the `speechify` repository, and set **Root Directory** to `rainmaker`.
+- Add these environment variables:
+  - `APP_PASSWORD`: pick a password. Required, because anyone could open the site without it.
+  - `ANTHROPIC_API_KEY`: switches on Claude for ads, emails and agents. Optional.
+  - `GOOGLE_PLACES_API_KEY`: adds ratings and review counts to search. Optional.
+- Tap **Deploy**.
 
-Swap `src/lib/store.ts` for Postgres or SQLite before relying on serverless.
+Your GTA site is a separate Vercel project and isn't affected.
+
+**3. Add a database.**
+- In the new project, open **Storage → Create Database → Neon (Postgres)** and connect it to the project. This sets `DATABASE_URL`.
+- Open **Deployments**, then **Redeploy**.
+
+Without a database, Vercel forgets your data whenever its servers restart. The app shows a warning until you connect one.
+
+**4. Install it.**
+- Open your Vercel URL in **Chrome** on Android and sign in.
+- Tap **Install** in the top bar, or Chrome's **⋮ menu → Install app**.
+- Rainmaker now has its own icon and opens without the browser bar. Long-press the icon for shortcuts to Find clients, Pipeline, Inbox and Ad Studio.
+
+### What's built for the phone
+
+- **Tab bar** at the bottom (Today, Find, Pipeline, Inbox, More), with large tap targets and room for Android's gesture bar.
+- **Find clients near me:** tap the target icon in the city field to search around where you're standing. Good for walk-in prospecting.
+- **Pipeline:** one stage at a time, with swipeable stage tabs and a **Move to** menu on each card. Drag-and-drop doesn't work with touch, so this replaces it.
+- **Lead screen:** big **Call, Text, Email, Website, Directions and Share** buttons. They open your phone's dialer, Messages, Gmail and Google Maps.
+- **Inbox:** tap a message to read it full screen, then send it from your own email or Messages app, or **Share** it to WhatsApp or any other app.
+- **Ad Studio:** **Share image** sends the finished ad creative straight to Instagram, WhatsApp or Gmail.
+- **Share to Rainmaker:** in Google Maps or Chrome, tap Share on a business and pick Rainmaker. You can turn it into a lead (with a website audit) or make sample ads for it.
+- **Stays signed in** for 6 months. An **offline screen** appears when you lose signal, and the app refreshes when you switch back to it.
+
+On Vercel's free plan, each agent run is limited to 5 minutes, which covers typical runs. Every step is saved as it happens. If a run outlives its server, it's marked stopped instead of hanging.
+
+## Deploying elsewhere
+
+- **With Postgres** (`DATABASE_URL`): any Node host works, serverless included. Data is shared by every server instance. All writes are compare-and-set, so simultaneous edits from your phone, your laptop and running agents don't overwrite each other.
+- **Without a database:** data lives in one JSON file (`.data/db.json`, or `DATA_DIR`). Use this on your own computer or a single server with a persistent disk:
+
+  ```bash
+  npm run build && npm start      # port 3100
+  ```
+
+  To install it on your phone from your own computer, the phone needs an HTTPS address. A tunnel such as Cloudflare Tunnel provides one.
 
 **Set `APP_PASSWORD`** on any public deployment. Without it, anyone with the URL can use your data and your API credits.
 
@@ -124,8 +162,8 @@ Rainmaker is deliberately smaller than GoHighLevel. It does **not** have:
 - A phone system or SMS sending
 - Funnels or a website builder, calendars or booking pages, payments, or membership sites
 - White-label or SaaS reselling
-- A native mobile app (the web app works on phones)
-- Multi-user accounts
+- A Play Store app (it installs from Chrome as an app; [PWABuilder](https://www.pwabuilder.com) can package it for the Play Store if you want one)
+- Multi-user accounts (one shared password)
 
 Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the tools you already use for those jobs.
 
@@ -133,7 +171,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 25 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing, niches, seed data, playbook sources
+npm test          # 29 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing, niches, seed data, playbook sources, concurrent storage writes
 npm run build
 ```
 
@@ -147,6 +185,7 @@ src/lib/claude/          Claude client, ad campaigns, outreach, web research
 src/lib/agents/          agent roster, CRM tools, runtimes (Managed Agents, Messages API, demo)
 src/lib/niches.ts        18 niches: map tags, offers, angles, pain points, sourced values
 src/lib/playbooks.ts     client-finding playbooks with sources
-src/lib/store.ts         JSON-file database; repo.ts holds the domain operations
+src/lib/store.ts         storage: Postgres (DATABASE_URL) or a JSON file; repo.ts holds the domain operations
+src/app/manifest.ts      installable app (PWA): icons, shortcuts, share target; public/sw.js is the service worker
 docs/research.md         the research, with sources and caveats
 ```

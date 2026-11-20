@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ExternalLink, Inbox as InboxIcon, LoaderCircle, Mail, MessageSquare, PhoneCall, Plus, Send, Trash, User } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, ExternalLink, Inbox as InboxIcon, LoaderCircle, Mail, MessageSquare, PhoneCall, Plus, Send, Share2, Trash, User } from "lucide-react";
 import { api, CopyButton, useToast } from "@/components/client";
+import { shareOrCopy, useCanShare } from "@/components/pwa";
 import { AgentAvatar, Empty } from "@/components/ui";
 import { dueLabel, timeAgo } from "@/lib/format";
 import type { Draft, Task } from "@/lib/types";
@@ -25,6 +26,9 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
   const [tasks, setTasks] = useState(initialTasks);
   const [tab, setTab] = useState<"pending" | "sent" | "discarded">("pending");
   const [selId, setSelId] = useState<string | undefined>(initial.find((d) => d.status === "pending")?.id);
+  // Phones show the list or one message at a time.
+  const [view, setView] = useState<"list" | "detail">("list");
+  const shareable = useCanShare();
   const [edit, setEdit] = useState({ to: "", subject: "", body: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
@@ -46,6 +50,7 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
     setDrafts((ds) => ds.map((d) => (d.id === updated.id ? updated : d)));
     const next = drafts.find((d) => d.status === "pending" && d.id !== updated.id);
     setSelId(next?.id);
+    setView("list");
     toast(msg);
     router.refresh();
   }
@@ -118,8 +123,8 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <div className="studio" style={{ gridTemplateColumns: "360px minmax(0,1fr)" }}>
-        <section className="card" style={{ overflow: "hidden" }}>
+      <div className="studio inbox-split" data-view={view}>
+        <section className="card inbox-list" style={{ overflow: "hidden" }}>
           <div className="card-head">
             <div className="tabs">
               {(["pending", "sent", "discarded"] as const).map((t) => (
@@ -135,7 +140,16 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
                 const a = who(d);
                 const C = CHANNEL[d.channel];
                 return (
-                  <button key={d.id} className="list-item" onClick={() => setSelId(d.id)} style={{ background: d.id === selId ? "var(--brand-soft)" : undefined }}>
+                  <button
+                    key={d.id}
+                    className="list-item"
+                    onClick={() => {
+                      setSelId(d.id);
+                      setView("detail");
+                      window.scrollTo({ top: 0 });
+                    }}
+                    style={{ background: d.id === selId ? "var(--brand-soft)" : undefined }}
+                  >
                     {a ? (
                       <AgentAvatar icon={a.icon} color={a.color} size="sm" />
                     ) : (
@@ -169,11 +183,14 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
           )}
         </section>
 
-        <section className="card">
+        <section className="card inbox-detail">
           {sel ? (
             <>
               <div className="card-head">
-                <div style={{ minWidth: 0 }}>
+                <button className="btn ghost icon sm inbox-back" onClick={() => setView("list")} aria-label="Back to messages">
+                  <ArrowLeft size={18} />
+                </button>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <h2 className="truncate">{sel.leadName ?? "Message"}</h2>
                   <div className="faint small">
                     {CHANNEL[sel.channel].label} · written by {who(sel)?.name ?? "you"} {timeAgo(sel.createdAt)}
@@ -236,6 +253,11 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
                       </a>
                     )}
                     <CopyButton text={sel.channel === "email" ? `Subject: ${edit.subject}\n\n${edit.body}` : edit.body} className="btn" />
+                    {shareable && (
+                      <button className="btn" onClick={() => void shareOrCopy({ title: sel.channel === "email" ? edit.subject : undefined, text: edit.body })}>
+                        <Share2 size={15} /> Share
+                      </button>
+                    )}
                     <button className="btn" onClick={() => void send(true)} disabled={busy !== null}>
                       <Check size={15} /> {sel.channel === "call" ? "Mark as called" : "Mark as sent"}
                     </button>

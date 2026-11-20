@@ -5,7 +5,7 @@ import { HttpError, readBody, route } from "@/lib/http";
 // Agent runs keep going after this response is sent. On a long-lived Node
 // server they can run as long as they need; on serverless hosts this is the
 // time limit.
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 export const GET = route(async () => {
   const runs = await listRuns();

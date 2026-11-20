@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Save, Sparkles } from "lucide-react";
 import { api, useToast } from "@/components/client";
+import { InstallButton } from "@/components/pwa";
 import type { AgencyProfile } from "@/lib/types";
 import type { Integrations } from "@/lib/config";
 
@@ -19,14 +20,14 @@ export function SettingsForm({
   profile: initial,
   integrations: i,
   niches,
-  dataDir,
+  storage,
   passwordSet,
   sampleCount,
 }: {
   profile: AgencyProfile;
   integrations: Integrations;
   niches: { id: string; label: string }[];
-  dataDir: string;
+  storage: { kind: "file" | "postgres"; label: string; persistent: boolean };
   passwordSet: boolean;
   sampleCount: number;
 }) {
@@ -77,7 +78,7 @@ export function SettingsForm({
   }
 
   return (
-    <div className="grid-2" style={{ alignItems: "start", gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr)" }}>
+    <div className="grid-2 wide-left">
       <form className="card" onSubmit={save}>
         <div className="card-head">
           <h2>Your agency</h2>
@@ -266,9 +267,19 @@ export function SettingsForm({
           </div>
           <div className="card-body stack" style={{ gap: 10 }}>
             <div className="row small muted" style={{ gap: 8 }}>
-              <Database size={14} /> Stored in <span className="mono">{dataDir}/db.json</span>
+              <Database size={14} /> Stored in <span className="mono">{storage.label}</span>
             </div>
-            <div className="muted small">Back this file up to keep your pipeline. Sample records are marked &ldquo;Sample&rdquo; and use fictional businesses.</div>
+            {!storage.persistent ? (
+              <div className="tip warn">
+                <span>
+                  This host doesn&apos;t keep files, so your data can disappear. Connect a Postgres database (on Vercel: Storage → Neon) and set DATABASE_URL.
+                </span>
+              </div>
+            ) : (
+              <div className="muted small">
+                {storage.kind === "postgres" ? "Saved in your Postgres database, shared by every device you sign in from." : "Back this file up to keep your pipeline."} Sample records are marked &ldquo;Sample&rdquo; and use fictional businesses.
+              </div>
+            )}
             <div className="row wrap">
               {sampleCount > 0 ? (
                 <button className="btn sm" onClick={() => void samples("clear")}>
@@ -280,6 +291,16 @@ export function SettingsForm({
                 </button>
               )}
             </div>
+          </div>
+        </section>
+
+        <section className="card card-pad stack" style={{ gap: 10 }}>
+          <b>Use it on your phone</b>
+          <div className="muted small">
+            Open this site in Chrome on Android and choose <b>Install app</b> (or ⋮ → <b>Add to home screen</b>). It opens full screen from its own icon, and Rainmaker shows up in your share sheet so you can send it a business from Google Maps.
+          </div>
+          <div className="row wrap">
+            <InstallButton className="btn primary sm" label="Install on this device" />
           </div>
         </section>
 

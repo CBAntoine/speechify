@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import {
-  Check, Clapperboard, Download, FileText, Image as ImageIcon, LayoutTemplate, LoaderCircle, Megaphone, Search,
+  Check, Clapperboard, Download, Share2, FileText, Image as ImageIcon, LayoutTemplate, LoaderCircle, Megaphone, Search,
   Sparkles, Target, Trash, Wand, X,
 } from "lucide-react";
 import { api, CopyButton, download, useToast } from "@/components/client";
@@ -11,7 +11,8 @@ import { Empty } from "@/components/ui";
 import { campaignIssues, campaignText, googleAdsCsv, LIMITS } from "@/lib/ads/limits";
 import { timeAgo } from "@/lib/format";
 import type { AdCampaign, Creative } from "@/lib/types";
-import { CreativeSvg, downloadPng, SIZES, type CreativeSize, type CreativeTemplate } from "./Creative";
+import { CreativeSvg, downloadPng, sharePng, SIZES, type CreativeSize, type CreativeTemplate } from "./Creative";
+import { shareOrCopy, useCanShare } from "@/components/pwa";
 import { Counter, FeedPreview, SearchPreview } from "./Previews";
 
 type LeadLite = { id: string; name: string; niche: string; city?: string; website?: string };
@@ -56,6 +57,8 @@ export function AdStudio({
   const [size, setSize] = useState<CreativeSize>("square");
   const [creative, setCreative] = useState<Creative | null>(campaign?.creative ?? null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const shareable = useCanShare();
 
   const niche = niches.find((n) => n.id === brief.niche);
   const issues = useMemo(() => (campaign ? campaignIssues(campaign) : []), [campaign]);
@@ -69,7 +72,8 @@ export function AdStudio({
     setCampaign(c);
     setCreative(c.creative);
     setTab("meta");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Phones stack the brief above the results, so bring the results into view.
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   async function generate(e: React.FormEvent) {
@@ -258,7 +262,7 @@ export function AdStudio({
         )}
       </div>
 
-      <div className="stack" style={{ gap: 14, minWidth: 0 }}>
+      <div className="stack" style={{ gap: 14, minWidth: 0, scrollMarginTop: 72 }} ref={resultsRef}>
         {!campaign ? (
           <div className="card">
             <Empty icon={<Megaphone size={18} />} title="Tailored ads in about a minute">
@@ -378,7 +382,14 @@ export function AdStudio({
                   <div key={i} className="stack" style={{ gap: 10 }}>
                     <div className="row between">
                       <span className="badge brand">{ad.angle}</span>
-                      <CopyButton text={`${ad.primaryText}\n\nHeadline: ${ad.headline}\nDescription: ${ad.description}\nCTA: ${ad.cta}`} className="btn sm ghost" label="Copy ad" />
+                      <span className="row" style={{ gap: 4 }}>
+                        {shareable && (
+                          <button className="btn sm ghost" onClick={() => void shareOrCopy({ title: ad.headline, text: `${ad.primaryText}\n\n${ad.headline}\n${ad.description}` })}>
+                            Share
+                          </button>
+                        )}
+                        <CopyButton text={`${ad.primaryText}\n\nHeadline: ${ad.headline}\nDescription: ${ad.description}\nCTA: ${ad.cta}`} className="btn sm ghost" label="Copy ad" />
+                      </span>
                     </div>
                     <FeedPreview ad={ad} business={campaign.businessName} creative={cr} template={(["bold", "split", "minimal"] as const)[i % 3]} url={campaign.website} />
                     <div className="card" style={{ padding: "10px 14px" }}>
@@ -545,7 +556,7 @@ export function AdStudio({
             )}
 
             {tab === "creative" && cr && (
-              <div className="grid-2" style={{ alignItems: "start", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)" }}>
+              <div className="grid-2 wide-left">
                 <div className="creative-wrap" style={{ maxWidth: size === "story" ? 360 : undefined, justifySelf: "center", width: "100%" }}>
                   <CreativeSvg ref={svgRef} creative={cr} business={campaign.businessName} size={size} template={template} />
                 </div>
@@ -589,6 +600,17 @@ export function AdStudio({
                     >
                       <Download size={15} /> Download PNG
                     </button>
+                    {shareable && (
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          if (svgRef.current)
+                            void sharePng(svgRef.current, `${slug}-${size}.png`, SIZES[size].w, SIZES[size].h, `${campaign.businessName}: ${cr.headline}`).catch((e) => toast(String(e), "error"));
+                        }}
+                      >
+                        <Share2 size={15} /> Share image
+                      </button>
+                    )}
                     <button className="btn ghost" onClick={() => setCreative(campaign.creative)}>
                       Reset
                     </button>

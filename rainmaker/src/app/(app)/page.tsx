@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, TrendingUp, UserPlus } from "lucide-react";
+import { InstallBanner } from "@/components/today/InstallBanner";
 import { QuickStart } from "@/components/today/QuickStart";
 import { AgentAvatar, Empty, PageHead, ScoreRing, Stat } from "@/components/ui";
 import { AGENTS } from "@/lib/agents/roster";
+import { listRuns } from "@/lib/agents/runner";
 import { integrations } from "@/lib/config";
 import { dueLabel, greeting, money, timeAgo } from "@/lib/format";
 import { NICHES, getNiche } from "@/lib/niches";
@@ -24,7 +26,7 @@ const STAGE_COLORS: Record<string, string> = {
 const ACTIVITY_ICON = { lead: UserPlus, draft: PenLine, ad: Megaphone, agent: Radar, stage: TrendingUp, task: ListTodo, system: Inbox };
 
 export default async function Today() {
-  const db = await readDb();
+  const [db, runs] = await Promise.all([readDb(), listRuns()]);
   const i = integrations();
   const { leads, drafts, tasks, profile } = db;
   const open = leads.filter((l) => l.stage !== "won" && l.stage !== "lost");
@@ -56,9 +58,12 @@ export default async function Today() {
     <div className="page">
       <PageHead
         title={`${greeting()}${first ? `, ${first}` : ""}`}
+        keepTitle
         sub={
           pending.length || hot.length
-            ? `${pending.length} message${pending.length === 1 ? "" : "s"} to approve and ${hot.length} hot lead${hot.length === 1 ? "" : "s"} to contact.`
+            ? [pending.length ? `${pending.length} message${pending.length === 1 ? "" : "s"} to approve` : "", hot.length ? `${hot.length} hot lead${hot.length === 1 ? "" : "s"} to contact` : ""]
+                .filter(Boolean)
+                .join(" and ") + "."
             : "Your pipeline at a glance. Start by finding a few businesses to help."
         }
         actions={
@@ -73,10 +78,19 @@ export default async function Today() {
         }
       />
 
+      <InstallBanner />
+
       {!i.claude && (
         <div className="tip warn" style={{ marginBottom: 16 }}>
           <span>
-            <b>Demo mode.</b> Search, audits, scoring and the pipeline all work now on free map data. Add <span className="mono">ANTHROPIC_API_KEY</span> to let Claude write the ads and emails and run the agents.{" "}
+            <b>Demo mode.</b>{" "}
+            <span className="desktop-only">
+              Search, audits, scoring and the pipeline all work now on free map data. Add <span className="mono">ANTHROPIC_API_KEY</span> to let Claude write the ads and emails
+              and run the agents.{" "}
+            </span>
+            <span className="mobile-inline">
+              Add a Claude API key to switch on AI ads, emails and agents.{" "}
+            </span>
             <Link href="/settings" style={{ textDecoration: "underline" }}>
               How to connect
             </Link>
@@ -214,7 +228,7 @@ export default async function Today() {
         </div>
         <div className="grid-4">
           {AGENTS.map((a) => {
-            const last = db.runs.find((r) => r.agentId === a.id);
+            const last = runs.find((r) => r.agentId === a.id);
             return (
               <Link key={a.id} href={`/agents?agent=${a.id}`} className="card" style={{ padding: 14, display: "flex", gap: 12 }}>
                 <AgentAvatar icon={a.icon} color={a.color} />

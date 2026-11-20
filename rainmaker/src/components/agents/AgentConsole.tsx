@@ -135,58 +135,73 @@ export function AgentConsole({
 
   const runAgent = run ? agents.find((a) => a.id === run.agentId) : undefined;
 
+  const recentRuns =
+    runs.length > 0 ? (
+      <section className="card recent-runs">
+        <div className="card-head">
+          <h3>Recent runs</h3>
+        </div>
+        <div className="list" style={{ maxHeight: 380, overflowY: "auto" }}>
+          {runs.slice(0, 20).map((r) => {
+            const a = agents.find((x) => x.id === r.agentId);
+            const s = STATUS[r.status] ?? STATUS.done;
+            return (
+              <button
+                key={r.id}
+                className="list-item"
+                onClick={() =>
+                  void load(r.id).then((x) => {
+                    setAgentId(x.agentId);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  })
+                }
+                style={{ background: r.id === run?.id ? "var(--brand-soft)" : undefined }}
+              >
+                {a && <AgentAvatar icon={a.icon} color={a.color} size="sm" />}
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <div className="truncate small" style={{ fontWeight: 600 }}>
+                    {r.goal}
+                  </div>
+                  <div className="row small faint" style={{ gap: 6 }}>
+                    <span className={`badge ${s.cls}`} style={{ height: 18 }}>
+                      {s.label}
+                    </span>
+                    {timeAgo(r.startedAt)}
+                  </div>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
+
   return (
     <div className="agents">
-      <div className="stack" style={{ gap: 10 }}>
-        {agents.map((a) => (
-          <button
-            key={a.id}
-            className="agent-card"
-            aria-pressed={a.id === agentId}
-            onClick={() => {
-              setAgentId(a.id);
-              if (run && run.agentId !== a.id && !live) setRun(null);
-            }}
-          >
-            <AgentAvatar icon={a.icon} color={a.color} />
-            <span style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 650 }}>{a.name}</div>
-              <div className="faint small">{a.role}</div>
-              <div className="muted small" style={{ marginTop: 4 }}>
-                {a.description}
-              </div>
-            </span>
-          </button>
-        ))}
-        {runs.length > 0 && (
-          <section className="card" style={{ marginTop: 6 }}>
-            <div className="card-head">
-              <h3>Recent runs</h3>
-            </div>
-            <div className="list" style={{ maxHeight: 380, overflowY: "auto" }}>
-              {runs.slice(0, 20).map((r) => {
-                const a = agents.find((x) => x.id === r.agentId);
-                const s = STATUS[r.status] ?? STATUS.done;
-                return (
-                  <button key={r.id} className="list-item" onClick={() => void load(r.id).then((x) => setAgentId(x.agentId))} style={{ background: r.id === run?.id ? "var(--brand-soft)" : undefined }}>
-                    {a && <AgentAvatar icon={a.icon} color={a.color} size="sm" />}
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <div className="truncate small" style={{ fontWeight: 600 }}>
-                        {r.goal}
-                      </div>
-                      <div className="row small faint" style={{ gap: 6 }}>
-                        <span className={`badge ${s.cls}`} style={{ height: 18 }}>
-                          {s.label}
-                        </span>
-                        {timeAgo(r.startedAt)}
-                      </div>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
+      <div className="stack" style={{ gap: 10, minWidth: 0 }}>
+        <div className="stack agent-roster" style={{ gap: 10 }}>
+          {agents.map((a) => (
+            <button
+              key={a.id}
+              className="agent-card"
+              aria-pressed={a.id === agentId}
+              onClick={() => {
+                setAgentId(a.id);
+                if (run && run.agentId !== a.id && !live) setRun(null);
+              }}
+            >
+              <AgentAvatar icon={a.icon} color={a.color} />
+              <span style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 650 }}>{a.name}</div>
+                <div className="faint small">{a.role}</div>
+                <div className="muted small agent-desc" style={{ marginTop: 4 }}>
+                  {a.description}
+                </div>
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="desktop-only">{recentRuns}</div>
       </div>
 
       <section className="card" style={{ display: "flex", flexDirection: "column", minHeight: 560 }}>
@@ -331,6 +346,7 @@ export function AgentConsole({
           </>
         )}
       </section>
+      <div className="mobile-only">{recentRuns}</div>
     </div>
   );
 }
