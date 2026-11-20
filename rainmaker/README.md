@@ -107,7 +107,7 @@ The tools:
 
 Rainmaker installs on Android as an app: Chrome adds it to your home screen and app drawer, and it opens full screen like a normal app. Your phone needs to reach it over the internet, so you host it once (free tiers work). You can do every step below from your phone's browser.
 
-**1. Put the code on your main branch.** Merge the `ccr-461324e6-fulfni` branch into `main` on GitHub.
+**1. Put the code on your default branch.** Vercel deploys a repository's default branch (in this repo, `ccr-e923554b-5tyguk`). Merge the `ccr-461324e6-fulfni` branch into it on GitHub. The pull request page has a Merge button.
 
 **2. Create a Vercel project for Rainmaker.**
 - On vercel.com, choose **Add New → Project**, import the `speechify` repository, and set **Root Directory** to `rainmaker`.
