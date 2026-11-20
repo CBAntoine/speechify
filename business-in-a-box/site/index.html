@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doorkeep | Your own box office. Keep the fee.</title>
+<meta name="description" content="A branded box office on your own website for independent venues. Your Stripe, your fans, one honest all-in price, and the booking fee stays with the house. No monthly fee.">
+<!-- Before publishing: put your booking link (e.g. a Cal.com or Calendly page) in content="". Empty = buttons scroll to #book. -->
+<meta name="booking-url" content="">
+<style>
+  @font-face { font-family: "Anton"; src: url("fonts/anton-latin-400-normal.woff2") format("woff2"); font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/inter-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/inter-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/inter-latin-800-normal.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+  @font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+  :root { --black: #14111A; --panel: #1d1826; --line: #2e2738; --cream: #F4EBD9; --gold: #FFC233; --green: #3DBE7A; --red: #E5483B; --smoke: #A39CAD; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--black); color: var(--cream); font-family: "Inter", system-ui, sans-serif; font-size: 18px; line-height: 1.55; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  .display { font-family: "Anton", Impact, sans-serif; text-transform: uppercase; line-height: .95; letter-spacing: .01em; font-weight: 400; }
+  .gold { color: var(--gold); } .green { color: var(--green); } .red { color: var(--red); } .smoke { color: var(--smoke); }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  /* nav */
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(20,17,26,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .door { width: 18px; height: 24px; border: 3px solid var(--gold); border-bottom: none; border-radius: 9px 9px 0 0; position: relative; }
+  .door::after { content: ""; position: absolute; right: 3px; top: 11px; width: 3px; height: 3px; border-radius: 50%; background: var(--gold); }
+  .logo span { font-family: "Anton", sans-serif; font-size: 24px; letter-spacing: .08em; }
+  .btn { display: inline-block; background: var(--gold); color: var(--black); font-weight: 800; text-decoration: none; border-radius: 12px; padding: 14px 22px; border: 0; cursor: pointer; font-size: 17px; }
+  .btn.ghost { background: transparent; color: var(--cream); border: 2px solid var(--line); }
+  .btn.small { padding: 9px 16px; font-size: 15px; }
+  /* hero */
+  .hero { padding: 72px 0 56px; background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255,194,51,.13), rgba(255,194,51,0) 70%); }
+  .hero h1 { font-size: clamp(64px, 13vw, 150px); }
+  .hero p.lead { font-size: clamp(19px, 2.4vw, 23px); max-width: 720px; margin: 22px 0 28px; color: #e6dcc9; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px; }
+  .chip { border: 2px solid var(--gold); color: var(--gold); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 15px; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(40px, 7vw, 72px); margin-bottom: 14px; }
+  .sub { color: var(--smoke); max-width: 720px; margin-bottom: 32px; }
+  /* calculator */
+  .calc { display: grid; grid-template-columns: 1fr 1.25fr; gap: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .field input[type=number] { width: 100%; background: var(--black); color: var(--cream); border: 2px solid var(--line); border-radius: 10px; padding: 12px 14px; font: 600 20px "JetBrains Mono", monospace; }
+  .field input:focus { outline: none; border-color: var(--gold); }
+  .field small { color: var(--smoke); font-size: 14px; }
+  .toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 16px; cursor: pointer; }
+  .toggle input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--gold); }
+  .big { font-family: "Anton", sans-serif; font-size: clamp(56px, 9vw, 96px); line-height: 1; color: var(--green); }
+  .bigl { color: var(--smoke); font-weight: 600; margin-bottom: 18px; }
+  .rows { border-top: 1px dashed var(--line); margin-top: 8px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+  .row b { font-family: "JetBrains Mono", monospace; white-space: nowrap; }
+  .note { font-size: 14px; color: var(--smoke); margin-top: 14px; }
+  .warn { color: var(--red); font-weight: 600; margin-top: 12px; display: none; }
+  /* steps & features */
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .day { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .day b { display: block; font-family: "JetBrains Mono", monospace; color: var(--gold); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .feat { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .feat h3 { font-size: 18px; margin-bottom: 4px; }
+  .feat p { color: var(--smoke); font-size: 16px; }
+  /* pricing */
+  .price { display: grid; grid-template-columns: auto 1fr; gap: 32px; align-items: center; }
+  .price .amount { font-family: "Anton", sans-serif; font-size: clamp(110px, 18vw, 190px); line-height: .9; color: var(--gold); }
+  .price ul { list-style: none; }
+  .price li { padding: 8px 0 8px 30px; position: relative; }
+  .price li::before { content: ""; position: absolute; left: 0; top: 15px; width: 16px; height: 9px; border: solid var(--green); border-width: 0 0 3px 3px; transform: rotate(-45deg); }
+  /* faq */
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { color: #d9cfbd; margin-top: 10px; }
+  /* book */
+  .book { text-align: center; background: radial-gradient(ellipse 60% 80% at 50% 100%, rgba(255,194,51,.12), rgba(255,194,51,0) 70%); }
+  .book p { color: var(--smoke); margin: 10px auto 26px; max-width: 560px; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--smoke); font-size: 14px; }
+  footer p + p { margin-top: 8px; }
+  @media (max-width: 860px) {
+    .calc, .price { grid-template-columns: 1fr; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .days { grid-template-columns: 1fr 1fr; }
+    nav .hide-sm { display: none; }
+  }
+  @media (max-width: 520px) {
+    .grid, .days { grid-template-columns: 1fr; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#top" aria-label="Doorkeep home"><span class="door"></span><span>DOORKEEP</span></a>
+  <a class="btn small" data-book href="#book">Book a fee check</a>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <h1 class="display">Keep the fee.<br><span class="gold">Own the door.</span></h1>
+  <p class="lead">Your own branded box office, on your own website. Payments go to your Stripe, the customer list is yours, fans see one honest all-in price, and the booking fee stays with the house.</p>
+  <div class="chips"><span class="chip">No monthly fee</span><span class="chip">Live in 7 days</span><span class="chip">75¢ a ticket, only when you sell</span></div>
+  <div class="ctas"><a class="btn" href="#calculator">See what you'd keep</a><a class="btn ghost" data-book href="#book">Book a 10-minute fee check</a></div>
+</div></header>
+
+<section id="calculator"><div class="wrap">
+  <h2 class="display">See what you'd keep</h2>
+  <p class="sub">Put in your own numbers. The comparison uses the big self-serve ticket sites' published US fees: 3.7% + $1.79 per ticket, plus 2.9% processing.</p>
+  <div class="calc">
+    <form class="card" id="calc-form" onsubmit="return false">
+      <div class="field"><label for="price">Average ticket price ($)</label><input id="price" type="number" min="5" max="200" step="1" value="25" inputmode="decimal"></div>
+      <div class="field"><label for="tickets">Paid tickets per week</label><input id="tickets" type="number" min="10" max="5000" step="10" value="300" inputmode="numeric"></div>
+      <div class="field"><label for="fee">Your booking fee per ticket ($)</label><input id="fee" type="number" min="0" max="10" step="0.25" value="2" inputmode="decimal"><small>Doorkeep's 75¢ (50¢ under $20) is added on top, inside the all-in price.</small></div>
+      <label class="toggle"><input id="absorbed" type="checkbox"><span>We absorb the ticket site's fees today, so our fans don't pay them</span></label>
+    </form>
+    <div class="card" aria-live="polite">
+      <div class="big" id="big">$16,306</div>
+      <div class="bigl" id="bigl">a year to you, with no monthly fee</div>
+      <div class="rows" id="rows"></div>
+      <p class="warn" id="warn">At this price your fee doesn't cover card processing. Raise your booking fee.</p>
+      <p class="note">Assumes 2 tickets per order and Stripe at 2.9% + 30¢ per order. Fee rates as published, November 2026. An estimate, not a quote: we'll run your real numbers on the call.</p>
+    </div>
+  </div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2 class="display">Live in <span class="gold">7 days</span></h2>
+  <p class="sub">We do the work. Shows already on sale stay where they are; the next on-sale is yours.</p>
+  <div class="days">
+    <div class="day"><b>MON</b>Kickoff call. Connect your Stripe.</div>
+    <div class="day"><b>TUE</b>Box office built in your colours.</div>
+    <div class="day"><b>WED</b>Upcoming shows loaded.</div>
+    <div class="day"><b>THU</b>Buy buttons on your website.</div>
+    <div class="day"><b>FRI</b>Test sales and door drill.</div>
+    <div class="day"><b>SAT</b>Your list gets the news.</div>
+    <div class="day"><b>SUN</b>Your next show goes on sale.</div>
+  </div>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <h2 class="display">Everything at the door</h2>
+  <p class="sub">Built on Hi.Events, an open-source ticketing platform. We host it, run it and keep it updated.</p>
+  <div class="grid">
+    <div class="feat"><h3>Your domain</h3><p>tickets.yourvenue.com, in your colours, with buy buttons on your own site.</p></div>
+    <div class="feat"><h3>Your Stripe</h3><p>Money goes straight to your account. We never touch it.</p></div>
+    <div class="feat"><h3>One honest price</h3><p>All-in pricing up front, the way the FTC fee rule requires.</p></div>
+    <div class="feat"><h3>Phone check-in</h3><p>Door staff scan tickets with a phone camera and see live counts.</p></div>
+    <div class="feat"><h3>Presales and promo codes</h3><p>Hidden tickets, waitlists, capacity limits and tracking links for promoters.</p></div>
+    <div class="feat"><h3>Your fan list</h3><p>Marketing opt-in at checkout, plus exports whenever you want them.</p></div>
+    <div class="feat"><h3>Ads that see sales</h3><p>Meta, TikTok and Google pixels wired into checkout.</p></div>
+    <div class="feat"><h3>Friday-night support</h3><p>Monitoring, nightly backups and a plan for show nights.</p></div>
+    <div class="feat"><h3>No lock-in</h3><p>Month to month. Leave any time with your events and customers.</p></div>
+  </div>
+</div></section>
+
+<section id="pricing"><div class="wrap">
+  <div class="price">
+    <div><div class="amount">75¢</div><div class="smoke">per paid ticket<br>(50¢ under $20)</div></div>
+    <ul>
+      <li><b>No monthly fee.</b> We only earn when you sell.</li>
+      <li><b>No setup fee.</b> The 7-day launch is included.</li>
+      <li><b>Free tickets are free.</b></li>
+      <li>Card processing is billed by Stripe (2.9% + 30¢ per order) and comes out of your booking fee.</li>
+      <li>Cancel any time and keep your events and customer list.</li>
+    </ul>
+  </div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2 class="display">Straight answers</h2>
+  <details><summary>Won't we lose the ticket site's discovery?</summary><p>Most of your buyers already come from your own Instagram, your mailing list and your posters. You can keep a couple of discovery listings on the big sites and move your regulars to your own box office.</p></details>
+  <details><summary>Is adding our own booking fee allowed?</summary><p>Yes, as long as it's part of the price fans see first. The FTC's fee rule (in force since May 12, 2025) requires all-in pricing for live-event tickets, and we set your box office up that way.</p></details>
+  <details><summary>Who handles refunds and chargebacks?</summary><p>You do, in your own Stripe dashboard, the same place your money lands. We'll walk you through it at kickoff.</p></details>
+  <details><summary>What about door sales and reserved seats?</summary><p>Keep your bar POS for walk-ups. If you need reserved seating or a door box office, those need a paid licence from Hi.Events, which we pass through at cost.</p></details>
+  <details><summary>What if something breaks on a Friday?</summary><p>Your box office runs on its own server, with monitoring and nightly backups, and there's a Friday-night response plan. Check-in works from any phone browser.</p></details>
+  <details><summary>Do you take a percentage?</summary><p>No. We charge a flat 75¢ per paid ticket (50¢ under $20), built into your all-in price. There's no monthly fee and no setup fee.</p></details>
+</div></section>
+
+<section class="book" id="book"><div class="wrap">
+  <h2 class="display">Book a 10-minute <span class="gold">fee check</span></h2>
+  <p>Bring last month's ticket numbers. We'll show you what you'd keep, and you decide.</p>
+  <a class="btn" data-book href="#book">Pick a time</a>
+</div></section>
+
+<footer><div class="wrap">
+  <p><b class="gold">Doorkeep</b> · Own the door.</p>
+  <p>Doorkeep box offices run on Hi.Events, an open-source ticketing platform. Fee comparisons use the big self-serve ticket sites' published US fees (3.7% + $1.79 per ticket plus 2.9% processing) and Stripe's 2.9% + 30¢, as of November 2026.</p>
+</div></footer>
+
+<script>
+  // Same maths as tools/roi.py.
+  const EB_PCT = 0.037, EB_FIX = 1.79, EB_PROC = 0.029, ST_PCT = 0.029, ST_FIX = 0.30, TPO = 2;
+  const $ = id => document.getElementById(id);
+  const money = (v, d = 2) => (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  function update() {
+    const P = Math.min(200, Math.max(5, +$('price').value || 25));
+    const tw = Math.min(5000, Math.max(10, +$('tickets').value || 300));
+    const venueFee = Math.min(10, Math.max(0, +$('fee').value || 0));
+    const absorbed = $('absorbed').checked;
+    const ours = P < 20 ? 0.50 : 0.75, yr = tw * 52;
+    let rows, big, label, warn = false;
+    if (!absorbed) {
+      const ebFee = (P * (1 + EB_PCT) + EB_FIX) / (1 - EB_PROC) - P;
+      const fanFee = venueFee + ours;
+      const stripe = (ST_PCT * (P + fanFee) * TPO + ST_FIX) / TPO;
+      const kept = fanFee - stripe - ours;
+      const diff = ebFee - fanFee;
+      warn = kept < 0;
+      big = money(kept * yr, 0); label = 'a year to you, with no monthly fee';
+      rows = [['Fans pay today (fees passed on)', money(P + ebFee)], ['Fans pay at your box office', money(P + fanFee)],
+              [diff >= 0 ? 'Fans save per ticket' : 'Fans pay more per ticket', money(Math.abs(diff))],
+              ['You keep per ticket', money(kept)], ['Doorkeep earns per year', money(ours * yr, 0)]];
+    } else {
+      const ebCost = (EB_PCT * P + EB_FIX + EB_PROC * P) * yr;
+      const ourCost = (ST_PCT * P + ST_FIX / TPO + ours) * yr;
+      big = money(ebCost - ourCost, 0); label = 'a year saved, with fans paying the same price';
+      rows = [['Fees you absorb today', money(ebCost, 0) + '/yr'], ['With Doorkeep (Stripe + 75¢)', money(ourCost, 0) + '/yr'],
+              ['Doorkeep earns per year', money(ours * yr, 0)]];
+    }
+    $('big').textContent = big; $('bigl').textContent = label;
+    $('rows').innerHTML = rows.map(([k, v]) => `<div class="row"><span>${k}</span><b>${v}</b></div>`).join('');
+    $('warn').style.display = warn ? 'block' : 'none';
+  }
+  ['price', 'tickets', 'fee', 'absorbed'].forEach(id => $(id).addEventListener('input', update));
+  update();
+  // Booking link from <meta name="booking-url">; until it's set, buttons scroll to #book.
+  const booking = document.querySelector('meta[name="booking-url"]').content.trim();
+  if (booking) document.querySelectorAll('[data-book]').forEach(a => { a.href = booking; a.target = '_blank'; a.rel = 'noopener'; });
+</script>
+</body>
+</html>

@@ -13,6 +13,8 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 | [`05-ugc-scripts.md`](05-ugc-scripts.md) | Two 9:16 UGC scripts with timings and on-screen text |
 | [`06-most-profitable-route.md`](06-most-profitable-route.md) | Most profitable route: per-ticket pricing, one install per venue, busiest rooms first, plus the routes that lost |
 | [`07-getting-started.md`](07-getting-started.md) | Research findings (market size, the real competitor, the name, sales tax, hosting) and the launch plan, plus the licence email and discovery-call script |
+| [`site/`](site/) | Landing page with the fee calculator (same maths as `tools/roi.py`), how it works, pricing and FAQ. A static file with no backend, so it can go on any static host (GitHub Pages, Netlify, Cloudflare Pages). **Before publishing:** set `<meta name="booking-url">` to your booking link. Until then, the booking buttons scroll to the bottom of the page. Previews: `site/preview-desktop.png`, `site/preview-mobile.png`. |
+| [`video/`](video/) | Two faceless UGC videos (9:16) with ElevenLabs voiceover, plus their sources and build scripts |
 | [`tools/roi.py`](tools/roi.py) | Per-venue fee and ROI calculator |
 | [`tools/route_model.py`](tools/route_model.py) | Pricing route model: flat vs per-ticket, fan-price check, licence downside, 12-month scenario |
 | `leads/` | Lead lists. **Git-ignored on purpose:** they hold named people's contact details and this repo is public. |
@@ -27,7 +29,8 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 - [x] 5 static Meta ads in [`ads/`](ads/), with ad text, headlines and descriptions in `04-style-guide.md`
 - [x] Fee research on 14 other platforms ([`research/platform-fees.md`](research/platform-fees.md)): none passes, so list B was dropped
 - [ ] Leads: 15 of 20 merged into `leads/leads.csv` (9 ready, 3 need contact details, 3 on hold). Remaining email lookups and 5 more venues wait for the Firecrawl daily reset.
-- [ ] UGC videos (needs an avatar tool, or the faceless voiceover route)
+- [x] UGC videos: two faceless versions with ElevenLabs voiceover in `video/`
+- [x] Landing page with fee calculator in `site/` (set the booking link before publishing)
 
 ## Facts used, all checked 2026-11-20
 
