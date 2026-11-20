@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check, Clapperboard, Download, Share2, FileText, Image as ImageIcon, LayoutTemplate, LoaderCircle, Megaphone, Search,
   Sparkles, Target, Trash, Wand, X,
@@ -59,6 +59,14 @@ export function AdStudio({
   const svgRef = useRef<SVGSVGElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const shareable = useCanShare();
+
+  // Opened straight to a saved campaign (e.g. from a lead): on phones the
+  // brief comes first, so jump down to the campaign.
+  useEffect(() => {
+    if (initial.campaignId && window.matchMedia("(max-width: 1180px)").matches) {
+      resultsRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [initial.campaignId]);
 
   const niche = niches.find((n) => n.id === brief.niche);
   const issues = useMemo(() => (campaign ? campaignIssues(campaign) : []), [campaign]);
