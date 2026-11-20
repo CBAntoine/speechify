@@ -78,7 +78,7 @@ These are starting assumptions to test. Log every dial with its hour and adjust 
 **Email 1**
 > Subject: your [Show name] fees
 >
-> Hi [First name] — fans who bought tickets to [Show] on [date] paid about $3.50 each in Eventbrite fees, and none of it reached [Venue].
+> Hi [First name] — fans who bought tickets to [Show] paid Eventbrite's fees on top. On a $25 ticket that's about $3.50, and none of it reached [Venue].
 >
 > I set up branded box offices for independent venues: your domain, your Stripe account, one all-in price that's still lower for your fans. You keep about $1.05 a ticket, roughly $[X]k a year at your volume. No monthly fee: I earn 75¢ only when you sell. Live in 7 days.
 >
@@ -91,6 +91,33 @@ These are starting assumptions to test. Log every dial with its hour and adjust 
 
 **Instagram DM**
 > "Love what you're booking at [Venue]. Sent [First name] a quick email about keeping your ticket fees instead of Eventbrite. Happy to share the numbers here if that's easier."
+
+**Voicemail (under 20 seconds)**
+> "Hi [First name], [Name] from Doorkeep. I help venues like [Venue] sell tickets on their own site and keep the booking fee their ticket site keeps today, with no monthly fee. I'll send a short email with your numbers. If it's easier, call me back on [phone]. Thanks."
+
+**Email 2: day 6, their numbers**
+> Subject: [Venue]: your numbers
+>
+> Hi [First name], I ran a rough version for [Venue] using public prices: [N] tickets a week at about $[P].
+>
+> - Today: fans pay $[P + platform fee] and [Venue] keeps $0 of the fee.
+> - Your own box office: fans pay $[P + 2.75] all-in and you keep about $[kept] a ticket, roughly $[kept per year] a year. No monthly fee.
+>
+> (Numbers come from `tools/roi.py` or the calculator on the landing page.) Want me to check them against your real numbers? 10 minutes, any afternoon this week.
+>
+> — [Name], Doorkeep
+
+**Email 3: day 10, closing the loop**
+> Subject: should I close your file?
+>
+> Hi [First name], I'll stop here so I'm not clogging your inbox. If ticket fees come up later, reply "fees" and I'll send [Venue]'s numbers the same day.
+>
+> — [Name], Doorkeep
+
+**Opener for venues selling on their own website (list D)**
+> "You already sell on your own site, which is great. Most venues we talk to want three things their current checkout doesn't give them: phone check-in at the door, waitlists and presales that run themselves, and ad pixels that see sales. We set that up in 7 days, with no monthly fee."
+
+**Rules for every cold email (CAN-SPAM).** Use your real name and business in the From line and an honest subject line. Include a valid postal address and a plain way to opt out ("Reply 'no thanks' and I won't email again"), and honour opt-outs within 10 business days. Send from your own business domain once it's set up, never from a personal account.
 
 ## What to measure
 
