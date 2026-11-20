@@ -347,6 +347,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void voiceStarted() {
             main.post(() -> {
+                // Android only lets an app keep the microphone in the background once it's allowed to use it.
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "Not listening in the background: Patch can't use the microphone yet");
+                    return;
+                }
                 askForNotifications();
                 ListeningService.start(MainActivity.this);
             });

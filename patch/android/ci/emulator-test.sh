@@ -76,7 +76,16 @@ adb logcat -d -s Patch:V | grep -q "Opening www.google.com outside Patch" || fai
 echo "The web search was handed to Android."
 adb exec-out screencap -p > "$OUT/after-web-search.png" || true
 
-echo "Keeping Patch listening while a conversation is going…"
+echo "Without the microphone allowed, Patch shouldn't try to listen in the background…"
+node "$HERE/cdp-eval.mjs" "window.PatchAndroid.voiceStarted(), 'started'" || fail "couldn't ask to listen"
+sleep 2
+if adb shell dumpsys activity services "$PKG" | grep -q "ListeningService"; then fail "the listening service started without the microphone"; fi
+adb logcat -d -s Patch:V | grep -q "Not listening in the background" || fail "Patch didn't explain why it isn't listening"
+echo "It waits until the microphone is allowed."
+
+echo "Keeping Patch listening while a conversation is going (microphone allowed, as after the first chat)…"
+adb shell pm grant "$PKG" android.permission.RECORD_AUDIO || fail "couldn't allow the microphone"
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
 node "$HERE/cdp-eval.mjs" "window.PatchAndroid.voiceStarted(), 'started'" || fail "couldn't start listening"
 sleep 3
 adb shell dumpsys activity services "$PKG" | grep -q "ListeningService" || fail "the listening service didn't start"
