@@ -105,6 +105,7 @@ What to know:
 - **Which TVs:** the ones that can give a picture of their screen, which is Android TV, Google TV and Fire TV. Samsung, LG and Roku TVs can't, so there Patch still works by the remote alone.
 - **Films and shows that are protected** show as a black picture while they play; menus and lists are visible.
 - It's slower than a list: each look takes a few seconds.
+- **Each look uses a little of your ElevenLabs allowance.** ElevenLabs bills for every picture put into a conversation, on top of the conversation itself (its [multimodal input page](https://elevenlabs.io/docs/eleven-agents/customization/multimodal-input) says "uploads are billed per file"; your ElevenLabs usage page shows what it came to). The assistant is set to take at most 60 pictures in one conversation and to keep the last 4 in mind. After the sixtieth it carries on by the remote alone and says so; a new conversation starts the count again.
 
 ### The TV's remote, worked by Patch
 
