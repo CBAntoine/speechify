@@ -146,7 +146,9 @@ export function createVoice(ui) {
       mode === "text" ? "This is a typed chat: keep answers short and skimmable." : "",
     ].filter(Boolean);
     conv.sendContextualUpdate(intro.join(" "));
-    conv.sendContextualUpdate(`Devices on the network right now (${s.devices.length}). Use these names with the tools:\n${directory() || "(none found yet: offer to scan)"}`);
+    // The TV that "YouTube" or "the TV" means when the person doesn't name one (the one used last).
+    const tv = s.devices.find((d) => d.defaultTv && !d.hidden);
+    conv.sendContextualUpdate(`Devices on the network right now (${s.devices.length}). Use these names with the tools:\n${directory() || "(none found yet: offer to scan)"}${tv ? `\nThe TV to use when the person doesn't name one (for YouTube, apps and the remote): ${tv.name}.` : ""}`);
     const made = ui.tvapps?.apps || [];
     const job = (a) => (!a.job ? "" : a.job.status === "failed" ? ` | Claude's last request failed: ${a.job.error}` : " | Claude is working on it right now");
     conv.sendContextualUpdate(made.length ? `TV apps the person made with Patch (tv_apps tool):\n${made.map((a) => `- ${a.name} | ${a.kindLabel}: ${a.summary} | ${a.tvs.length ? a.tvs.map((t) => `${t.how === "browser" ? "opens on" : "on"} ${t.name}${t.upToDate ? "" : " (old version)"}`).join(", ") : a.built ? "not on a TV yet" : "not built yet"}${job(a)}`).join("\n")}` : "The person hasn't made any TV apps yet (tv_apps can make one).");
@@ -299,6 +301,8 @@ export function createVoice(ui) {
         error: r.error || undefined,
         options: r.candidates?.map((c) => c.name),
         hint: r.hint || undefined,
+        // How to carry on (in a TV's YouTube app: with the remote).
+        next_step: r.next || undefined,
         status: r.device ? ui.stateLine(r.device) : undefined,
         // What's on the phone's screen (read_screen): numbered items to tap by number or by their words.
         screen: r.screen || undefined,

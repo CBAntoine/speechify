@@ -200,7 +200,19 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       if (offline && r.ok) r.message += ` (${offline} offline ${offline === 1 ? "device was" : "devices were"} skipped.)`;
       return r;
     }
+    // "YouTube" means the YouTube app on the TV, at once: with no TV named (or just "the TV"), it's
+    // the TV used last, or the one that's connected and on. Nobody is asked "which one?".
+    const youtube = action === "search_youtube" || action === "play_youtube" || (action === "launch_app" && /\byou\s?tube\b/i.test(String(value || "")));
+    const anyTv = !device || /^(on\s+)?((the|my|our|a)\s+)?(tv|telly|television|big screen|screen)$/i.test(String(device).trim());
+    if (youtube && !room && anyTv) {
+      const tv = inventory.defaultTv(inventory.tvs().filter((d) => d.setup || d.actions?.includes(action)));
+      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true });
+    }
     const r = inventory.resolve(room && device ? `${room} ${device}` : device, { kind, action });
+    if (r.ambiguous && youtube) {
+      const tv = inventory.defaultTv(r.ambiguous.filter((d) => inventory.tvs().some((t) => t.id === d.id)));
+      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true });
+    }
     if (r.ambiguous) return { ok: false, error: "EAMBIGUOUS", message: `Which one do you mean: ${r.ambiguous.map((d) => inventory.displayName(d)).join(", ")}?`, candidates: r.ambiguous.map((d) => inventory.toPublic(d)) };
     if (r.none) return { ok: false, error: "ENOTFOUND", message: `I couldn't find "${device}".${r.suggestions.length ? ` Did you mean ${r.suggestions.join(" or ")}?` : " A new scan might find it."}${setupHint()}` };
     // Asked for by voice or in the chat: the answer says what's on screen afterwards, where it can.

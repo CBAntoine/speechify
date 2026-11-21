@@ -204,6 +204,7 @@ export function rokuState() {
     ],
     keys: [],
     searches: [],
+    launches: [], // each app start: { id, params, query }
   };
 }
 
@@ -257,6 +258,8 @@ export function rokuHandler(s) {
       if (!s.apps.some((a) => a.id === decodeURIComponent(m[1]))) return send(404, "");
       s.active = decodeURIComponent(m[1]);
       s.power = "PowerOn";
+      // What the app was started with (a video, or a search handed to it), as the Roku passes it on.
+      s.launches.push({ id: s.active, params: Object.fromEntries(url.searchParams), query: url.search.slice(1) });
       return send(200, "");
     }
     if (p === "/search/browse") {

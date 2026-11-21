@@ -4,10 +4,10 @@
 import { request } from "../net/lanhttp.mjs";
 import { wsConnect } from "../net/websocket.mjs";
 import { wakeOnLan } from "../net/probe.mjs";
-import { youtubeSearchUrl } from "../net/youtube.mjs";
+import { youtubeSearchUrl, youtubeVoiceParams } from "../net/youtube.mjs";
 import { fuzzyPick, normalizeMac, normalizeText, safeJson, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { APPS, buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { APPS, buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, pressPlan, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const CLIENT_NAME = Buffer.from("Patch").toString("base64");
 
@@ -245,15 +245,15 @@ export default {
         case "press_button": {
           // Any of the remote's buttons, several in a row, or one held down.
           const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `KEY_${d}`, device: device.name });
-          for (const [i, st] of steps.entries()) {
-            if (i) await sleep(250);
-            if (!st.hold) {
-              await keys(ws, Array(st.times).fill(st.code), 250);
+          for (const p of pressPlan(steps, 250)) {
+            if (p.wait) await sleep(p.wait);
+            if (!p.hold) {
+              ws.send(keyMsg(p.code));
               continue;
             }
-            ws.send(keyMsg(st.code, "Press"));
+            ws.send(keyMsg(p.code, "Press"));
             await sleep(1200);
-            ws.send(keyMsg(st.code, "Release"));
+            ws.send(keyMsg(p.code, "Release"));
           }
           return done(`${describeButtons(steps)} on ${device.name}.`);
         }
@@ -296,6 +296,11 @@ export default {
         }
         case "search_youtube":
           return await youtubeSearch(device, value, ctx, {
+            // "YouTube" is the TV's YouTube app: it's handed the search the way the TV's own voice search does.
+            askApp: async (q) => {
+              await launch(ws, device, YOUTUBE, { type: "DEEP_LINK", metaTag: youtubeVoiceParams(q) });
+              return true;
+            },
             browserSearch: async (q) => {
               await launch(ws, device, BROWSER, { type: "NATIVE_LAUNCH", metaTag: youtubeSearchUrl(q) });
               return "in the TV's web browser";
@@ -305,6 +310,10 @@ export default {
         case "play_youtube":
           return await youtubePlay(device, value, ctx, {
             playVideo: (id) => launch(ws, device, YOUTUBE, { type: "DEEP_LINK", metaTag: `v=${id}` }),
+            playByName: async (q) => {
+              await launch(ws, device, YOUTUBE, { type: "DEEP_LINK", metaTag: youtubeVoiceParams(q, { play: true }) });
+              return true;
+            },
             browserSearch: async (q) => {
               await launch(ws, device, BROWSER, { type: "NATIVE_LAUNCH", metaTag: youtubeSearchUrl(q) });
               return "in the TV's web browser";

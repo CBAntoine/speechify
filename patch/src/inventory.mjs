@@ -70,6 +70,32 @@ export class Inventory extends EventEmitter {
     for (const d of store.savedDevices || []) {
       if (d?.id) this.devices.set(d.id, { ...d, online: null });
     }
+    this.lastTv = null; // the TV used last: what "the TV" means when someone doesn't say which
+  }
+
+  /** TVs and TV boxes Patch can run apps on (and ones that will once they're connected). */
+  tvs() {
+    return this.all().filter((d) => !d.self && d.kind !== "room" && d.kind !== "group" && (d.actions?.includes("launch_app") || (d.setup && ["tv", "streamer"].includes(d.kind))));
+  }
+
+  /**
+   * The TV to use when someone doesn't say which ("YouTube", "press OK"): the one used last, else
+   * one that's connected and on, else one that's connected, else the first by name.
+   */
+  defaultTv(among) {
+    const list = (among || this.tvs()).filter((d) => d.online !== false);
+    if (!list.length) return null;
+    const last = list.find((d) => d.id === this.lastTv);
+    if (last) return last;
+    const rank = (d) => (d.setup ? 4 : 0) + (d.actions?.includes("play_youtube") ? 0 : 2) + (d.state?.on === false ? 1 : 0);
+    return [...list].sort((a, b) => rank(a) - rank(b) || this.displayName(a).localeCompare(this.displayName(b)))[0];
+  }
+
+  /** Remember the TV that was just used. */
+  usedTv(d) {
+    if (!d || d.self || this.lastTv === d.id || !this.tvs().some((t) => t.id === d.id)) return;
+    this.lastTv = d.id;
+    this.changed(d);
   }
 
   meta(id) {
@@ -206,6 +232,8 @@ export class Inventory extends EventEmitter {
       setup: d.setup || null,
       hidden: !!m.hidden,
       hasPassword: !!this.store.data.credentials[d.parent || d.id],
+      // The TV that "YouTube" or "the TV" means when no TV is named.
+      ...(this.defaultTv()?.id === d.id ? { defaultTv: true } : {}),
     };
   }
 

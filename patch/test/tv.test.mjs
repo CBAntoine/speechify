@@ -101,6 +101,15 @@ test("Samsung TV: asks to be allowed once, then takes channels, apps, YouTube, t
   r = await control({ device: "Family Room TV", action: "play_youtube", value: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" });
   assert.ok(r.ok, r.message);
   assert.deepEqual(sim.state.samsung.launched.at(-1), { appId: "111299001912", type: "DEEP_LINK", metaTag: "v=dQw4w9WgXcQ" });
+  // "YouTube" is the TV's YouTube app: a search is handed to the app (the way the TV's own voice search does), not to the TV's web browser.
+  r = await control({ device: "Family Room TV", action: "search_youtube", value: "cooking videos" });
+  assert.equal(r.message, "Searching for “cooking videos” in the YouTube app on Family Room TV.");
+  assert.deepEqual(sim.state.samsung.launched.at(-1), { appId: "111299001912", type: "DEEP_LINK", metaTag: "va=search&launch=voice&launch=search&vq=cooking%20videos" });
+  assert.match(r.next, /press_button "ok" plays what the remote is on/, "the assistant is told how to carry on in the app");
+  // "Play this" by name, with no YouTube key: the app picks the closest match itself.
+  r = await control({ device: "Family Room TV", action: "play_youtube", value: "baby shark" });
+  assert.equal(r.message, "Asked the YouTube app on Family Room TV to play “baby shark”. It picks the closest match itself.");
+  assert.equal(sim.state.samsung.launched.at(-1).metaTag, "va=play&launch=voice&vq=baby%20shark");
   const connects = sim.state.samsung.connects;
   r = await control({ device: "Family Room TV", action: "turn_off" });
   assert.ok(r.ok);
@@ -128,10 +137,16 @@ test("LG TV: client key, channels by number and by name, inputs, remote buttons,
   assert.deepEqual(sim.state.lg.launched.at(-1).params, { contentTarget: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" });
   r = await control({ device: "LG TV", action: "open_website", value: "bbc.co.uk" });
   assert.deepEqual(sim.state.lg.opened.at(-1), "https://bbc.co.uk/");
-  // Without a YouTube key, a search opens YouTube's results in the TV's browser.
+  // Without a YouTube key, a search goes into the TV's own YouTube app, the way LG's voice search hands it one (not the TV's browser).
+  const pages = sim.state.lg.opened.length;
   r = await control({ device: "LG TV", action: "search_youtube", value: "pancakes" });
   assert.ok(r.ok, r.message);
-  assert.equal(sim.state.lg.opened.at(-1), "https://www.youtube.com/results?search_query=pancakes");
+  assert.equal(r.message, "Searching for “pancakes” in the YouTube app on LG TV.");
+  assert.deepEqual(sim.state.lg.launched.at(-1), { id: "youtube.leanback.v4", contentId: null, params: { contentTarget: "inApp=true&vs=9&va=search&launch=voice&launch=search&vq=pancakes" } });
+  assert.equal(sim.state.lg.opened.length, pages, "nothing opened in the TV's browser");
+  r = await control({ device: "LG TV", action: "play_youtube", value: "how to make pancakes" });
+  assert.equal(r.message, "Asked the YouTube app on LG TV to play “how to make pancakes”. It picks the closest match itself.");
+  assert.equal(sim.state.lg.launched.at(-1).params.contentTarget, "inApp=true&vs=9&va=play&launch=voice&vq=how%20to%20make%20pancakes");
 });
 
 test("Fire TV over ADB: the allow prompt, then apps, YouTube, browser and typing", async () => {
@@ -144,9 +159,27 @@ test("Fire TV over ADB: the allow prompt, then apps, YouTube, browser and typing
   r = await control({ device: "Kids Room Fire TV", action: "launch_app", value: "Disney+" });
   assert.ok(r.ok, r.message);
   assert.match(sim.state.firetv.focus, /^com\.disney\.disneyplus\//);
+  // A YouTube search goes to the TV's YouTube app the way the TV's own voice assistant hands it one: on a Fire TV, Alexa's link.
   r = await control({ device: "Kids Room Fire TV", action: "search_youtube", value: "paw patrol" });
   assert.ok(r.ok, r.message);
-  assert.deepEqual(sim.state.firetv.lastIntent, { action: "android.intent.action.SEARCH", data: null, query: "paw patrol", pkg: "com.amazon.firetv.youtube" });
+  assert.equal(r.message, "Searching for “paw patrol” in the YouTube app on Kids Room Fire TV.");
+  assert.deepEqual(sim.state.firetv.lastIntent, { action: "android.intent.action.VIEW", data: "youtube://search?query=paw+patrol&isVoice=true", query: null, pkg: "com.amazon.firetv.youtube" });
+  // A YouTube app that doesn't take that is asked the next way (Google Assistant's link), and so on down to a plain search.
+  sim.state.firetv.ytTakes = ["assistant", "results", "search"];
+  await control({ device: "Kids Room Fire TV", action: "search_youtube", value: "bluey" });
+  assert.equal(sim.state.firetv.lastIntent.data, "https://www.youtube.com/tv?va=search&launch=voice&launch=search&vq=bluey");
+  sim.state.firetv.ytTakes = ["results", "search"];
+  await control({ device: "Kids Room Fire TV", action: "search_youtube", value: "bluey" });
+  assert.equal(sim.state.firetv.lastIntent.data, "https://www.youtube.com/results?search_query=bluey");
+  sim.state.firetv.ytTakes = ["search"];
+  await control({ device: "Kids Room Fire TV", action: "search_youtube", value: "bluey" });
+  assert.deepEqual(sim.state.firetv.lastIntent, { action: "android.intent.action.SEARCH", data: null, query: "bluey", pkg: "com.amazon.firetv.youtube" });
+  sim.state.firetv.ytTakes = ["alexa", "assistant", "results", "search"];
+  // "Play this" by name, with no YouTube key: the app picks the closest match, and Patch says what started (the TV tells it).
+  r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "baby shark" });
+  assert.equal(r.message, "Asked the YouTube app on Kids Room Fire TV to play “baby shark”. It's playing “Baby shark (Official Video)”.");
+  assert.equal(sim.state.firetv.lastIntent.data, "youtube://search?query=baby+shark&isVoice=true&method=play");
+  sim.state.firetv.playing = null;
   r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "dQw4w9WgXcQ" });
   assert.equal(sim.state.firetv.lastIntent.data, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   r = await control({ device: "Kids Room Fire TV", action: "type_text", value: "it's bluey" });
@@ -175,9 +208,13 @@ test("Roku: live TV channels, Roku 'channels' (apps), typing and YouTube by link
   assert.deepEqual(sim.state.roku.keys.slice(-2), ["Lit_o", "Lit_k"]);
   r = await control({ device: "Living Room TV", action: "play_youtube", value: "https://youtu.be/dQw4w9WgXcQ" });
   assert.ok(r.ok, r.message);
+  // Without a YouTube key, the Roku's YouTube app is asked by name: it picks the closest match itself.
   r = await control({ device: "Living Room TV", action: "play_youtube", value: "never gonna give you up" });
-  assert.equal(r.ok, false, "without a YouTube key a phrase can't be turned into a video on a Roku");
-  assert.match(r.message, /YouTube API key/);
+  assert.equal(r.message, "Asked the YouTube app on Living Room TV to play “never gonna give you up”. It picks the closest match itself.");
+  assert.deepEqual(sim.state.roku.launches.at(-1), { id: "837", params: { va: "play", launch: "voice", vq: "never gonna give you up" }, query: "va=play&launch=voice&vq=never%20gonna%20give%20you%20up" });
+  r = await control({ device: "Living Room TV", action: "search_youtube", value: "trains" });
+  assert.equal(r.message, "Searching for “trains” in the YouTube app on Living Room TV.");
+  assert.equal(sim.state.roku.launches.at(-1).query, "va=search&launch=voice&launch=search&vq=trains");
 });
 
 test("with a YouTube key: results to choose from, then 'play the second one'", async () => {
@@ -191,7 +228,7 @@ test("with a YouTube key: results to choose from, then 'play the second one'", a
   r = await control({ device: "Living Room TV", action: "search_youtube", value: "lofi beats" });
   assert.ok(r.ok, r.message);
   assert.equal(r.results.length, 2);
-  assert.match(r.message, /Which one should I play/);
+  assert.match(r.message, /^Searching for “lofi beats” in the YouTube app on Living Room TV\. The top results are: /, "the app shows them, and Patch can read them out");
   r = await control({ device: "Living Room TV", action: "play_youtube", value: "the second one" });
   assert.ok(r.ok, r.message);
   assert.match(r.message, /Lo-fi Beats for Focus & Study/, "titles come back with their HTML entities decoded");
@@ -525,4 +562,33 @@ test("the remote: any button, several in a row, a count, or one held down, on ea
   r = await api("POST", `/api/devices/${encodeURIComponent(d.id)}/action`, { action: "press_button", value: "down" });
   assert.equal(r.message, "Pressed down on Kids Room Fire TV.");
   assert.equal(r.screen, undefined);
+});
+
+test("“YouTube” with no TV named means the YouTube app on the TV, at once", async () => {
+  // One TV is the one "the TV" means: the one used last.
+  await control({ device: "LG TV", action: "press_button", value: "info" });
+  let list = await devices();
+  assert.deepEqual(list.filter((d) => d.defaultTv).map((d) => d.name), ["LG TV"]);
+  // No device, "the TV", "tv": no "which one do you mean?", it goes to that TV's YouTube app.
+  let from = sim.state.lg.launched.length;
+  let r = await control({ action: "launch_app", value: "YouTube" });
+  assert.ok(r.ok, r.message);
+  assert.match(r.message, /YouTube on LG TV/);
+  r = await control({ device: "the TV", action: "search_youtube", value: "cat videos" });
+  assert.match(r.message, /^Searching for “cat videos” in the YouTube app on LG TV\./);
+  r = await control({ device: "tv", action: "play_youtube", value: "https://youtu.be/dQw4w9WgXcQ" });
+  assert.match(r.message, /on LG TV\.$/);
+  assert.equal(sim.state.lg.launched.length, from + 3);
+  // A TV they name still wins, and is then the one used last.
+  r = await control({ device: "Family Room TV", action: "launch_app", value: "YouTube" });
+  assert.ok(r.ok, r.message);
+  r = await control({ action: "search_youtube", value: "dinosaurs" });
+  assert.match(r.message, /in the YouTube app on Family Room TV\./);
+  list = await devices();
+  assert.deepEqual(list.filter((d) => d.defaultTv).map((d) => d.name), ["Family Room TV"]);
+  // "On my computer" is still this computer, and other things still ask which TV when it isn't clear.
+  r = await control({ device: "this computer", action: "search_youtube", value: "dinosaurs" });
+  assert.doesNotMatch(r.message, /Family Room TV/);
+  r = await control({ device: "the TV", action: "volume_up" });
+  assert.equal(r.error, "EAMBIGUOUS", r.message);
 });

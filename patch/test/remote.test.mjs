@@ -2,8 +2,9 @@
 // (How each kind of TV is sent them is in tv.test.mjs.)
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buttonCodes, describeButtons, parseButtons } from "../src/drivers/tv.mjs";
-import { refusedKey } from "../src/drivers/androidtv.mjs";
+import { buttonCodes, describeButtons, parseButtons, pressPlan } from "../src/drivers/tv.mjs";
+import { mediaSession, refusedKey } from "../src/drivers/androidtv.mjs";
+import { youtubeVoiceParams, youtubeVoiceUrl } from "../src/net/youtube.mjs";
 
 const said = (v) => parseButtons(v).map((s) => `${s.hold ? "hold " : ""}${s.button}${s.times > 1 ? ` x${s.times}` : ""}`).join(", ");
 
@@ -92,4 +93,68 @@ test("Android says nothing when it has pressed a key; Patch notices when it says
   assert.equal(refusedKey("Error: Invalid arguments for command: keyevent\nusage: input [<source>] keyevent [--longpress] <key code number or name> ..."), true);
   assert.equal(refusedKey("java.lang.SecurityException: Injecting to another application requires INJECT_EVENTS permission\n\tat android.os.Parcel.readException(Parcel.java:2013)"), true);
   assert.equal(refusedKey("Exception occurred while executing 'keyevent':\njava.lang.IllegalArgumentException: Argument expected after \"--longpress\""), true);
+});
+
+test("a TV is given a moment after a button that changes the screen, before the next one", () => {
+  const codes = { home: "H", right: "R", ok: "S", back: "B", down: "D" };
+  const plan = (v, gap) => pressPlan(buttonCodes(parseButtons(v), codes), gap).map((p) => `${p.wait ? `${p.wait} ` : ""}${p.hold ? "hold " : ""}${p.code}`);
+  // Arrows follow one another at once (or at this kind of TV's own pace); after Home and OK the TV gets longer.
+  assert.deepEqual(plan("right 3"), ["R", "R", "R"]);
+  assert.deepEqual(plan("right 3", 200), ["R", "200 R", "200 R"]);
+  assert.deepEqual(plan("home, right 2, ok"), ["H", "1500 R", "R", "S"]);
+  assert.deepEqual(plan("home, right 2, ok", 250), ["H", "1500 R", "250 R", "250 S"]);
+  // Each Back is a screen of its own.
+  assert.deepEqual(plan("back twice, down"), ["B", "700 B", "700 D"]);
+  assert.deepEqual(plan("ok, hold ok, down"), ["S", "900 hold S", "900 D"]);
+  // Nothing waits before the first press, and nothing after the last.
+  assert.deepEqual(plan("ok"), ["S"]);
+});
+
+test("a request for the TV's YouTube app, as a TV's own voice assistant hands it one", () => {
+  assert.equal(youtubeVoiceParams("cute cats"), "va=search&launch=voice&launch=search&vq=cute%20cats");
+  assert.equal(youtubeVoiceParams("  lofi & chill  ", { play: true }), "va=play&launch=voice&vq=lofi%20%26%20chill");
+  assert.equal(youtubeVoiceUrl("ça va?"), "https://www.youtube.com/tv?va=search&launch=voice&launch=search&vq=%C3%A7a%20va%3F");
+});
+
+test("what a TV says its YouTube app is playing", () => {
+  // As Android TV 11 prints it, with another app's part before and after.
+  const older = [
+    "MEDIA SESSION SERVICE (dumpsys media_session)",
+    "",
+    "3 sessions listeners.",
+    "Global priority session is null",
+    "User Records:",
+    "Record for full_user=0",
+    "  Sessions Stack - have 2 sessions:",
+    "    Netflix com.netflix.ninja/Netflix (userId=0)",
+    "      ownerPid=2211, ownerUid=10071, userId=0",
+    "      package=com.netflix.ninja",
+    "      active=false",
+    "      state=PlaybackState {state=2, position=0, buffered position=0, speed=0.0, updated=1, actions=0, custom actions=[], active item id=-1, error=null}",
+    "      metadata: size=3, description=The Bear, Season 2, null",
+    "    YouTube TV com.google.android.youtube.tv/YouTube TV (userId=0)",
+    "      ownerPid=3811, ownerUid=10089, userId=0",
+    "      package=com.google.android.youtube.tv",
+    "      launchIntent=null",
+    "      active=true",
+    "      flags=3",
+    "      state=PlaybackState {state=3, position=157436, buffered position=0, speed=1.0, updated=3247471, actions=823, custom actions=[], active item id=-1, error=null}",
+    "      audioAttrs=AudioAttributes: usage=USAGE_MEDIA content=CONTENT_TYPE_MOVIE flags=0x800 tags= bundle=null",
+    "      volumeType=1, controlId=null, max=0, current=0",
+    "      metadata: size=6, description=Baby Shark Dance, and more, Pinkfong, null",
+    "      queueTitle=null, size=0",
+    "    Kids com.google.android.youtube.tvkids/Kids (userId=0)",
+    "      package=com.google.android.youtube.tvkids",
+    "      state=PlaybackState {state=1, position=0, buffered position=0, speed=0.0, updated=1, actions=0, custom actions=[], active item id=-1, error=null}",
+    "      metadata: size=1, description=null, null, null",
+  ].join("\n");
+  assert.deepEqual(mediaSession(older, "com.google.android.youtube.tv"), { playing: true, title: "Baby Shark Dance, and more" }, "a title with a comma in it, and the right app's part");
+  assert.deepEqual(mediaSession(older, "com.netflix.ninja"), { playing: false, title: "The Bear" });
+  assert.deepEqual(mediaSession(older, "com.google.android.youtube.tvkids"), { playing: false, title: null });
+  assert.equal(mediaSession(older, "com.amazon.firetv.youtube"), null, "an app with nothing there");
+  // As Android 13 and later print the state.
+  const newer = "      package=com.amazon.firetv.youtube\n      active=true\n      state=PlaybackState {state=PLAYING(3), position=12000, buffered position=0, speed=1.0, updated=99, actions=1, custom actions=[], active item id=-1, error=null}\n      metadata: size=4, description=Lofi Girl, Lofi Girl, null\n";
+  assert.deepEqual(mediaSession(newer, "com.amazon.firetv.youtube"), { playing: true, title: "Lofi Girl" });
+  assert.deepEqual(mediaSession(newer.replace("PLAYING(3)", "PAUSED(2)"), "com.amazon.firetv.youtube"), { playing: false, title: "Lofi Girl" });
+  assert.equal(mediaSession("", "com.amazon.firetv.youtube"), null);
 });

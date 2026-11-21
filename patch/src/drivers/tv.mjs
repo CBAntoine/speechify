@@ -268,6 +268,29 @@ export function describeButtons(steps) {
   return parts.length > 4 && steps.every((st) => /^\d$/.test(st.button)) ? `Pressed ${steps.map((st) => st.button).join(" ")}` : parts.join(", then ");
 }
 
+// After these the screen changes (another app, a menu, the home screen), and a TV takes a moment
+// to be ready for the next button. Milliseconds to wait before whatever is pressed next.
+const BUTTON_SETTLES = { home: 1500, power: 1500, ok: 900, settings: 900, apps: 900, search: 900, guide: 900, recent: 900, input: 900, back: 700, exit: 700, menu: 700, info: 700 };
+/** How long a TV needs after this button before the next one (0 for arrows, numbers, volume and the like). */
+export const settleAfter = (button) => BUTTON_SETTLES[button] || 0;
+
+/**
+ * Every press in order, with how long to wait before it: [{ code, button, hold, wait }].
+ * `gap` is the pause this kind of TV needs between any two presses; after a button that changes
+ * the screen the wait is longer, so "home, right 2, OK" lands on the home screen, not on the way to it.
+ */
+export function pressPlan(steps, gap = 0) {
+  const plan = [];
+  let last = null;
+  for (const st of steps) {
+    for (let i = 0; i < st.times; i++) {
+      plan.push({ code: st.code, button: st.button, hold: !!st.hold, wait: last == null ? 0 : Math.max(gap, settleAfter(last)) });
+      last = st.button;
+    }
+  }
+  return plan;
+}
+
 /** Each step as a driver's own code: `codes` is { button name: code } and `digit` makes a code for 0-9. Throws for a button this TV's remote doesn't have. */
 export function buttonCodes(steps, codes, { digit = null, device = "This TV" } = {}) {
   return steps.map((st) => {
@@ -310,15 +333,20 @@ export function pickIndex(value) {
   return null;
 }
 
+// For the assistant, after anything in a TV's YouTube app: it can't see that app's screen, so it works it with the remote.
+export const YOUTUBE_NEXT = "You can't see the YouTube app's screen. Work it with the remote on this TV: press_button \"ok\" plays what the remote is on; \"right\", \"down\", \"left\" and \"up\" move to other videos; \"back\" leaves a video; play and pause work too.";
+
 /**
- * Search YouTube for a TV.
+ * Search YouTube for a TV. "YouTube" means the TV's YouTube app, so that comes first:
  *  - showOnTv(query): the TV's own YouTube app shows the results; resolves true (or a phrase like
  *    "in YouTube") if it could.
- *  - browserSearch(query): fallback that opens YouTube's results page in the TV's web browser.
+ *  - askApp(query): hands the search to the TV's YouTube app the way the TV's own voice search does.
+ *    Patch can't see whether the app took it, so the answer says what was asked, not what's showing.
+ *  - browserSearch(query): the last resort, YouTube's results page in the TV's web browser.
  *  - openYouTube(): just opens the YouTube app.
  * With a YouTube key, the top results also come back so the person can pick one to play.
  */
-export async function youtubeSearch(device, query, ctx, { showOnTv, browserSearch, openYouTube } = {}) {
+export async function youtubeSearch(device, query, ctx, { showOnTv, askApp, browserSearch, openYouTube } = {}) {
   const q = String(need(query, "search")).trim();
   let results = null;
   let keyProblem = null;
@@ -332,11 +360,13 @@ export async function youtubeSearch(device, query, ctx, { showOnTv, browserSearc
     }
   }
   const where = (w) => (typeof w === "string" ? ` ${w}` : "");
-  let shown = false;
-  if (showOnTv) shown = await showOnTv(q).catch(() => false);
   const list = results?.length ? describeResults(results, 3) : "";
   const extra = { results: results?.map(({ id, title, channel, duration, live }) => ({ id, title, channel, duration, live })) };
-  if (shown) return done(`Showing YouTube results for “${q}” on ${device.name}${where(shown)}.${list ? ` The top ones are: ${list}.` : ""}`, extra);
+  const inApp = { ...extra, next: YOUTUBE_NEXT, state: { ...device.state, on: true, app: "YouTube" } };
+  const shown = showOnTv ? await showOnTv(q).catch(() => false) : false;
+  if (shown) return done(`Showing YouTube results for “${q}” on ${device.name}${where(shown)}.${list ? ` The top ones are: ${list}.` : ""}`, inApp);
+  const asked = askApp ? await askApp(q).catch(() => false) : false;
+  if (asked) return done(`Searching for “${q}” in the YouTube app on ${device.name}.${list ? ` The top results are: ${list}.` : ""}`, inApp);
   if (results?.length) return done(`Top YouTube results for “${q}”: ${list}. Which one should I play on ${device.name}?`, extra);
   if (results && !results.length) return done(`YouTube found nothing for “${q}”.`, extra);
   if (browserSearch) {
@@ -380,17 +410,25 @@ export async function youtubeVideo(device, value, ctx) {
 }
 
 /**
- * play_youtube for a TV: playVideo(id) starts it. Without a YouTube key a phrase can't be turned into
- * a video, so the TV shows YouTube's results instead (showOnTv, then browserSearch).
+ * play_youtube for a TV: playVideo(id) starts a video Patch knows the id of (a link, a pick from the
+ * results, or the top result when there's a YouTube key). Without a key a phrase can't be turned
+ * into an id, so the TV's YouTube app is asked to play it by name (playByName: it picks the closest
+ * match itself; resolves true, or a sentence about what started). Failing that the app or the
+ * browser shows the results (showOnTv, askApp, browserSearch).
  */
-export async function youtubePlay(device, value, ctx, { playVideo, showOnTv, browserSearch }) {
+export async function youtubePlay(device, value, ctx, { playVideo, playByName, showOnTv, askApp, browserSearch }) {
   const pick = await youtubeVideo(device, value, ctx);
   if (pick.query) {
-    for (const show of [showOnTv, browserSearch]) {
+    const playing = { state: { ...device.state, on: true, app: "YouTube" }, next: YOUTUBE_NEXT };
+    const started = playByName ? await playByName(pick.query).catch(() => false) : false;
+    if (started) return done(`Asked the YouTube app on ${device.name} to play “${pick.query}”.${typeof started === "string" ? ` ${started}` : " It picks the closest match itself."}`, playing);
+    for (const show of [showOnTv, askApp]) {
       if (!show) continue;
       const w = await show(pick.query).catch(() => false);
-      if (w) return done(`I can't pick a video by name without a YouTube key, so YouTube's results for “${pick.query}” are on ${device.name}${typeof w === "string" ? ` ${w}` : ""} now. Choose one with the remote, or add a free YouTube key in Settings so I can pick for you.`);
+      if (w) return done(`YouTube's results for “${pick.query}” are on ${device.name}${typeof w === "string" ? ` ${w}` : ""}. Nothing is playing yet: OK on the remote plays the first one.`, playing);
     }
+    const w = browserSearch ? await browserSearch(pick.query).catch(() => false) : false;
+    if (w) return done(`I can't pick a video by name without a YouTube key, so YouTube's results for “${pick.query}” are on ${device.name}${typeof w === "string" ? ` ${w}` : ""} now. Choose one with the remote, or add a free YouTube key in Settings so I can pick for you.`);
     throw new DeviceError(`To play something by name I need a free YouTube API key in Patch's Settings. With a link or video id I can play it right away.`, { code: "ENOYTKEY", hint: "Settings → YouTube search key" });
   }
   await playVideo(pick.id);

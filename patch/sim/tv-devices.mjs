@@ -288,6 +288,8 @@ export function fireTvState() {
     keys: [], // every button pressed, in order ("hold KEYCODE_HOME" for one held down)
     cursor: 0, // which app on the home screen the remote is on
     refuseKey: null, // a key code this TV's Android won't press (a test's switch)
+    ytTakes: ["alexa", "assistant", "results", "search"], // the ways this TV's YouTube app takes a search (a test's switch)
+    youtube: null, // the last thing its YouTube app was asked: { asked, query, play }
   };
 }
 
@@ -461,7 +463,21 @@ function fireShell(s, cmd) {
   if (m) {
     const [, action, data, query, pkg] = m;
     if (pkg && !s.packages.includes(pkg)) return `Error: Activity not started, unable to resolve Intent { act=${action} pkg=${pkg} }\n`;
-    if (action === "android.intent.action.SEARCH" && pkg !== "com.amazon.firetv.youtube") return "Error: Activity not started, unable to resolve Intent\n";
+    if (action === "android.intent.action.SEARCH" && (pkg !== "com.amazon.firetv.youtube" || !s.ytTakes.includes("search"))) return "Error: Activity not started, unable to resolve Intent\n";
+    if (pkg === "com.amazon.firetv.youtube" && action === "android.intent.action.VIEW" && data) {
+      // A search or "play this" for the YouTube app: Alexa's link, Google Assistant's, or a results page's address.
+      const form = /^youtube:\/\/search\?/.test(data) ? "alexa" : /^https:\/\/www\.youtube\.com\/tv\?/.test(data) ? "assistant" : /\/results\?search_query=/.test(data) ? "results" : null;
+      if (form && !s.ytTakes.includes(form)) return `Error: Activity not started, unable to resolve Intent { act=${action} dat=${data} pkg=${pkg} }\n`;
+      if (form) {
+        const u = new URL(data);
+        const q = u.searchParams.get("query") || u.searchParams.get("vq") || u.searchParams.get("search_query") || "";
+        const play = u.searchParams.get("method") === "play" || u.searchParams.get("va") === "play";
+        s.youtube = { asked: form, query: q, play };
+        // Asked to play something by name, it picks the closest match and starts it.
+        if (play) s.playing = { app: pkg, title: `${q.slice(0, 1).toUpperCase()}${q.slice(1)} (Official Video)`, state: "playing" };
+      }
+    }
+    if (action === "android.intent.action.SEARCH") s.youtube = { asked: "search", query: query || "", play: false };
     const target = pkg || (/^https?:\/\/(www\.)?youtube\.com/.test(data || "") ? "com.amazon.firetv.youtube" : "com.amazon.cloud9");
     s.focus = `${target}/.MainActivity`;
     if (!s.running.includes(target)) s.running.push(target);

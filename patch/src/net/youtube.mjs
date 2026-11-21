@@ -27,6 +27,14 @@ export function videoIdFrom(value) {
 
 export const watchUrl = (id) => `https://www.youtube.com/watch?v=${id}`;
 export const youtubeSearchUrl = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+/**
+ * A request for the YouTube app on a TV, the way a TV's own voice assistant hands it one: "search
+ * for this" or "play this". They are start-up parameters the app reads (va: what to do, vq: the
+ * words), and the same on every make of TV because YouTube on TVs is one app everywhere. With
+ * `play` the app picks the closest match itself and starts it.
+ */
+export const youtubeVoiceParams = (q, { play = false } = {}) => `${play ? "va=play&launch=voice" : "va=search&launch=voice&launch=search"}&vq=${encodeURIComponent(String(q).trim())}`;
+export const youtubeVoiceUrl = (q, opts) => `https://www.youtube.com/tv?${youtubeVoiceParams(q, opts)}`;
 export const webSearchUrl = (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 
 /**

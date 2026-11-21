@@ -7,13 +7,13 @@ import { AdbClient, newAdbKey, shellQuote } from "../net/adb.mjs";
 import { fireTvModel } from "../net/models.mjs";
 import { describeScreen, riskyButton } from "../net/phone.mjs";
 import { readUiTree } from "../net/uitree.mjs";
-import { watchUrl, youtubeSearchUrl } from "../net/youtube.mjs";
+import { watchUrl, youtubeSearchUrl, youtubeVoiceUrl } from "../net/youtube.mjs";
 import { WebSession, describePage, hostOf } from "../tvweb/session.mjs";
 import { apkInfo } from "../apk/index.mjs";
 import { fuzzyPick, normalizeText, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { APPS, buttonCodes, customAppNames, describeButtons, knownApp, parseButtons, parseChannel, pickIndex, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { APPS, buttonCodes, customAppNames, describeButtons, knownApp, parseButtons, parseChannel, pickIndex, pressPlan, settleAfter, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 // The remote's buttons (named as in tv.mjs) as Android's key codes.
 const KEYS = {
@@ -164,6 +164,50 @@ export const refusedKey = (out) => /(^|\n)\s*(Error|Usage)\b|Exception|Unknown k
 async function youtubePkg(client, device) {
   const list = device.ref.packages?.length ? device.ref.packages : await packages(client, device);
   return APPS.find((a) => a.key === "youtube").android.find((p) => list.includes(p)) || null;
+}
+
+/**
+ * Hands the TV's YouTube app a request ("search for this", or with `play` "play this") the way the
+ * TV's own voice assistant does: Alexa's link on a Fire TV, Google Assistant's on Android TV and
+ * Google TV, then the plainer ways of asking for a search. True once the app has taken one.
+ */
+async function youtubeAsk(client, yt, q, { play = false } = {}) {
+  const alexa = `youtube://search?query=${encodeURIComponent(q).replace(/%20/g, "+")}&isVoice=true${play ? "&method=play" : ""}`;
+  const assistant = youtubeVoiceUrl(q, { play });
+  for (const url of /amazon|firetv/.test(yt) ? [alexa, assistant] : [assistant, alexa]) if (await view(client, url, yt)) return true;
+  if (play) return false;
+  if (await view(client, youtubeSearchUrl(q), yt)) return true;
+  return !failed(await sh(client, `am start -a android.intent.action.SEARCH --es query ${shellQuote(q)} ${yt}`));
+}
+
+/**
+ * What an app says it's playing, from `dumpsys media_session`: { playing, title }, or null when the
+ * app has nothing there. (Each app's part has "package=<its name>", then its state and what's on.)
+ */
+export function mediaSession(out, pkg) {
+  const text = String(out || "");
+  const at = text.indexOf(`package=${pkg}\n`) >= 0 ? text.indexOf(`package=${pkg}\n`) : text.indexOf(`package=${pkg}`);
+  if (at < 0) return null;
+  const rest = text.slice(at + 8);
+  const end = rest.search(/\n\s*package=/);
+  const part = end < 0 ? rest : rest.slice(0, end);
+  const state = part.match(/state=PlaybackState\s*\{\s*state=(?:[A-Z_]+\()?(\d+)/);
+  const meta = part.match(/metadata:\s*size=\d+,\s*description=(.*)/);
+  // "description=<title>, <who it's by>, <more>": the title is everything before the last two.
+  const bits = meta ? meta[1].trim().split(", ") : [];
+  const title = (bits.length > 2 ? bits.slice(0, -2).join(", ") : bits[0] || "").trim();
+  return { playing: state ? Number(state[1]) === 3 : false, title: title && title !== "null" ? title : null };
+}
+
+/** Waits (up to `ms`) for the app to start playing something other than `before`, and gives its title; null if it can't be told. */
+async function nowPlaying(client, pkg, before, ms = 9000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    await sleep(1500);
+    const now = mediaSession(await sh(client, "dumpsys media_session", 8000).catch(() => ""), pkg);
+    if (now?.playing && now.title && now.title !== before) return now.title;
+  }
+  return null;
 }
 
 async function liveState(client, device) {
@@ -352,7 +396,8 @@ async function readScreen(client, device, ctx) {
  */
 async function afterButtons(client, device, ctx, steps, lead) {
   if (!ctx.look || !steps.some((st) => MOVES.has(st.button))) return done(lead);
-  await sleep(450);
+  // Long enough for the screen to have changed, when the last button changes it.
+  await sleep(Math.max(450, settleAfter(steps.at(-1)?.button)));
   try {
     const web = await webInFront(client, device);
     if (web) {
@@ -717,26 +762,37 @@ export default {
           }
           // Any of the remote's buttons, several in a row, or one held down.
           const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `KEYCODE_${d}`, device: device.name });
+          // Buttons that follow one another at once go as one command; after one that changes the
+          // screen, the TV is given a moment before the next.
           let run = [];
-          let said = "";
-          for (const st of steps) {
-            if (!st.hold) {
-              run.push(...Array(st.times).fill(st.code));
-              continue;
-            }
-            if (run.length) said += await key(client, ...run);
-            run = [];
-            for (let n = 0; n < st.times; n++) said += await holdKey(client, st.code);
-          }
-          if (run.length) said += await key(client, ...run);
-          ctx.memory?.delete(`tv-screen:${device.id}`);
-          // Never "Pressed…" when Android wouldn't.
-          if (refusedKey(said)) {
+          // Android says nothing when it has pressed a key. Anything else means it wouldn't: stop there,
+          // and never say "Pressed…".
+          const taken = (said) => {
+            if (!refusedKey(said)) return;
+            ctx.memory?.delete(`tv-screen:${device.id}`);
             // Some makers lock button presses away from ADB until one more switch is turned on.
             if (/SecurityException|INJECT_EVENTS/i.test(said)) throw new DeviceError(`${device.name} won't let Patch press its buttons. If its Developer options have “USB debugging (Security settings)”, turn that on and try again.`, { code: "EREFUSED" });
             const one = steps.length === 1 && steps[0].times === 1;
             throw new DeviceError(`${device.name} wouldn't take ${one ? "that button" : "those buttons"}. Its remote may not have ${one ? "it" : "one of them"}.`, { code: "EUNSUPPORTED" });
+          };
+          const flush = async () => {
+            if (!run.length) return;
+            const codes = run;
+            run = [];
+            taken(await key(client, ...codes));
+          };
+          for (const p of pressPlan(steps)) {
+            if (p.wait) {
+              await flush();
+              await sleep(p.wait);
+            }
+            if (p.hold) {
+              await flush();
+              taken(await holdKey(client, p.code));
+            } else run.push(p.code);
           }
+          await flush();
+          ctx.memory?.delete(`tv-screen:${device.id}`);
           return await afterButtons(client, device, ctx, steps, `${describeButtons(steps)} on ${device.name}.`);
         }
         case "launch_app": {
@@ -855,13 +911,8 @@ export default {
         case "search_youtube": {
           const yt = await youtubePkg(client, device);
           return await youtubeSearch(device, value, ctx, {
-            showOnTv: yt
-              ? async (q) => {
-                  const out = await sh(client, `am start -a android.intent.action.SEARCH --es query ${shellQuote(q)} ${yt}`);
-                  if (!failed(out)) return "in YouTube";
-                  return (await view(client, youtubeSearchUrl(q), yt)) ? "in YouTube" : false;
-                }
-              : null,
+            // "YouTube" is the TV's YouTube app: it's handed the search the way the TV's own voice search does.
+            askApp: yt ? (q) => youtubeAsk(client, yt, q) : null,
             browserSearch: async (q) => ((await view(client, youtubeSearchUrl(q))) ? "in the web browser" : false),
             openYouTube: yt ? () => launchPkg(client, yt) : null,
           });
@@ -873,12 +924,16 @@ export default {
               if (!((yt && (await view(client, watchUrl(id), yt))) || (await view(client, watchUrl(id))))) throw new DeviceError(`${device.name} couldn't open the video. Is the YouTube app installed?`, { code: "ENOTINSTALLED" });
               await sleep(50);
             },
-            showOnTv: yt
+            // By name: the YouTube app picks the closest match itself. Where the TV says what's playing, so does Patch.
+            playByName: yt
               ? async (q) => {
-                  const out = await sh(client, `am start -a android.intent.action.SEARCH --es query ${shellQuote(q)} ${yt}`);
-                  return failed(out) ? false : "in YouTube";
+                  const before = mediaSession(await sh(client, "dumpsys media_session", 8000).catch(() => ""), yt)?.title || null;
+                  if (!(await youtubeAsk(client, yt, q, { play: true }))) return false;
+                  const title = await nowPlaying(client, yt, before, ctx.look ? 9000 : 0);
+                  return title ? `It's playing “${title}”.` : true;
                 }
               : null,
+            askApp: yt ? (q) => youtubeAsk(client, yt, q) : null,
           });
         }
         default:

@@ -3,7 +3,8 @@ import { request } from "../net/lanhttp.mjs";
 import { childText, findAll, findFirst, parseXml } from "../net/xml.mjs";
 import { fuzzyPick, normalizeMac, normalizeText, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { youtubeVoiceParams } from "../net/youtube.mjs";
+import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, pressPlan, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const YOUTUBE = "837"; // YouTube's channel id on every Roku
 
@@ -139,14 +140,13 @@ export default {
           }
           // Any of the remote's buttons, several in a row, or one held down.
           const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `Lit_${d}`, device: device.name });
-          for (const st of steps) {
-            for (let i = 0; i < st.times; i++) {
-              if (st.hold) {
-                await post(ref, `/keydown/${st.code}`);
-                await sleep(1200);
-                await post(ref, `/keyup/${st.code}`);
-              } else await post(ref, `/keypress/${st.code}`);
-            }
+          for (const p of pressPlan(steps, 120)) {
+            if (p.wait) await sleep(p.wait);
+            if (p.hold) {
+              await post(ref, `/keydown/${p.code}`);
+              await sleep(1200);
+              await post(ref, `/keyup/${p.code}`);
+            } else await post(ref, `/keypress/${p.code}`);
           }
           return done(`${describeButtons(steps)} on ${device.name}.`);
         }
@@ -207,11 +207,22 @@ export default {
         case "search_youtube": {
           const list = await apps(ref.base);
           if (!list.some((a) => a.id === YOUTUBE)) throw new DeviceError(`YouTube isn't installed on ${device.name}. Add it from the Roku Channel Store.`, { code: "ENOTINSTALLED" });
-          return await youtubeSearch(device, value, ctx, { openYouTube: () => post(ref, `/launch/${YOUTUBE}`) });
+          return await youtubeSearch(device, value, ctx, {
+            // "YouTube" is the Roku's YouTube app: it's started with the search, the way a voice search hands it one.
+            askApp: async (q) => {
+              await post(ref, `/launch/${YOUTUBE}?${youtubeVoiceParams(q)}`);
+              return true;
+            },
+            openYouTube: () => post(ref, `/launch/${YOUTUBE}`),
+          });
         }
         case "play_youtube":
           return await youtubePlay(device, value, ctx, {
             playVideo: (id) => post(ref, `/launch/${YOUTUBE}?contentId=${encodeURIComponent(id)}&mediaType=movie`),
+            playByName: async (q) => {
+              await post(ref, `/launch/${YOUTUBE}?${youtubeVoiceParams(q, { play: true })}`);
+              return true;
+            },
           });
         case "search": {
           const q = String(need(value, "search"));

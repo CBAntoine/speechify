@@ -4,10 +4,10 @@
 import { readFileSync } from "node:fs";
 import { wsConnect } from "../net/websocket.mjs";
 import { wakeOnLan } from "../net/probe.mjs";
-import { youtubeSearchUrl, watchUrl } from "../net/youtube.mjs";
+import { youtubeSearchUrl, youtubeVoiceParams, watchUrl } from "../net/youtube.mjs";
 import { clamp, fuzzyPick, normalizeMac, normalizeText, parsePercent, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, pressPlan, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const PAIRING = JSON.parse(readFileSync(new URL("./lg-pairing.json", import.meta.url), "utf8"));
 delete PAIRING._source;
@@ -288,12 +288,11 @@ export default {
         case "press_button": {
           // Any of the remote's buttons, or several in a row. (LG's TVs take presses, not a held button.)
           const steps = buttonCodes(parseButtons(value), BUTTONS, { digit: (d) => d, device: device.name });
-          for (const st of steps) {
-            for (let i = 0; i < st.times; i++) {
-              await s.button(st.code);
-              await sleep(200);
-            }
+          for (const p of pressPlan(steps, 200)) {
+            if (p.wait) await sleep(p.wait);
+            await s.button(p.code);
           }
+          await sleep(200);
           const held = steps.some((st) => st.hold);
           return done(`${describeButtons(steps.map((st) => ({ ...st, hold: false })))} on ${device.name}.${held ? " (This TV doesn't take a held button from Patch, so I pressed it once.)" : ""}`);
         }
@@ -337,6 +336,12 @@ export default {
         }
         case "search_youtube":
           return await youtubeSearch(device, value, ctx, {
+            // "YouTube" is the TV's YouTube app: it's handed the search the way LG's own voice search
+            // does (vs=9 is how the app knows the request came from the TV).
+            askApp: async (q) => {
+              await s.request("ssap://com.webos.applicationManager/launch", { id: "youtube.leanback.v4", params: { contentTarget: `inApp=true&vs=9&${youtubeVoiceParams(q)}` } });
+              return true;
+            },
             browserSearch: async (q) => {
               await s.request("ssap://system.launcher/open", { target: youtubeSearchUrl(q) });
               return "in the TV's web browser";
@@ -346,6 +351,10 @@ export default {
         case "play_youtube":
           return await youtubePlay(device, value, ctx, {
             playVideo: (id) => s.request("ssap://com.webos.applicationManager/launch", { id: "youtube.leanback.v4", params: { contentTarget: watchUrl(id) } }),
+            playByName: async (q) => {
+              await s.request("ssap://com.webos.applicationManager/launch", { id: "youtube.leanback.v4", params: { contentTarget: `inApp=true&vs=9&${youtubeVoiceParams(q, { play: true })}` } });
+              return true;
+            },
             browserSearch: async (q) => {
               await s.request("ssap://system.launcher/open", { target: youtubeSearchUrl(q) });
               return "in the TV's web browser";

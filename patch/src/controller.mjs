@@ -166,7 +166,9 @@ export class Controller {
         for (const dev of r.devices) this.inventory.upsert(dev.id === id ? { ...d, ...dev } : dev, { scanId: d.scanId });
       } else this.inventory.patch(id, patch);
       if (r.rescan && this.scanner) this.scanner.scan().catch(() => {});
-      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}), ...(r.screen ? { screen: r.screen } : {}), ...(r.apps ? { apps: r.apps } : {}), ...(r.installed ? { installed: r.installed } : {}) };
+      // "The TV" now means this one, until another is used.
+      this.inventory.usedTv(this.inventory.get(id));
+      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}), ...(r.screen ? { screen: r.screen } : {}), ...(r.apps ? { apps: r.apps } : {}), ...(r.installed ? { installed: r.installed } : {}), ...(r.next ? { next: r.next } : {}) };
     } catch (err) {
       const e = err instanceof DeviceError ? err : new DeviceError(err.message || String(err));
       if (e.code === "ECONFIRM") {
