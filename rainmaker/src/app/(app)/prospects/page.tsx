@@ -21,7 +21,13 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
         sub={
           <>
             Search a niche in any city. Every result is checked for the gaps agencies sell against and scored by need and ability to pay.{" "}
-            <span className="faint">Data: {i.googlePlaces ? "Google Places" : "OpenStreetMap (free)"}.</span>
+            <span className="faint">
+              Data:{" "}
+              {i.googlePlaces
+                ? "Google Places"
+                : `OpenStreetMap, city licence lists${i.claude ? ", Claude web research" : ""} and Rainmaker's own crawler`}
+              .
+            </span>
           </>
         }
       />
