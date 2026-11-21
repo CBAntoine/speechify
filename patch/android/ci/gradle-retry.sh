@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs Gradle, and tries again when the build couldn't fetch its tools: Maven Central and Google's
-# servers sometimes turn build machines away for a minute ("429 Too Many Requests"). Anything else
-# that fails (a mistake in the code) fails straight away.
+# servers sometimes turn build machines away for a minute ("429 Too Many Requests"), or answer that
+# parts every build uses "could not be found". Anything else that fails (a mistake in the code)
+# fails straight away.
 # Usage: gradle-retry.sh <gradle arguments>
 set -uo pipefail
 LOG="$(mktemp)"
@@ -9,7 +10,7 @@ for attempt in 1 2 3 4; do
   gradle --no-daemon "$@" 2>&1 | tee "$LOG"
   status="${PIPESTATUS[0]}"
   [ "$status" = 0 ] && exit 0
-  if [ "$attempt" = 4 ] || ! grep -qE "Too Many Requests|status code (429|5[0-9][0-9])|Could not (GET|HEAD) |Connection (reset|refused|timed out)|Read timed out|Remote host terminated the handshake" "$LOG"; then
+  if [ "$attempt" = 4 ] || ! grep -qE "Too Many Requests|status code (429|5[0-9][0-9])|Could not (GET|HEAD) |Connection (reset|refused|timed out)|Read timed out|Remote host terminated the handshake|Could not resolve all (artifacts|files|dependencies|task dependencies) for configuration" "$LOG"; then
     exit "$status"
   fi
   wait=$((attempt * 60))
