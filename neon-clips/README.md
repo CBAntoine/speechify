@@ -41,9 +41,9 @@ cd neon-clips
 ./gradlew :app:assembleRelease -Pabi=x86_64   # for an emulator on a PC
 ```
 
-Needs JDK 21 and the Android SDK (platform 37.2). Release builds are signed with the debug key unless `NEONCLIPS_KEYSTORE`, `NEONCLIPS_KEYSTORE_PASSWORD`, `NEONCLIPS_KEY_ALIAS` and `NEONCLIPS_KEY_PASSWORD` are set. An update only installs over an older copy signed with the same key, so set a real keystore before handing builds to other people.
+Needs JDK 21 and the Android SDK (platform 37.2). Release builds are signed with the machine's debug key unless `NEONCLIPS_KEYSTORE`, `NEONCLIPS_KEYSTORE_PASSWORD`, `NEONCLIPS_KEY_ALIAS` and `NEONCLIPS_KEY_PASSWORD` are set. Android only installs an update over a copy signed with the same key, so a build from another machine has to be installed fresh (uninstall first) until a permanent key is set up.
 
-The GitHub workflow `.github/workflows/neon-clips-apk.yml` runs the tests and uploads the APK as a build artifact on every push that touches this folder.
+The GitHub workflow `.github/workflows/neon-clips-apk.yml` runs the tests and uploads the APK as a build artifact on every push that touches this folder. It signs with a permanent key when the repository has the secrets `NEONCLIPS_KEYSTORE_BASE64` (the keystore file, base64-encoded), `NEONCLIPS_KEYSTORE_PASSWORD`, `NEONCLIPS_KEY_ALIAS` and `NEONCLIPS_KEY_PASSWORD`.
 
 ### On-device tests
 

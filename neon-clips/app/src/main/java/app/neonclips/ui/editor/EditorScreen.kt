@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -24,10 +26,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +70,7 @@ import app.neonclips.ui.Shout
 import app.neonclips.ui.Tag
 import app.neonclips.ui.TopBar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 
 private enum class Tab(val label: String) { CLIPS("Clips"), REFRAME("Reframe"), CAPTIONS("Captions"), AUDIO("Audio") }
 
@@ -243,7 +248,7 @@ private fun ReframeTab(c: EditorController) {
 private fun CaptionsTab(c: EditorController, openSettings: () -> Unit) {
     val clip = c.clip ?: return
     Label("Hook  ·  shows for the first seconds", color = Neon.Hot)
-    Field(clip.hook, { c.setHook(it) }, "ADD A HOOK", Modifier.fillMaxWidth(), display = true, capitalize = true)
+    Field(clip.hook, { c.setHook(it) }, "ADD A HOOK", Modifier.fillMaxWidth(), display = true, capitalize = true, resetKey = clip.id, maxLength = 60)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         HotButton(if (c.transcribing) "Listening" else "Auto caption", { c.autoCaption() }, enabled = !c.transcribing, color = Neon.Peach)
         LineButton("+ At playhead", { c.addCaption() }, color = Neon.Peach)
@@ -268,7 +273,9 @@ private fun CaptionsTab(c: EditorController, openSettings: () -> Unit) {
     if (clip.captions.isEmpty()) {
         Body("No captions yet. Auto caption transcribes the clip's speech; you can fix any word afterwards.", size = 12.sp)
     }
-    clip.captions.forEach { caption -> CaptionRow(caption, clip, c) }
+    clip.captions.forEach { caption ->
+        key(clip.id, caption.startMs, c.captionsVersion) { CaptionRow(caption, clip, c) }
+    }
 }
 
 @Composable
@@ -283,15 +290,18 @@ private fun CaptionRow(caption: Caption, clip: Clip, c: EditorController) {
             color = Neon.Peach,
         )
         Spacer(Modifier.width(8.dp))
+        val state = remember { TextFieldState(caption.text) }
+        LaunchedEffect(state) {
+            snapshotFlow { state.text.toString() }.drop(1).collect { c.editCaption(caption.startMs, it) }
+        }
         BasicTextField(
-            value = caption.text,
-            onValueChange = { c.editCaption(caption, it) },
+            state = state,
             modifier = Modifier.weight(1f).padding(vertical = 8.dp),
             textStyle = TextStyle(color = Neon.Text, fontSize = 14.sp),
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             cursorBrush = SolidColor(Neon.Hot),
         )
-        IconButton(Glyph.Close, "Delete caption", { c.deleteCaption(caption) }, color = Neon.Faint)
+        IconButton(Glyph.Close, "Delete caption", { c.deleteCaption(caption.startMs) }, color = Neon.Faint)
     }
 }
 
@@ -368,7 +378,7 @@ private fun ExportPanel(c: EditorController, onClose: () -> Unit) {
                 state == null -> {
                     Shout("Ready to drop", size = 30.sp)
                     val size = if (settings.exportHeight >= 1920) "1080 x 1920" else "720 x 1280"
-                    Label("9:16  ·  H.264  ·  $size  ·  Video + captions")
+                    Label("9:16  ·  H.264  ·  $size")
                     HotButton("Export this clip", { c.export(all = false) }, Modifier.fillMaxWidth())
                     if (c.project.clips.size > 1) {
                         LineButton("Export all ${c.project.clips.size} clips", { c.export(all = true) }, Modifier.fillMaxWidth())

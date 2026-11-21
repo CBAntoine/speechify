@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,7 +19,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import app.neonclips.Graph
 import app.neonclips.core.CamKey
-import app.neonclips.core.Caption
 import app.neonclips.core.Captions
 import app.neonclips.core.Clip
 import app.neonclips.core.Envelope
@@ -441,11 +441,15 @@ class EditorController(
 
     fun setCaptionShift(ms: Float) = update { it.copy(captionShiftMs = (ms / 10).toLong() * 10) }
 
-    fun editCaption(caption: Caption, text: String) = update { c ->
-        c.copy(captions = c.captions.map { if (it === caption || it == caption) Captions.retext(it, text) else it })
+    /** Bumped whenever the caption list is replaced wholesale, so the editor rebuilds its rows. */
+    var captionsVersion by mutableIntStateOf(0)
+        private set
+
+    fun editCaption(startMs: Long, text: String) = update { c ->
+        c.copy(captions = c.captions.map { if (it.startMs == startMs) Captions.retext(it, text) else it })
     }
 
-    fun deleteCaption(caption: Caption) = update { c -> c.copy(captions = c.captions.filterNot { it == caption }) }
+    fun deleteCaption(startMs: Long) = update { c -> c.copy(captions = c.captions.filterNot { it.startMs == startMs }) }
 
     fun addCaption() = update { c ->
         val t = positionMs.longValue.coerceIn(c.startMs, c.endMs - 300)
@@ -469,6 +473,7 @@ class EditorController(
                 val words = withContext(Dispatchers.IO) { Scribe.transcribe(audio, key) }
                 val captions = Captions.shift(Captions.fromWords(words), c.startMs)
                 updateClip(c.id) { it.copy(captions = Captions.within(captions, it.startMs, it.endMs), captionsOn = true) }
+                captionsVersion++
                 message = if (captions.isEmpty()) "No speech was found in this clip." else "${captions.size} captions added."
             } catch (e: CancellationException) {
                 throw e

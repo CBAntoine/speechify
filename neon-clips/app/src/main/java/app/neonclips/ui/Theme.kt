@@ -19,13 +19,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldDecorator
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.maxLengthTrim
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -38,6 +50,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,13 +60,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.neonclips.R
+import kotlinx.coroutines.flow.drop
 
 object Neon {
     val Ink = Color(0xFF0E0714)
@@ -241,6 +255,11 @@ fun Tag(text: String, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * A single-line text field. The field owns its text while it is on screen and reports every
+ * change through [onValueChange]; [value] is only the text it starts with. To replace the text
+ * from outside (clear it, load another item), pass a different [resetKey].
+ */
 @Composable
 fun Field(
     value: String,
@@ -248,41 +267,73 @@ fun Field(
     placeholder: String,
     modifier: Modifier = Modifier,
     display: Boolean = false,
-    secret: VisualTransformation = VisualTransformation.None,
+    secret: Boolean = false,
+    reveal: Boolean = false,
     imeAction: ImeAction = ImeAction.Done,
     onDone: () -> Unit = {},
     capitalize: Boolean = false,
+    resetKey: Any? = null,
+    maxLength: Int = 200,
 ) {
+    val state = remember(resetKey) { TextFieldState(value) }
+    val report by rememberUpdatedState(onValueChange)
+    LaunchedEffect(state) {
+        snapshotFlow { state.text.toString() }.drop(1).collect { report(it) }
+    }
+
+    val focus = LocalFocusManager.current
     val style = if (display) {
         TextStyle(color = Neon.Text, fontFamily = Neon.Display, fontSize = 20.sp)
     } else {
         TextStyle(color = Neon.Text, fontSize = 14.sp)
     }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier
-            .defaultMinSize(minHeight = 44.dp)
-            .clip(Neon.Shape)
-            .background(Neon.Ink)
-            .border(1.dp, Neon.Line, Neon.Shape)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        textStyle = style,
-        singleLine = true,
-        cursorBrush = SolidColor(Neon.Hot),
-        visualTransformation = secret,
-        keyboardOptions = KeyboardOptions(
-            imeAction = imeAction,
-            capitalization = if (capitalize) KeyboardCapitalization.Characters else KeyboardCapitalization.None,
-        ),
-        keyboardActions = KeyboardActions(onDone = { onDone() }, onSearch = { onDone() }, onGo = { onDone() }),
-        decorationBox = { inner ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Text(placeholder, style = style.copy(color = Neon.Faint), maxLines = 1)
-                inner()
-            }
-        },
+    val box = modifier
+        .defaultMinSize(minHeight = 44.dp)
+        .clip(Neon.Shape)
+        .background(Neon.Ink)
+        .border(1.dp, Neon.Line, Neon.Shape)
+        .padding(horizontal = 12.dp, vertical = 10.dp)
+    val keyboard = KeyboardOptions(
+        imeAction = imeAction,
+        capitalization = if (capitalize) KeyboardCapitalization.Characters else KeyboardCapitalization.None,
+        keyboardType = if (secret) KeyboardType.Password else KeyboardType.Text,
     )
+    val action = KeyboardActionHandler {
+        focus.clearFocus()
+        onDone()
+    }
+    val decorator = TextFieldDecorator { inner ->
+        Box(contentAlignment = Alignment.CenterStart) {
+            if (state.text.isEmpty()) Text(placeholder, style = style.copy(color = Neon.Faint), maxLines = 1)
+            inner()
+        }
+    }
+    val limit = InputTransformation.maxLengthTrim(maxLength)
+    if (secret) {
+        BasicSecureTextField(
+            state = state,
+            modifier = box,
+            inputTransformation = limit,
+            textStyle = style,
+            keyboardOptions = keyboard,
+            onKeyboardAction = action,
+            cursorBrush = SolidColor(Neon.Hot),
+            decorator = decorator,
+            textObfuscationMode = if (reveal) TextObfuscationMode.Visible else TextObfuscationMode.RevealLastTyped,
+        )
+    } else {
+        BasicTextField(
+            state = state,
+            modifier = box,
+            inputTransformation = limit,
+            textStyle = style,
+            keyboardOptions = keyboard,
+            onKeyboardAction = action,
+            lineLimits = TextFieldLineLimits.SingleLine,
+            cursorBrush = SolidColor(Neon.Hot),
+            decorator = decorator,
+        )
+    }
 }
 
 @Composable

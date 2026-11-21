@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +54,7 @@ fun HomeScreen(nav: Nav) {
     val projects by Graph.store.projects.collectAsState()
     val jobs by Graph.imports.jobs.collectAsState()
     var link by remember { mutableStateOf("") }
+    var linkCleared by remember { mutableIntStateOf(0) }
     var deleting by remember { mutableStateOf<Project?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -125,9 +127,10 @@ fun HomeScreen(nav: Nav) {
                         if (url.startsWith("http")) {
                             nav.openLink(url)
                             link = ""
+                            linkCleared++
                         }
                     }
-                    Field(link, { link = it }, "Paste a video link", Modifier.weight(1f), imeAction = ImeAction.Go, onDone = go)
+                    Field(link, { link = it }, "Paste a video link", Modifier.weight(1f), imeAction = ImeAction.Go, onDone = go, resetKey = linkCleared, maxLength = 2000)
                     HotButton("Clip", go, enabled = link.trim().startsWith("http"), color = Neon.Peach)
                 }
             }

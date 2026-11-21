@@ -109,7 +109,7 @@ fun DiscoverScreen(nav: Nav) {
         TopBar("01 / Find", "Top videos", onBack = { nav.pop() })
         Column(Modifier.padding(ScreenPadding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Field(query, { query = it }, "Search a game, streamer or topic", Modifier.weight(1f), imeAction = ImeAction.Search, onDone = { search() })
+                Field(query, { query = it }, "Search a game, streamer or topic", Modifier.weight(1f), imeAction = ImeAction.Search, onDone = { search() }, resetKey = attempt)
                 HotButton("Search", { search() }, enabled = query.isNotBlank())
             }
             ScrollRow {

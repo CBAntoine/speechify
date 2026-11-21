@@ -187,7 +187,7 @@ fun ImportSheet(initial: VideoHit, nav: Nav) {
                 }
 
                 if (wholeAllowed) {
-                    PickHeader("Whole video  ·  ${Fmt.clock(duration!! * 1000)}", pick == Pick.WHOLE) { pick = Pick.WHOLE }
+                    PickHeader("Whole video  ·  ${Fmt.clock(duration * 1000)}", pick == Pick.WHOLE) { pick = Pick.WHOLE }
                 }
 
                 PickHeader("A part I choose", pick == Pick.RANGE) { pick = Pick.RANGE }

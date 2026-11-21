@@ -51,3 +51,7 @@ At connect time the page sends Sol the date, the player's tier, what they're vie
 ## Data and credits
 
 Map data © OpenStreetMap contributors (ODbL) via OpenFreeMap and OpenMapTiles. Natural Earth (public domain). AWS Terrain Tiles. News headlines link to the original publishers; the site never republishes articles. Pins carry confidence labels: **Confirmed**, **Reported** or **Theory**. Theories are the site's own inferences and are labelled as such.
+
+## Neon Clips (Android)
+
+`neon-clips/` is a separate Android app that turns long videos into 9:16 shorts: it finds top-viewed videos or takes one from the phone, picks the moments, reframes around faces, captions and exports on the device. It shares nothing with the site's code. See [neon-clips/README.md](neon-clips/README.md).
