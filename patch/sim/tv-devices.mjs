@@ -445,6 +445,8 @@ function fireShell(s, cmd) {
   if (m) {
     const pid = !s.noPidof && s.running.includes(m[1]) ? `${firePid(s, m[1])}\n` : "";
     const sockets = s.running.filter((p) => s.browser && fireWebApp(s, p)).map((p) => `0000000000000000: 00000002 00000000 00010000 0001 01 ${20000 + firePid(s, p)} @webview_devtools_remote_${firePid(s, p)}`);
+    // (noSocketList: a TV that keeps that list to itself.)
+    if (s.noSocketList) return `${pid}\n`;
     return `${pid}\nNum       RefCount Protocol Flags    Type St Inode Path\n0000000000000000: 00000002 00000000 00010000 0001 01 11872 /dev/socket/logdw\n${sockets.join("\n")}${sockets.length ? "\n" : ""}`;
   }
   m = cmd.match(/^cat \/proc\/(\d+)\/cmdline 2>\/dev\/null$/);

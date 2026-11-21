@@ -380,6 +380,8 @@ async function devtoolsSocket(client, pkg) {
       }
     }
   }
+  // A TV that won't show its list of sockets at all: the app's own is named after its process, so try that.
+  if (!hit && pids.size && !/RefCount|\/dev\/socket\/|@\w/.test(out)) return `webview_devtools_remote_${[...pids][0]}`;
   return hit?.name || null;
 }
 

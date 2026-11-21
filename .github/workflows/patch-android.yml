@@ -80,7 +80,7 @@ jobs:
         working-directory: patch
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          (cd android && gradle --no-daemon :tvapp:assembleRelease)
+          (cd android && bash ci/gradle-retry.sh :tvapp:assembleRelease)
           mkdir -p tvapp "$GITHUB_WORKSPACE/out"
           cp android/tvapp/build/outputs/apk/release/tvapp-release.apk tvapp/template.apk
           cp tvapp/template.apk "$GITHUB_WORKSPACE/out/PatchTVApp.apk"
@@ -120,7 +120,7 @@ jobs:
           PATCH_VERSION_CODE: ${{ github.run_number }}
           PATCH_VERSION_NAME: 1.0.${{ github.run_number }}
         run: |
-          gradle --no-daemon :app:assembleRelease -PpatchAbis=x86_64 -PpatchDebugWebView=true
+          bash ci/gradle-retry.sh :app:assembleRelease -PpatchAbis=x86_64 -PpatchDebugWebView=true
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/patch-test-x86_64.apk"
 
@@ -142,7 +142,7 @@ jobs:
             keytool -genkeypair -keystore "$PATCH_KEYSTORE" -storepass "$PATCH_KEYSTORE_PASSWORD" -alias patch \
               -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Patch"
           fi
-          gradle --no-daemon :app:assembleRelease -PpatchAbis=arm64-v8a,armeabi-v7a
+          bash ci/gradle-retry.sh :app:assembleRelease -PpatchAbis=arm64-v8a,armeabi-v7a
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/Patch.apk"
           ls -la "$GITHUB_WORKSPACE/out"
 

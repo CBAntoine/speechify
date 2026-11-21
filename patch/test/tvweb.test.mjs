@@ -293,6 +293,15 @@ test("with a template from before the browser, or a TV Patch can't see into, the
   await blind.stop();
 });
 
+test("a TV that won't list its sockets: Patch tries the browser's socket by its usual name", async () => {
+  const shy = await startRig("127.0.27", { webTries: 2 });
+  shy.tv.noSocketList = true;
+  const r = await shy.act("open_website", "bbc.co.uk");
+  assert.ok(r.ok, r.message);
+  assert.match(r.screen || "", /^On screen: bbc\.co\.uk: front page \(bbc\.co\.uk\), in Patch Browser\./, "Patch sees the page all the same");
+  await shy.stop();
+});
+
 // ── A real browser behind the simulated TV ──────────────────────────────────
 
 const chromePath = findChrome();
