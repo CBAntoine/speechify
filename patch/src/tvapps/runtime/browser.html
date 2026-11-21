@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patch's browser</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #0b0f1d; color: #eef1ff; font: 2.2vw/1.45 "Trebuchet MS", "Segoe UI", Roboto, Arial, sans-serif; display: flex; align-items: center; justify-content: center; }
+  main { width: 80vw; max-width: 1500px; text-align: center; }
+  h1 { font-size: 4.6vw; margin: 0 0 1vw; }
+  p { color: #b9c2ea; margin: 0 0 3vw; }
+  form { display: flex; gap: 1.2vw; margin-bottom: 3vw; }
+  input { flex: 1; min-width: 0; font: inherit; padding: 1.2vw 1.6vw; border-radius: 1.2vw; border: 0.3vw solid #2a3566; background: #141a33; color: #fff; }
+  input:focus { outline: none; border-color: #7c8cff; box-shadow: 0 0 0 0.4vw rgba(124, 140, 255, 0.35); }
+  button { font: inherit; font-weight: bold; padding: 1.2vw 2.4vw; border-radius: 1.2vw; border: 0; background: #5b6cff; color: #fff; }
+  button:focus { outline: 0.4vw solid #fff; }
+  ul { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-block; color: #dfe4ff; }
+  li { margin: 0.6vw 0; }
+  li::before { content: "“"; color: #7c8cff; }
+  li::after { content: "”"; color: #7c8cff; }
+  small { display: block; margin-top: 3vw; color: #8ea0d8; font-size: 1.7vw; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Patch's browser</h1>
+  <p>Patch can see the pages you open here, and click, type and scroll for you.</p>
+  <form id="go" action="https://www.google.com/search" method="get">
+    <input id="q" name="q" type="search" placeholder="Search the web, or type an address" aria-label="Search the web, or type an address" autocomplete="off">
+    <button type="submit">Go</button>
+  </form>
+  <ul>
+    <li>Open bbc.co.uk on the TV and choose the top story</li>
+    <li>Search the web for a lasagne recipe on the TV</li>
+    <li>What does the page say? Scroll down. Go back.</li>
+  </ul>
+  <small>With the remote: the arrows move the pointer and OK clicks. Menu switches the pointer off. Back goes back.</small>
+</main>
+<script>
+  // An address goes straight there; anything else is a search.
+  document.getElementById("go").addEventListener("submit", function (e) {
+    var v = document.getElementById("q").value.replace(/^\s+|\s+$/g, "");
+    if (!v) { e.preventDefault(); return; }
+    var address = /^https?:\/\//i.test(v) ? v : /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(v) ? "https://" + v : null;
+    if (address) {
+      e.preventDefault();
+      location.href = address;
+    }
+  });
+</script>
+</body>
+</html>

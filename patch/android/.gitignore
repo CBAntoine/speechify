@@ -1,0 +1,11 @@
+# Built or downloaded during the build (see .github/workflows/patch-android.yml)
+.gradle/
+build/
+app/build/
+app/.cxx/
+app/libnode/
+app/src/main/assets/
+local.properties
+*.jks
+*.keystore
+*.apk
