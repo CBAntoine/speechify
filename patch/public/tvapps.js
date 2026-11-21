@@ -25,7 +25,7 @@ export function createTvApps(ui) {
   /** A short name from a description, as Patch's server makes one ("a snake game for the kids" → "Snake game"). */
   function nameFrom(text) {
     const skip = /^(a|an|the|make|build|create|write|me|us|my|our|please|app|for|that|which|with)$/i;
-    const words = String(text).replace(/[^\p{L}\p{N}' -]+/gu, " ").split(/\s+/).filter(Boolean);
+    const words = String(text).replace(/[\x21-\x26\x28-\x2c\x2e\x2f\x3a-\x40\x5b-\x60\x7b-\x7e\u00a1-\u00bf\u2000-\u206f\u3000-\u303f]+/g, " ").split(/\s+/).filter(Boolean);
     while (words.length && skip.test(words[0])) words.shift();
     const cut = words.findIndex((w, i) => i > 0 && skip.test(w));
     const name = (cut > 0 ? words.slice(0, cut) : words).slice(0, 3).join(" ");

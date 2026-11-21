@@ -70,6 +70,27 @@ function listen() {
   };
 }
 
+test("the code the phone runs avoids what the phone's Node.js lacks (it has no Unicode data)", () => {
+  // Node.js for Android is built without ICU, so a regular expression with a Unicode property class
+  // (like the letter class written with a backslash p) is a syntax error there, and Patch wouldn't start.
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const files = [path.join(root, "server.mjs")];
+  const walk = (dir, keep) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name !== "src" || !dir.includes("node_modules")) walk(p, keep);
+      } else if (keep.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name)) files.push(p);
+    }
+  };
+  walk(path.join(root, "src"), /\.m?js$/);
+  for (const pkg of ["@anthropic-ai/sdk", "@opentelemetry/api", "standardwebhooks", "@stablelib/base64", "fast-sha256"]) walk(path.join(root, "node_modules", pkg), /\.(mjs|cjs|js)$/);
+  const unicodeClass = new RegExp(String.raw`\\[pP]\{`);
+  const bad = files.filter((f) => unicodeClass.test(fs.readFileSync(f, "utf8"))).map((f) => path.relative(root, f));
+  assert.ok(files.length > 100, `checked ${files.length} files`);
+  assert.deepEqual(bad, []);
+});
+
 test("reads the Wi-Fi, router and DNS servers the Android app passes in, and ignores anything odd", () => {
   assert.deepEqual(networkFromEnv({ PATCH_WIFI: "192.168.1.23/24", PATCH_GATEWAY: "192.168.1.1", PATCH_DNS: "192.168.1.1, 8.8.8.8 ,fe80::1" }), {
     wifi: { address: "192.168.1.23", prefix: 24, cidr: "192.168.1.0/24" },
