@@ -2080,6 +2080,11 @@ input.range-ct::-moz-range-progress {
   flex: none;
 }
 
+.field .file-pick {
+  justify-self: start;
+  cursor: pointer;
+}
+
 .check {
   margin-top: 4px;
   font-size: 13px;

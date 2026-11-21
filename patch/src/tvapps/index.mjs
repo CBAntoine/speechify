@@ -37,7 +37,7 @@ const imageType = (b) => (b[0] === 0xff && b[1] === 0xd8 ? ".jpg" : b.readUInt32
 const cleanName = (s) => String(s ?? "").replace(/[\u0000-\u001f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
 const cleanColor = (c) => (/^#[0-9a-f]{6}$/i.test(String(c || "")) ? String(c).toLowerCase() : null);
 const cleanText = (s, max) => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, max);
-const NO_CLAUDE = "Claude isn't set up yet: add your Anthropic API key in Patch's Settings, under Claude.";
+const NO_CLAUDE = "Claude isn't set up yet: add your Anthropic API key in Patch's Settings, under Claude (Claude Max, Ultra and Team memberships include monthly API credits for it). Or ask Claude in the Claude app to build the app, then add its file in Patch under TV apps, Make a TV app, Your own code.";
 const MAX_JOBS = 2;
 
 const PUNCTUATION = /[\x21-\x26\x28-\x2c\x2e\x2f\x3a-\x40\x5b-\x60\x7b-\x7e\u00a1-\u00bf\u2000-\u206f\u3000-\u303f]+/g;

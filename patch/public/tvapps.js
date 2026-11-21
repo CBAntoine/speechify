@@ -249,6 +249,8 @@ export function createTvApps(ui) {
   }
 
   const field = (label, html, hint = "") => `<label class="field"><span>${label}</span>${html}${hint ? `<small>${hint}</small>` : ""}</label>`;
+  // The same, for a field that holds its own button (a label can't hold another label).
+  const fieldBox = (label, html, hint = "") => `<div class="field"><span>${label}</span>${html}${hint ? `<small>${hint}</small>` : ""}</div>`;
   const lines = (list) => (list || []).join("\n");
 
   function contentFields(kind, s = {}, a = null) {
@@ -277,10 +279,15 @@ export function createTvApps(ui) {
       default:
         if (a && (a.madeBy === "claude" || claudeOn())) {
           return `<div class="claude-box" id="tvJob">${claudeBox(a)}</div>
-            <details class="code-details"><summary>Or replace its code yourself</summary>${field("The app's HTML", `<textarea name="content" rows="8" class="code" placeholder="<!doctype html>…"></textarea>`, "Leave it empty to keep what's there.")}</details>`;
+            <details class="code-details"><summary>Or replace its code yourself</summary>${fieldBox("The app's HTML", `${filePick()}<textarea name="content" rows="8" class="code" aria-label="The app's HTML" placeholder="<!doctype html>…"></textarea>`, "Leave it empty to keep what's there.")}</details>`;
         }
-        return field("Your app's HTML", `<textarea name="content" rows="10" class="code" placeholder="<!doctype html>…">${a ? "" : ""}</textarea>`, a ? "Leave it empty to keep the current page." : "A single page. It should work with the arrow keys and Enter (the remote).");
+        return fieldBox("Your app's HTML", `${filePick()}<textarea name="content" rows="10" class="code" aria-label="Your app's HTML" placeholder="<!doctype html>…  or choose the app's file above"></textarea>`, a ? "Leave it empty to keep the current page." : "A single page (an .html file), such as one Claude made for you in the Claude app. It should work with the arrow keys and OK.");
     }
+  }
+
+  /** A button that loads an app's .html file (from Downloads, say) into the code box below it. */
+  function filePick() {
+    return `<label class="btn btn--sm file-pick">${icon("plus", 14)} Choose a file<input type="file" data-tv="html-file" hidden></label>`;
   }
 
   /** For an app Claude built: what it does, what's happening, and a box to ask Claude for a change. */
@@ -304,13 +311,13 @@ export function createTvApps(ui) {
       "✨ Build with Claude",
       `<form class="tvmaker" data-tv-claude>
         <p class="tvmaker__lead">Describe the app you want, as you'd tell a friend. Claude writes all of it, then Patch puts it on your TV. It takes two to four minutes.</p>
-        ${claudeOn() ? "" : `<p class="tvmaker__warn">${icon("info", 14)}<span>First add your Anthropic API key in <button type="button" class="linkish" data-ui="settings" data-focus="claude">Settings → Claude</button>.</span></p>`}
+        ${claudeOn() ? "" : `<p class="tvmaker__warn">${icon("info", 14)}<span>This needs an Anthropic API key: add one in <button type="button" class="linkish" data-ui="settings" data-focus="claude">Settings → Claude</button>. Claude Max, Ultra and Team memberships include monthly API credits that pay for it. On any Claude membership you can also ask Claude in the Claude app to build the app, then add its file with <b>Your own code</b> under Make a TV app.</span></p>`}
         ${field("What should it do?", `<textarea name="description" rows="5" required placeholder="A snake game for the kids with a high score… A chores board where we tick things off with the remote… A big clock with the weather in Leeds…"></textarea>`, "The more you say, the closer it gets. You can ask Claude to change it afterwards.")}
         <div class="field-row">${field("Name", `<input name="name" maxlength="40" placeholder="Optional">`)}${field("Picture", `<input name="emoji" value="✨" maxlength="8" class="emoji-in" aria-label="Emoji for the app">`)}</div>
         <div class="emoji-row">${CLAUDE_EMOJI.map((e) => `<button type="button" class="emoji-btn" data-tv="emoji" data-emoji="${esc(e)}">${esc(e)}</button>`).join("")}</div>
         <div class="swatches">${COLORS.map((c) => `<button type="button" class="swatch ${c === editing.color ? "is-on" : ""}" style="background:${c}" data-tv="color" data-color="${c}" aria-label="Colour ${c}"></button>`).join("")}</div>
         ${field("Put it on", `<select name="device">${list.map((d) => `<option value="${esc(d.id)}" ${ready(d) ? "" : "disabled"}>${esc(d.name)}${d.self ? " (in its browser)" : d.driver === "androidtv" ? "" : " (in its web browser)"}${ready(d) ? "" : " (not connected)"}</option>`).join("")}<option value="">Not yet: I'll choose later</option></select>`)}
-        <p class="tvmaker__fine">${icon("info", 14)} Claude uses your Anthropic account. A build usually costs well under a dollar, and Patch shows what it cost.</p>
+        <p class="tvmaker__fine">${icon("info", 14)} Claude uses your Anthropic API account (Max, Ultra and Team memberships include monthly credits for it). A build usually costs well under a dollar, and Patch shows what it cost.</p>
         <p class="tvmaker__status" id="tvStatus" role="status"></p>
         <div class="dialog-actions"><button class="btn btn--claude" ${claudeOn() ? "" : "disabled"}>✨ Build it</button></div>
       </form>`,
@@ -553,6 +560,7 @@ export function createTvApps(ui) {
   });
 
   document.addEventListener("change", async (e) => {
+    if (e.target.dataset?.tv === "html-file") return loadHtmlFile(e.target);
     if (e.target.dataset?.tv !== "photos") return;
     const files = [...e.target.files];
     e.target.value = "";
@@ -578,6 +586,22 @@ export function createTvApps(ui) {
       }
     }
   });
+
+  /** Puts the chosen file's page in the code box, and names the app after its title if it has no name yet. */
+  async function loadHtmlFile(input) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (file.size > 400 * 1024) return setStatus(`${file.name} is too big for a TV app (the most is 400 KB).`, true);
+    const html = await file.text().catch(() => "");
+    if (!/<\w/.test(html)) return setStatus(`${file.name} isn't a web page. Choose the app's .html file.`, true);
+    const form = input.closest("form");
+    form.content.value = html;
+    form.closest("details")?.setAttribute("open", "");
+    const title = (html.match(/<title[^>]*>([^<]{1,60})<\/title>/i) || [])[1];
+    if (!editing?.id && (!form.name.value.trim() || form.name.value === kindOf("custom").label)) form.name.value = (title || file.name.replace(/\.html?$/i, "")).trim().slice(0, 40);
+    setStatus(`Added ${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB). ${editing?.id ? "Tap Save changes." : "Tap Make it."}`);
+  }
 
   document.addEventListener("submit", (e) => {
     const claude = e.target.closest("form[data-tv-claude]");

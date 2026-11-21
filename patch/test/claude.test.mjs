@@ -73,6 +73,9 @@ test("Claude builds a TV app from a description, installs it, and changes it", a
   let r = await api("POST", "/api/tvapps/build", { description: "a snake game", device: TV });
   assert.equal(r.ok, false);
   assert.match(r.message, /add your Anthropic API key/);
+  // Without a key, there's a way that uses only a Claude membership: build it in the Claude app, add the file.
+  assert.match(r.message, /Max, Ultra and Team memberships include monthly API credits/);
+  assert.match(r.message, /ask Claude in the Claude app to build the app, then add its file/);
   // A wrong key isn't kept; a right one is checked with the Models API first (no tokens used).
   r = await api("POST", "/api/settings", { anthropicApiKey: "sk-ant-wrong" });
   assert.equal(r.checks.claude.ok, false);
