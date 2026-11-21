@@ -2,9 +2,16 @@ import "server-only";
 import { NICHES, getNiche, matchNiche, type Niche } from "@/lib/niches";
 import { listLeads, findDuplicate } from "@/lib/repo";
 import type { LeadSource, Prospect } from "@/lib/types";
+import { findBusinessesWithClaude } from "@/lib/claude/find-businesses";
+import { describeError as describeClaudeError } from "@/lib/claude/client";
+import { claudeEnabled } from "@/lib/config";
+import { expandPlace, parsePlace } from "@/lib/regions";
 import { auditWebsite, mapLimit } from "./audit";
+import { crawlSite, findWebsite } from "./crawler";
+import { searchOpenData } from "./opendata";
 import { geocode, searchOsm, type Place } from "./osm";
 import { placesEnabled, searchPlaces } from "./places";
+import { crawlOrder, mergeProspects, WEB_RESEARCH } from "./research-parse";
 import { deriveSignals, scoreProspect } from "./score";
 
 export interface SearchInput {
@@ -26,6 +33,8 @@ export interface SearchResult {
   center?: Place;
   prospects: Prospect[];
   note?: string;
+  /** Every source searched, with how many businesses each found. */
+  sources?: { label: string; count: number; url?: string }[];
 }
 
 function customNiche(text: string): Niche {
@@ -184,26 +193,24 @@ function normalize(input: SearchInput): Normalized {
   };
 }
 
-/** Map search (OpenStreetMap) when asked for, or when there's no Google Places key. */
-function usesOsm(wanted: Normalized["wanted"]): boolean {
+/** The in-house finder when asked for, or when there's no Google Places key. */
+function inHouse(wanted: Normalized["wanted"]): boolean {
   return wanted === "osm" || (wanted === "auto" && !placesEnabled());
 }
 
-async function osmCenter(n: Normalized): Promise<Place> {
+async function searchCenter(n: Normalized): Promise<Place> {
   const center = n.near ? { lat: n.near.lat, lon: n.near.lon, label: "your location" } : ((await geocode(n.location)) ?? undefined);
   if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Pick a province or state and a city, or type it as "City, ON".`);
   if (n.niche.id === "custom" && !n.niche.nameWords?.length) throw new Error("Pick a niche from the list for map search");
   return center;
 }
 
-function osmNote(): string | undefined {
-  return placesEnabled()
-    ? undefined
-    : "Free OpenStreetMap data (© OpenStreetMap contributors). It lists few tradespeople such as roofers, plumbers and HVAC companies, and has no ratings. Connect Google Places in Settings for complete results.";
-}
-
 /** Audit, score, mark ones already saved, best first. */
-async function finish(n: Normalized, found: { source: LeadSource; prospects: Prospect[]; center?: Place; note?: string }, audit?: number): Promise<SearchResult> {
+async function finish(
+  n: Normalized,
+  found: { source: LeadSource; prospects: Prospect[]; center?: Place; note?: string; sources?: SearchResult["sources"] },
+  audit?: number
+): Promise<SearchResult> {
   let prospects = found.prospects;
   if (audit && audit > 0 && found.source !== "sample") {
     prospects = await auditProspects(prospects, audit);
@@ -216,8 +223,48 @@ async function finish(n: Normalized, found: { source: LeadSource; prospects: Pro
     return dup ? { ...p, savedLeadId: dup.id } : p;
   });
   prospects.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  return { niche: n.niche, location: n.location, source: found.source, center: found.center, prospects, note: found.note };
+  return {
+    niche: n.niche,
+    location: n.location,
+    source: found.source,
+    center: found.center,
+    prospects: prospects.slice(0, n.limit),
+    note: found.note,
+    sources: found.sources,
+  };
 }
+
+/**
+ * Rainmaker's crawler on each business: find the website when no source
+ * listed one, then read it for the audit and for phone, email and address.
+ * Stops starting new sites at the deadline.
+ */
+async function crawlProspects(prospects: Prospect[], opts: { tlds: string[]; deadline: number; count: number }): Promise<void> {
+  await mapLimit(prospects.slice(0, opts.count), 6, async (p) => {
+    if (Date.now() > opts.deadline) return;
+    if (!p.website && (p.source === "openstreetmap" || p.source === "open_data")) {
+      const found = await findWebsite(p.name, { tlds: opts.tlds, phone: p.phone, deadline: opts.deadline });
+      if (found) {
+        p.website = found;
+        p.websiteFound = true;
+      }
+    }
+    if (!p.website || Date.now() > opts.deadline) return;
+    const { audit, contacts } = await crawlSite(p.website);
+    if (p.source === "web" && !audit.reachable && /domain not found/i.test(audit.error ?? "")) {
+      // A web address from the research that doesn't exist: leave it out
+      // rather than report the business's site as down.
+      p.website = undefined;
+      return;
+    }
+    p.audit = audit;
+    p.phone ??= contacts.phones[0];
+    p.email ??= contacts.emails[0];
+    p.address ??= contacts.address;
+  });
+}
+
+const OSM = "OpenStreetMap";
 
 export async function findBusinesses(input: SearchInput): Promise<SearchResult> {
   const n = normalize(input);
@@ -225,11 +272,63 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
     const prospects = sampleProspects(n.niche, n.location, n.limit);
     return finish(n, { source: "sample", prospects, note: "Sample businesses (fictional) so you can try the workflow offline." }, input.audit);
   }
-  if (!usesOsm(n.wanted)) {
+  if (!inHouse(n.wanted)) {
     const prospects = await searchPlaces({ niche: n.niche, location: n.location, limit: n.limit, near: n.near ? { ...n.near, radiusKm: n.radiusKm } : undefined });
     return finish(n, { source: "google_places", prospects }, input.audit);
   }
-  const center = await osmCenter(n);
-  const prospects = await searchOsm({ niche: n.niche, center, radiusKm: n.radiusKm, limit: n.limit });
-  return finish(n, { source: "openstreetmap", prospects, center, note: osmNote() }, input.audit);
+
+  // In-house: the free sources in parallel, Claude's web research when they
+  // come up short, then one list crawled and scored.
+  const center = await searchCenter(n);
+  const place = n.near ? undefined : expandPlace(n.location);
+  const town = n.near ? undefined : parsePlace(n.location).city || undefined;
+  const errors: string[] = [];
+  const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  const [osm, open] = await Promise.all([
+    searchOsm({ niche: n.niche, center, radiusKm: n.radiusKm, limit: Math.max(n.limit, 30) })
+      .then((list) => list.map((p) => ({ ...p, foundIn: [OSM] })))
+      .catch((e) => {
+        errors.push(`${OSM}: ${reason(e)}`);
+        return [] as Prospect[];
+      }),
+    searchOpenData({ niche: n.niche, center, radiusKm: n.radiusKm, town }).catch((e) => {
+      errors.push(`City licence lists: ${reason(e)}`);
+      return { prospects: [], used: [], errors: [] } as Awaited<ReturnType<typeof searchOpenData>>;
+    }),
+  ]);
+  errors.push(...open.errors);
+
+  let web: Prospect[] = [];
+  const claude = claudeEnabled();
+  if (claude && !n.near && mergeProspects([osm, open.prospects]).length < n.limit) {
+    try {
+      web = await findBusinessesWithClaude(n.niche, n.location, { limit: 25, budgetMs: 80_000 });
+    } catch (e) {
+      errors.push(`${WEB_RESEARCH}: ${describeClaudeError(e)}`);
+    }
+  }
+
+  const merged = mergeProspects([osm, open.prospects, web]);
+  if (!merged.length && errors.length) throw new Error(errors[0]);
+  if (errors.length) console.warn("[search] some sources failed:", errors.join(" | "));
+
+  const pool = crawlOrder(merged, center).slice(0, n.limit + 6);
+  if (input.audit && input.audit > 0) {
+    await crawlProspects(pool, {
+      tlds: place?.countryCode === "us" ? ["com"] : ["ca", "com"],
+      deadline: Date.now() + 40_000,
+      count: Math.max(input.audit, pool.length),
+    });
+  }
+
+  const sources: NonNullable<SearchResult["sources"]> = [
+    { label: OSM, count: osm.length, url: "https://www.openstreetmap.org/copyright" },
+    ...open.used.map((u) => ({ label: u.label, count: u.count, url: u.url })),
+    ...(claude && web.length ? [{ label: WEB_RESEARCH, count: web.length }] : []),
+  ];
+  const primary: LeadSource = osm.length ? "openstreetmap" : open.prospects.length ? "open_data" : web.length ? "web" : "openstreetmap";
+  const note = claude
+    ? "Found with OpenStreetMap, city licence lists and Claude's web research. Websites, phones and emails come from Rainmaker's crawler; confirm before you pitch."
+    : "Free sources: OpenStreetMap (© OpenStreetMap contributors) and city licence lists (Toronto, Vancouver, Calgary, Edmonton). Websites, phones and emails come from Rainmaker's crawler. Add a Claude API key so it also searches the web, which finds far more tradespeople.";
+  return finish(n, { source: primary, prospects: pool, center, note, sources }, 0);
 }

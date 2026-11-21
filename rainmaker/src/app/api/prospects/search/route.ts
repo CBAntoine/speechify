@@ -1,7 +1,8 @@
 import { findBusinesses } from "@/lib/prospecting/search";
 import { HttpError, readBody, route } from "@/lib/http";
 
-export const maxDuration = 120;
+// Up to 20 sites crawled, plus Claude's web research when it runs.
+export const maxDuration = 300;
 
 export const POST = route(async (req: Request) => {
   const b = await readBody<{ niche?: string; location?: string; limit?: number; radiusKm?: number; audit?: number; source?: "auto" | "google" | "osm" | "sample"; lat?: number; lon?: number }>(req);

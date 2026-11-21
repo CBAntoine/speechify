@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Save, Sparkles } from "lucide-react";
+import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
 import { api, useToast } from "@/components/client";
 import { InstallButton } from "@/components/pwa";
 import type { AgencyProfile } from "@/lib/types";
@@ -183,7 +183,9 @@ export function SettingsForm({
                   <Status ok={i.claude} on="Connected" off="Not set" />
                 </div>
                 <div className="muted small">
-                  {i.claude ? `Model ${i.model}. Writes ads and outreach, researches the web and runs the agents.` : "Set ANTHROPIC_API_KEY to turn on AI ads, AI outreach, web research and thinking agents."}
+                  {i.claude
+                    ? `Model ${i.model}. Writes ads and outreach, researches the web, finds clients on the web and runs the agents.`
+                    : "Set ANTHROPIC_API_KEY to turn on AI ads, AI outreach, web research, web search in Find clients, and thinking agents."}
                 </div>
               </span>
             </div>
@@ -223,12 +225,31 @@ export function SettingsForm({
               </span>
             </div>
             <div className="list-item">
+              <span className="icon-tile" style={{ background: "var(--good-soft)", color: "var(--good)" }}>
+                <Radar size={15} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div className="row between" style={{ gap: 8 }}>
+                  <b>Finding clients</b>
+                  <Status ok on={i.googlePlaces ? "Google Places" : i.claude ? "Free sources + Claude" : "Free sources"} off="" />
+                </div>
+                <ul className="muted small" style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                  <li>OpenStreetMap, the free world map, through its Nominatim search server.</li>
+                  <li>City business-licence lists: Toronto, Vancouver, Calgary and Edmonton publish theirs as open data, contractors included.</li>
+                  <li>
+                    Claude web research: {i.claude ? "on. It runs when the free sources find fewer than 20 businesses, at roughly 10–30 cents a search." : "turns on with ANTHROPIC_API_KEY and finds businesses in any town, at roughly 10–30 cents a search."}
+                  </li>
+                  <li>Rainmaker&apos;s crawler visits each business&apos;s own website for its phone, email and the gaps you sell against, finds sites that weren&apos;t listed, and follows each site&apos;s robots.txt.</li>
+                </ul>
+              </span>
+            </div>
+            <div className="list-item">
               <span className="icon-tile" style={{ background: "var(--teal-soft)", color: "var(--teal)" }}>
                 <MapPin size={15} />
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <div className="row between" style={{ gap: 8 }}>
-                  <b>Google Places</b>
+                  <b>Google Places (optional)</b>
                   <Status ok={i.googlePlaces} on="Connected" off="Using OpenStreetMap" />
                 </div>
                 <div className="muted small">

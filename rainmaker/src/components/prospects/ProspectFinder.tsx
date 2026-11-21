@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Check, ChevronDown, Crosshair, ExternalLink, Globe, Lightbulb, LoaderCircle, MapPin, Megaphone, Phone, Plus, Radar,
+  ArrowRight, Check, ChevronDown, Crosshair, ExternalLink, Globe, Lightbulb, LoaderCircle, Mail, MapPin, Megaphone, Phone, Plus, Radar,
   Search, SearchCheck, Star, X,
 } from "lucide-react";
 import { api, Drawer, useToast } from "@/components/client";
@@ -27,7 +27,7 @@ export interface NicheLite {
   evidence?: { text: string; url: string }[];
 }
 
-type Result = { prospects: Prospect[]; source: LeadSource; note?: string; niche: { id: string; label: string; plural: string }; location: string };
+type Result = { prospects: Prospect[]; source: LeadSource; note?: string; niche: { id: string; label: string; plural: string }; location: string; sources?: { label: string; count: number; url?: string }[] };
 
 const FILTERS: { id: string; label: string; test: (p: Prospect) => boolean }[] = [
   { id: "no_website", label: "No website", test: (p) => has(p.signals, "no_website") || has(p.signals, "site_down") },
@@ -43,7 +43,7 @@ function has(signals: Signal[] | undefined, id: string) {
   return Boolean(signals?.some((s) => s.id === id));
 }
 
-const SOURCE_LABEL: Record<string, string> = { google_places: "Google Places", openstreetmap: "OpenStreetMap", sample: "Sample data" };
+const SOURCE_LABEL: Record<string, string> = { google_places: "Google Places", openstreetmap: "OpenStreetMap", open_data: "City licences", web: "Claude web research", sample: "Sample data" };
 
 export function ProspectFinder({
   niches,
@@ -345,7 +345,15 @@ export function ProspectFinder({
                   {shown.length} of {result.prospects.length} {result.niche.plural}
                 </b>
                 near {result.location}
-                <span className={`badge ${result.source === "sample" ? "warm" : "outline"}`}>{SOURCE_LABEL[result.source] ?? result.source}</span>
+                {result.sources?.length ? (
+                  result.sources.map((src) => (
+                    <span key={src.label} className="badge outline" title={src.url}>
+                      {src.label.replace(/^City of (\S+) business licences$/, "$1 licences")} · {src.count}
+                    </span>
+                  ))
+                ) : (
+                  <span className={`badge ${result.source === "sample" ? "warm" : "outline"}`}>{SOURCE_LABEL[result.source] ?? result.source}</span>
+                )}
               </div>
               {shown.length > 0 && (
                 <button className="btn sm ghost" onClick={() => setSelected(new Set(shown.filter((p) => !p.savedLeadId).map((p) => p.key)))}>
@@ -358,10 +366,10 @@ export function ProspectFinder({
                 <Lightbulb size={15} />
                 <span>
                   {result.note}
-                  {result.source === "openstreetmap" && (
+                  {result.source !== "google_places" && result.source !== "sample" && (
                     <>
                       {" "}
-                      <Link href="/settings">How to connect</Link>
+                      <Link href="/settings">Settings</Link>
                     </>
                   )}
                 </span>
@@ -399,15 +407,22 @@ export function ProspectFinder({
                         </span>
                       )}
                       {p.website ? (
-                        <a href={p.website} target="_blank" rel="noreferrer" style={{ color: "var(--brand-ink)" }}>
+                        <a href={p.website} target="_blank" rel="noreferrer" style={{ color: "var(--brand-ink)" }} title={p.websiteFound ? "Not in any listing: Rainmaker's crawler found it" : undefined}>
                           <Globe size={12} /> {p.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/.*$/, "")}
+                          {p.websiteFound ? " (found)" : ""}
                         </a>
                       ) : (
                         <span style={{ color: "var(--hot)" }}>
-                          <Globe size={12} /> No website listed
+                          <Globe size={12} /> {p.source === "google_places" ? "No website listed" : "No website found"}
                         </span>
                       )}
+                      {p.email && (
+                        <a href={`mailto:${p.email}`} style={{ color: "var(--brand-ink)" }}>
+                          <Mail size={12} /> {p.email}
+                        </a>
+                      )}
                     </div>
+                    {p.foundIn?.length ? <div className="faint small">Found in {p.foundIn.join(", ")}</div> : null}
                     <SignalChips signals={p.signals} />
                     <div className="actions">
                       {p.savedLeadId ? (
@@ -439,10 +454,10 @@ export function ProspectFinder({
                   </Empty>
                 ) : (
                   <Empty icon={<Radar size={18} />} title={`No ${result.niche.plural} found here`}>
-                    {result.source === "openstreetmap" ? (
+                    {result.source !== "google_places" && result.source !== "sample" ? (
                       <>
-                        OpenStreetMap doesn't list any near {result.location}. Try a wider radius or a bigger city nearby, or{" "}
-                        <Link href="/settings">connect Google Places</Link> to search every business Google knows.
+                        None of the free sources list any near {result.location}. Try a wider radius or a bigger city nearby, or{" "}
+                        <Link href="/settings">add a Claude API key</Link> so Rainmaker also searches the web.
                       </>
                     ) : (
                       "Try a wider radius or a bigger city nearby."

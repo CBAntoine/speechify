@@ -30,13 +30,13 @@ export function deriveSignals(p: ScoreInput): Signal[] {
       id: "no_website",
       label: "No website",
       detail:
-        p.source === "openstreetmap"
-          ? "No website in the map listing. Confirm before you pitch: some businesses only list it elsewhere."
+        p.source === "openstreetmap" || p.source === "open_data" || p.source === "web"
+          ? "No website in the listing, and Rainmaker's crawler didn't find one. Confirm before you pitch: some businesses only list it elsewhere."
           : "No website on their listing. Customers who search for them hit a dead end.",
       severity: "high",
       pitch: "A simple site that books jobs",
     });
-  } else if (a && !a.reachable) {
+  } else if (a && !a.reachable && !a.robotsBlocked) {
     s.push({
       id: "site_down",
       label: "Website not loading",

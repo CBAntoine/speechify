@@ -27,7 +27,7 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 
 | Variable | What it turns on |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude: AI ad campaigns, AI outreach sequences, web research, and agents that reason for themselves. Model: `claude-opus-5-5` (`CLAUDE_MODEL` to change). |
+| `ANTHROPIC_API_KEY` | Claude: AI ad campaigns, AI outreach sequences, web research (including finding clients in any town), and agents that reason for themselves. Model: `claude-opus-5-5` (`CLAUDE_MODEL` to change). |
 | `AGENT_RUNTIME` | `managed` (default) or `messages`. See "How the agents run". |
 | `AGENT_RUN_BUDGET_USD` | Hard spending cap per agent run (default $3). |
 | `GOOGLE_PLACES_API_KEY` | Google Places API (New): better coverage plus ratings and review counts, which unlock the review-gap signals. |
@@ -40,7 +40,7 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | Screen | What it does |
 |---|---|
 | **Today** | Greeting, a "find clients" search box, pipeline value, recurring revenue, hot leads, a "do next" list and agent activity. |
-| **Find clients** | Pick a niche, a province or state, and a city: every Canadian province and territory and every US state, each with its main cities, plus "Other city or town" and "Somewhere else" for anywhere. Places are looked up inside their country, so London, ON never lands in England. Each result shows an opportunity score (0–100) and the gaps you can sell against. Filter by "No website", "No online booking", "Not running ads", "Few reviews" and more, then add the best ones to the pipeline in one click. The side panel shows what one customer is worth in that niche, offers that convert, and sources. |
+| **Find clients** | Pick a niche, a province or state, and a city: every Canadian province and territory and every US state, each with its main cities, plus "Other city or town" and "Somewhere else" for anywhere. Places are looked up inside their country, so London, ON never lands in England. Results come from Rainmaker's own finder (below). Each result shows an opportunity score (0–100) and the gaps you can sell against. Filter by "No website", "No online booking", "Not running ads", "Few reviews" and more, then add the best ones to the pipeline in one click. The side panel shows what one customer is worth in that niche, offers that convert, and sources. |
 | **Pipeline** | Drag-and-drop board (or list view). Click a lead for its website audit, Claude-written outreach (email + 3 follow-ups, text, DM, call script, 45-second video-audit script), sample ads, notes and tasks. |
 | **Inbox** | Every message an agent writes lands here. Edit, then send (Resend), open in your mail or Messages app, or mark it sent. Tasks live here too. |
 | **Ad Studio** | Brief → campaign, with live feed and search-ad previews, character counters, a creative card you can restyle and download as a PNG in 3 sizes, a Google Ads Editor CSV export, and "copy all". |
@@ -135,7 +135,12 @@ Without a database, Vercel forgets your data whenever its servers restart. The a
 
 - **Tab bar** at the bottom (Today, Find, Pipeline, Inbox, More), with large tap targets and room for Android's gesture bar.
 - **Find clients near me:** tap the target icon next to the city to search around where you're standing, and tap it again to go back to the city. Good for walk-in prospecting. The app remembers the last place you searched.
-- **Free search, no key needed.** Without a Google key, Find clients searches OpenStreetMap through Nominatim, its search server, which answers reliably from Vercel. It lists most dentists, salons, gyms, restaurants, vets, lawyers, realtors and accountants, but few tradespeople: London, ON has 40+ dentists on the map and 1 plumber. For complete results, connect Google Places (Settings shows the steps; Google's free allowance covers about 1,000 searches a month).
+- **Rainmaker's own client finder, no Google needed.** It never scrapes Google Maps or directories (their terms forbid it, and they block it). Instead it combines:
+  - **OpenStreetMap**, the free world map, searched through Nominatim. Good for dentists, salons, gyms, restaurants, vets, lawyers, realtors and accountants.
+  - **City business-licence lists**, published as open data by Toronto, Vancouver, Calgary and Edmonton. They include the contractors OpenStreetMap lacks: Edmonton alone lists 122 licensed roofing businesses. Toronto's list also covers GTA contractors licensed to work in Toronto, so Oakville or Vaughan searches use it too.
+  - **Claude web research**, with an `ANTHROPIC_API_KEY`. When the free sources find fewer than 20 businesses (a small town, say), Claude searches the web for the niche in that town. Roughly 10–30 cents a search.
+  - **Rainmaker's crawler**, which visits each business's own website: it finds sites no listing had (by trying the domains the name suggests and checking the page), reads the phone, email and address from the homepage and contact page, and audits the gaps you sell against. It identifies itself and follows each site's robots.txt.
+- Google Places stays available as an option (`GOOGLE_PLACES_API_KEY`) if you ever want Google's ratings and review counts.
 - **Pipeline:** one stage at a time, with swipeable stage tabs and a **Move to** menu on each card. Drag-and-drop doesn't work with touch, so this replaces it.
 - **Lead screen:** big **Call, Text, Email, Website, Directions and Share** buttons. They open your phone's dialer, Messages, Gmail and Google Maps.
 - **Inbox:** tap a message to read it full screen, then send it from your own email or Messages app, or **Share** it to WhatsApp or any other app.
@@ -173,7 +178,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 42 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
+npm test          # 54 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
 npm run build
 ```
 

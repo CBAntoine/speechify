@@ -4,6 +4,7 @@ import { expandPlace } from "@/lib/regions";
 import type { Niche } from "@/lib/niches";
 import type { Prospect } from "@/lib/types";
 import { nominatimTerms, nominatimToElements, viewboxAround, type NominatimRow } from "./nominatim-parse";
+import { namePattern } from "./opendata-parse";
 import { buildOverpassQuery, parseOverpass, type OsmElement } from "./osm-parse";
 import { overpassUrls, queryOverpass } from "./overpass";
 
@@ -84,6 +85,21 @@ export async function geocode(location: string): Promise<Place | null> {
 }
 
 /**
+ * Name searches also find "Royal Lawn Bowling Club" for landscapers. Keep a
+ * place when it carries one of the niche's map tags, or its name passes the
+ * niche's name check.
+ */
+function fitsNiche(el: OsmElement, niche: Niche): boolean {
+  const tags = el.tags ?? {};
+  if (niche.osmTags.some((t) => {
+    const [k, v] = t.split("=");
+    return tags[k] === v;
+  })) return true;
+  const pattern = namePattern(niche);
+  return !!pattern && !!tags.name && pattern.re.test(tags.name);
+}
+
+/**
  * Businesses of a niche around a point, from Nominatim: its OSM categories
  * first, then words from business names, until there are plenty.
  */
@@ -104,7 +120,7 @@ async function nominatimBusinesses(niche: Niche, center: Place, radiusKm: number
     if (Date.now() - started > 25_000) break;
     try {
       const rows = await nominatim<NominatimRow>(`${niche.plural}`, { q, viewbox, bounded: "1", limit: "40", addressdetails: "1", extratags: "1" });
-      for (const el of nominatimToElements(rows)) found.set(`${el.type}/${el.id}`, el);
+      for (const el of nominatimToElements(rows)) if (fitsNiche(el, niche)) found.set(`${el.type}/${el.id}`, el);
     } catch (err) {
       failed++;
       lastError = err;

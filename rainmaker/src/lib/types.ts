@@ -13,7 +13,7 @@ export const STAGES: { id: Stage; label: string; hint: string }[] = [
   { id: "lost", label: "Lost", hint: "Not now" },
 ];
 
-export type LeadSource = "google_places" | "openstreetmap" | "web" | "manual" | "agent" | "sample";
+export type LeadSource = "google_places" | "openstreetmap" | "open_data" | "web" | "manual" | "agent" | "sample";
 
 export type Severity = "high" | "medium" | "low" | "info";
 
@@ -56,6 +56,8 @@ export interface AuditResult {
   socials: string[];
   emails: string[];
   phones: string[];
+  /** The site's robots.txt asks automated visitors not to read it, so it wasn't audited. */
+  robotsBlocked?: boolean;
   error?: string;
 }
 
@@ -112,6 +114,10 @@ export interface Prospect {
   openNow?: boolean;
   source: LeadSource;
   sourceId?: string;
+  /** Every source that listed it, e.g. ["OpenStreetMap", "City of Edmonton business licences"]. */
+  foundIn?: string[];
+  /** The website wasn't listed; Rainmaker's crawler found it. */
+  websiteFound?: boolean;
   score?: number;
   signals?: Signal[];
   audit?: AuditResult;
