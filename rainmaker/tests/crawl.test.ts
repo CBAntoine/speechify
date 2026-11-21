@@ -48,4 +48,10 @@ test("a guessed site counts only if it's the business's own, live page", () => {
   assert.ok(!pageIsBusiness(`<p>${"Another company does roofing here. ".repeat(10)}</p>`, "Coverall Roofing Ltd."), "a different business");
   assert.ok(pageIsBusiness(`<p>${"Call us any time for roofing. ".repeat(8)} 780-555-0101</p>`, "Coverall Roofing", { phone: "(780) 555-0101" }), "matched by phone");
   assert.ok(!pageIsBusiness("<p>Coverall</p>", "Coverall Roofing"), "too short to be a real site");
+  const indy = `<p>${"Elite Shield Roofing serves Indianapolis, Indiana. ".repeat(8)}</p>`;
+  const places = ["Edmonton", "Alberta", "AB"];
+  assert.ok(!pageIsBusiness(indy, "Elite Shield Roofing Ltd.", { places }), "same name, another city");
+  assert.ok(pageIsBusiness(indy.replace(/Indianapolis, Indiana/g, "Edmonton, AB"), "Elite Shield Roofing Ltd.", { places }), "names the business and its city");
+  assert.ok(pageIsBusiness(`<p>${"Roofing in Indianapolis. ".repeat(12)} (780) 555-0101</p>`, "Elite Shield Roofing", { places, phone: "780-555-0101" }), "the phone alone is enough");
+  assert.ok(pageIsBusiness(`<p>${"Plumbing in St. John's, NL. ".repeat(10)} Coverall</p>`, "Coverall Plumbing", { places: ["St. John's"] }), "place names with punctuation");
 });

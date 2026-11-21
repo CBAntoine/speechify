@@ -11,6 +11,7 @@ import { crawlSite, findWebsite } from "./crawler";
 import { searchOpenData } from "./opendata";
 import { geocode, searchOsm, type Place } from "./osm";
 import { placesEnabled, searchPlaces } from "./places";
+import { formatPhone } from "./crawl-parse";
 import { crawlOrder, mergeProspects, WEB_RESEARCH } from "./research-parse";
 import { deriveSignals, scoreProspect } from "./score";
 
@@ -239,11 +240,14 @@ async function finish(
  * listed one, then read it for the audit and for phone, email and address.
  * Stops starting new sites at the deadline.
  */
-async function crawlProspects(prospects: Prospect[], opts: { tlds: string[]; deadline: number; count: number }): Promise<void> {
+async function crawlProspects(prospects: Prospect[], opts: { tlds: string[]; places: string[]; deadline: number; count: number }): Promise<void> {
   await mapLimit(prospects.slice(0, opts.count), 6, async (p) => {
     if (Date.now() > opts.deadline) return;
     if (!p.website && (p.source === "openstreetmap" || p.source === "open_data")) {
-      const found = await findWebsite(p.name, { tlds: opts.tlds, phone: p.phone, deadline: opts.deadline });
+      // The site must mention the business's town or province (or its phone),
+      // so a same-name business elsewhere isn't taken for it.
+      const places = [...new Set([...opts.places, ...(p.city ? [p.city] : [])])];
+      const found = await findWebsite(p.name, { tlds: opts.tlds, phone: p.phone, places, deadline: opts.deadline });
       if (found) {
         p.website = found;
         p.websiteFound = true;
@@ -309,13 +313,16 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
   }
 
   const merged = mergeProspects([osm, open.prospects, web]);
+  for (const p of merged) if (p.phone) p.phone = formatPhone(p.phone) ?? p.phone;
   if (!merged.length && errors.length) throw new Error(errors[0]);
   if (errors.length) console.warn("[search] some sources failed:", errors.join(" | "));
 
   const pool = crawlOrder(merged, center).slice(0, n.limit + 6);
   if (input.audit && input.audit > 0) {
+    const region = n.near ? undefined : parsePlace(n.location).region;
     await crawlProspects(pool, {
       tlds: place?.countryCode === "us" ? ["com"] : ["ca", "com"],
+      places: [town, place?.state, region?.code].filter((x): x is string => !!x),
       deadline: Date.now() + 40_000,
       count: Math.max(input.audit, pool.length),
     });

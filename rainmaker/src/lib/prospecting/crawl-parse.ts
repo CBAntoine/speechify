@@ -195,14 +195,23 @@ export function domainCandidates(name: string, tlds: string[] = ["ca", "com"]): 
 const PARKED =
   /(domain (name )?(is )?for sale|buy this domain|this domain (may be|is) (for sale|available)|parked (free|domain)|domain parking|hugedomains|sedoparking|sedo\.com|afternic|dan\.com|godaddy\.com\/domainsearch|future home of|coming soon|under construction|account suspended|default web site page|it works!|index of \/)/i;
 
-/** Is this page the business's own site (and not a parked or placeholder page)? */
-export function pageIsBusiness(html: string, name: string, opts: { phone?: string } = {}): boolean {
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Whole words, so "mt" doesn't match inside another word.
+const hasWord = (haystack: string, w: string) => new RegExp(`\\b${escapeRe(w.toLowerCase())}\\b`).test(haystack);
+
+/**
+ * Is this page the business's own site (and not a parked or placeholder
+ * page)? It must name the business, and mention one of `places` (its city or
+ * province) when given, so a same-name business elsewhere doesn't count. A
+ * matching phone number is enough on its own.
+ */
+export function pageIsBusiness(html: string, name: string, opts: { phone?: string; places?: string[] } = {}): boolean {
   const text = pageText(html);
   if (text.length < 200 || PARKED.test(text.slice(0, 4000))) return false;
   const lower = text.toLowerCase();
   const words = distinctiveWords(name);
-  // Whole words, so "mt" doesn't match inside another word.
-  if (words.length && words.every((w) => new RegExp(`\\b${w}\\b`).test(lower))) return true;
+  const places = (opts.places ?? []).filter(Boolean);
+  if (words.length && words.every((w) => hasWord(lower, w)) && (!places.length || places.some((p) => hasWord(lower, p)))) return true;
   const digits = opts.phone?.replace(/\D/g, "").slice(-10);
   return !!digits && digits.length === 10 && text.replace(/\D/g, "").includes(digits);
 }

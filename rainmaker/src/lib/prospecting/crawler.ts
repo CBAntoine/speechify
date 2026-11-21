@@ -121,7 +121,7 @@ export async function crawlSite(rawUrl: string): Promise<CrawlResult> {
  * ("Coverall Roofing" → coverallroofing.ca, .com, ...) and keeping the first
  * whose page names the business (or shows its phone) and isn't parked.
  */
-export async function findWebsite(name: string, opts: { tlds?: string[]; phone?: string; deadline?: number } = {}): Promise<string | undefined> {
+export async function findWebsite(name: string, opts: { tlds?: string[]; phone?: string; places?: string[]; deadline?: number } = {}): Promise<string | undefined> {
   for (const host of domainCandidates(name, opts.tlds)) {
     if (opts.deadline && Date.now() > opts.deadline) break;
     const url = `https://${host}/`;
@@ -131,7 +131,7 @@ export async function findWebsite(name: string, opts: { tlds?: string[]; phone?:
       const res = await safeFetchText(url, { timeoutMs: 6_000, maxBytes: 600_000, maxRedirects: 4 });
       if (res.status >= 400) continue;
       if (new URL(res.finalUrl).host !== host && !(await robotsAllowed(res.finalUrl))) continue;
-      if (pageIsBusiness(res.body, name, { phone: opts.phone })) return new URL(res.finalUrl).origin + "/";
+      if (pageIsBusiness(res.body, name, { phone: opts.phone, places: opts.places })) return new URL(res.finalUrl).origin + "/";
     } catch {
       // Not this one.
     }
