@@ -92,7 +92,7 @@ export async function startPretendBrowser() {
       const j = i >= 0 ? i : items.findIndex((it) => it.text.toLowerCase().includes(want));
       return j >= 0 ? { item: items[j], i: j } : { error: "none", close: items.slice(0, 4).map((it) => it.text) };
     };
-    const info = (it, i) => ({ kind: it.kind, text: it.text, state: it.state || "", href: it.goes || "", secret: false, inForm: !!it.search, tag: it.kind === "Link" ? "A" : it.kind === "Text box" ? "INPUT" : "BUTTON", type: "", ...spot(i), moved: false });
+    const info = (it, i) => ({ kind: it.kind, text: it.text, state: it.state || "", href: it.goes || "", secret: false, inForm: !!it.search, tag: it.kind === "Link" ? "A" : it.kind === "Text box" ? "INPUT" : "BUTTON", type: "", ...spot(i), cx: spot(i).x, cy: spot(i).y, moved: false });
     const press = (it) => {
       state.clicks.push(it.text);
       if (page.watching) Object.assign(page.watching, { clicked: true, hit: true });

@@ -6,7 +6,7 @@
 // Written for old TV browsers (Chrome 55 and later): no async/await, no "?.", no "??", no spread.
 (function () {
   "use strict";
-  var VERSION = 7;
+  var VERSION = 8;
   var MAX_ITEMS = 45;
   var MAX_TEXT = 1500;
   var doc = document;
@@ -526,6 +526,7 @@
     if (r.top < 60 || r.bottom > v.h - 40 || r.left < 0 || r.right > v.w) {
       jumpTo(el);
       r = box(el) || r;
+      v = view();
       moved = true;
     }
     var pt = clickPoint(el, r, v);
@@ -534,14 +535,21 @@
       // slides): bringing it into view moves the row along too.
       jumpTo(el);
       r = box(el) || r;
+      v = view();
       moved = true;
       pt = clickPoint(el, r, v);
     }
     state.target = el;
     var info = describeFor(el);
     info.moved = moved;
+    // x, y: where to send the click, counted from the corner of what's showing (the browser allows
+    // for any zoom itself). cx, cy: where the page will then say the pointer is, counted from the
+    // corner of what's laid out. They differ when the two corners do: an on-screen keyboard is up,
+    // or the page is zoomed in.
     info.x = pt ? Math.round(pt.x - v.ox) : null;
     info.y = pt ? Math.round(pt.y - v.oy) : null;
+    info.cx = pt ? Math.round(pt.x) : null;
+    info.cy = pt ? Math.round(pt.y) : null;
     if (!pt) {
       var top = topAt(Math.min(Math.max(r.left + r.width / 2, 1), v.w - 1), Math.min(Math.max(r.top + r.height / 2, 1), v.h - 1));
       info.covered = top ? clean(top.innerText || top.textContent, 80) || top.tagName.toLowerCase() : "something";

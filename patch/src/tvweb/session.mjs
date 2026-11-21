@@ -37,7 +37,7 @@ const risky = (info) => (info.kind === "Link" ? RISKY_LINK.test(info.text || "")
  * or told to the page directly when those didn't arrive. The Android build prints these after
  * using a real WebView, to show which way a real TV takes them.
  */
-export const stats = { clicks: 0, clicksInside: 0, strays: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0, boxes: 0, boxesOutside: 0, misses: [] };
+export const stats = { clicks: 0, clicksInside: 0, strays: 0, aims: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0, boxes: 0, boxesOutside: 0, misses: [] };
 const missed = (what, why) => {
   if (stats.misses.length < 30) stats.misses.push(`${what}: ${why}`);
 };
@@ -318,37 +318,43 @@ export class WebSession {
   }
 
   /**
-   * A real click at a spot on the page, checked from inside the page. Resolves "sent"; "missed"
-   * when a click can't be sent this way here; or "changed" when another page loaded before the press.
+   * A real click on a spot of the page, checked from inside the page. (x, y) is where to send it;
+   * `want` is where the page should then say the pointer is. Resolves "sent"; "missed" when a
+   * click can't be sent this way here; or "changed" when another page loaded before the press.
    */
-  async #clickAt(x, y, id) {
+  async #clickAt(x, y, id, want) {
     try {
-      // Move the pointer there first and see where the page says it arrived: if the browser
-      // counts positions differently (a zoomed-out page), aim again before pressing.
-      const first = await this.#moveTo(x, y, id);
-      if (first.changed) return "changed";
-      const move = first.move;
-      if (!move) {
-        // A browser that never passes the pointer on: stop waiting so long for it.
-        this.moveWait = Math.max(160, Math.round(this.moveWait / 2));
-        this.why = "the pointer's move didn't reach the page";
-        return "missed";
+      // Move the pointer first and see where the page says it arrived. If that isn't the spot (the
+      // browser counts positions its own way on a zoomed page), aim again by how far off it was,
+      // at the scale the last two moves show, before pressing.
+      let sx = x;
+      let sy = y;
+      let last = null;
+      for (let aim = 0; ; aim++) {
+        const seen = await this.#moveTo(sx, sy, id, last && { x: last.mx, y: last.my });
+        if (seen.changed) return "changed";
+        const m = seen.move;
+        if (!m) {
+          // A browser that never passes the pointer on: stop waiting so long for it.
+          this.moveWait = Math.max(160, Math.round(this.moveWait / 2));
+          this.why = "the pointer's move didn't reach the page";
+          return "missed";
+        }
+        this.moveWait = MOVE_WAIT;
+        if (Math.abs(m.x - want.x) <= 3 && Math.abs(m.y - want.y) <= 3) break;
+        this.why = `the pointer arrived at ${m.x}, ${m.y}, not ${want.x}, ${want.y}`;
+        if (aim >= 3) return "missed";
+        const scale = (sent, was, now, before) => (last && sent !== was && now !== before ? (now - before) / (sent - was) : 1) || 1;
+        const ax = scale(sx, last?.sx, m.x, last?.mx);
+        const ay = scale(sy, last?.sy, m.y, last?.my);
+        last = { sx, sy, mx: m.x, my: m.y };
+        sx = Math.round(sx + (want.x - m.x) / ax);
+        sy = Math.round(sy + (want.y - m.y) / ay);
+        if (!(sx >= 0 && sy >= 0 && sx < 20_000 && sy < 20_000)) return "missed";
       }
-      this.moveWait = MOVE_WAIT;
-      let cx = x;
-      let cy = y;
-      if (Math.abs(move.x - x) > 3 || Math.abs(move.y - y) > 3) {
-        this.why = `the pointer arrived at ${move.x}, ${move.y}, not ${x}, ${y}`;
-        if (move.x < 1 || move.y < 1) return "missed";
-        cx = Math.round((x * x) / move.x);
-        cy = Math.round((y * y) / move.y);
-        const second = await this.#moveTo(cx, cy, id, move);
-        if (second.changed) return "changed";
-        const again = second.move;
-        if (!again || Math.abs(again.x - x) > 4 || Math.abs(again.y - y) > 4) return "missed";
-      }
-      await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", buttons: 1, clickCount: 1 }, { timeout: 4000 });
-      await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", buttons: 0, clickCount: 1 }, { timeout: 4000 });
+      this.why = "";
+      await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: sx, y: sy, button: "left", buttons: 1, clickCount: 1 }, { timeout: 4000 });
+      await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: sx, y: sy, button: "left", buttons: 0, clickCount: 1 }, { timeout: 4000 });
       return "sent";
     } catch (e) {
       if (gone(e)) return "sent"; // the page is already on its way somewhere else
@@ -359,6 +365,7 @@ export class WebSession {
 
   /** Move the pointer and wait for the page to say where it arrived. `old` is where it was said to be before. */
   async #moveTo(x, y, id, old = null) {
+    stats.aims++;
     await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }, { timeout: 4000 });
     let seen = {};
     for (let waited = 0; waited < this.moveWait; waited += 40) {
@@ -389,7 +396,7 @@ export class WebSession {
     await this.#begin(confirmed);
     const id = pageId(await this.call("watch"));
     this.why = "";
-    const sent = await this.#clickAt(info.x, info.y, id);
+    const sent = await this.#clickAt(info.x, info.y, id, { x: info.cx ?? info.x, y: info.cy ?? info.y });
     if (sent === "changed") {
       // Another page loaded by itself before the press: nothing was chosen, and the numbers are old.
       await this.#end();

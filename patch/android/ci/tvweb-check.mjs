@@ -215,7 +215,7 @@ for (let i = 0; i < 4; i++) {
 await check(r.ok && !/in Patch Browser/.test(r.screen || ""), `with the home screen in front, Patch should read the home screen: ${r.message}`);
 console.log("With the home screen in front, Patch reads the home screen again.");
 
-console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told; ${stats.boxes} message boxes answered inside the page and ${stats.boxesOutside} from outside.${stats.misses.length ? ` Not real: ${stats.misses.join("; ")}.` : ""}`);
+console.log(`How the steps went in: ${stats.clicks} clicks as real ones (aimed ${stats.aims} times) and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told; ${stats.boxes} message boxes answered inside the page and ${stats.boxesOutside} from outside.${stats.misses.length ? ` Not real: ${stats.misses.join("; ")}.` : ""}`);
 await check(stats.clicks >= 10 && stats.clicksInside === 0 && stats.strays === 0 && stats.typed >= 3 && stats.typedInside === 0 && stats.enters >= 2 && stats.entersInside === 0, `in Android's own WebView every step should go in as a real click, key press or typing: ${JSON.stringify(stats)}`);
 const browser = app.tvapps.list().find((a) => a.kind === "browser");
 if (browser) await adb("shell", "pm", "uninstall", browser.package).catch(() => {});

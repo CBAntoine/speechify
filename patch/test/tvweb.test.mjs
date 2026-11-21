@@ -450,6 +450,27 @@ test("in a real browser: on a busy front page, only what a person could see and 
   assert.equal(stats.clicksInside - was.clicksInside, 0);
 });
 
+test("in a real browser: on a zoomed-in page, where what's showing isn't the corner of the page, a click is real and aimed right first time", needsChrome, async () => {
+  const { rig, site, chrome } = await realRig();
+  let r = await rig.act("open_website", `${site.url}/article`);
+  assert.ok(r.ok, r.message);
+  // Zoomed in to twice the size, as with two fingers on a touch screen. (The same thing happens,
+  // without any zoom, when an on-screen keyboard covers the bottom of a page: seen on Android.)
+  const { session } = await connectPage(chrome.open);
+  try {
+    await session.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+    const was = { ...stats };
+    r = await rig.act("tap", "See the HDMI cable");
+    assert.match(r.message, /It's showing “HDMI cable, 2 metres”/);
+    assert.equal(stats.clicks - was.clicks, 1, "a real click");
+    assert.equal(stats.clicksInside - was.clicksInside, 0);
+    assert.equal(stats.aims - was.aims, 1, "aimed right the first time");
+  } finally {
+    await session.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 }).catch(() => {});
+    session.close();
+  }
+});
+
 test("in a real browser: no passwords or card numbers, pages that redraw themselves, message boxes, long pages and parts from other sites", needsChrome, async () => {
   const { rig, site } = await realRig();
   // Passwords and card details are the person's to type.
