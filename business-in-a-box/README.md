@@ -15,6 +15,7 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 | [`07-getting-started.md`](07-getting-started.md) | Research findings (market size, the real competitor, the name, sales tax, hosting) and the launch plan, plus the licence email and discovery-call script |
 | [`site/`](site/) | Landing page with the fee calculator (same maths as `tools/roi.py`), how it works, pricing and FAQ. A static file with no backend, so it can go on any static host (GitHub Pages, Netlify, Cloudflare Pages). **Before publishing:** set `<meta name="booking-url">` to your booking link. Until then, the booking buttons scroll to the bottom of the page. Previews: `site/preview-desktop.png`, `site/preview-mobile.png`. |
 | [`video/`](video/) | Two faceless UGC videos (9:16) with ElevenLabs voiceover, plus their sources and build scripts |
+| [`app/call-sheet.html`](app/call-sheet.html) | Source of the **Doorkeep Call Sheet** phone app, published privately as a Claude artifact. It holds the call list with local call windows, call and email drafts, the cadence tracker, pipeline, fee calculator and scripts. Lead data lives in the artifact's private database (owner and Editors only), never in this file. |
 | [`tools/roi.py`](tools/roi.py) | Per-venue fee and ROI calculator |
 | [`tools/route_model.py`](tools/route_model.py) | Pricing route model: flat vs per-ticket, fan-price check, licence downside, 12-month scenario |
 | `leads/` | Lead lists. **Git-ignored on purpose:** they hold named people's contact details and this repo is public. |
@@ -31,6 +32,7 @@ This follows the "business in a box" process: offer ideas → niche and ICP → 
 - [ ] Leads: 15 of 20 merged into `leads/leads.csv` (9 ready, 3 need contact details, 3 on hold). Remaining email lookups and 5 more venues wait for the Firecrawl daily reset.
 - [x] UGC videos: two faceless versions with ElevenLabs voiceover in `video/`
 - [x] Landing page with fee calculator in `site/` (set the booking link before publishing)
+- [x] Phone app: the Doorkeep Call Sheet, a private Claude artifact seeded with the 15 leads
 - [x] Outreach sequence complete in `02` (emails 1–3, voicemail, call openers, CAN-SPAM rules). Personalised drafts for the 9 ready leads are in `leads/outreach-drafts.md` (git-ignored, not sent).
 
 ## Facts used, all checked 2026-11-20

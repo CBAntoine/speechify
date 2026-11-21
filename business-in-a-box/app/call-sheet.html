@@ -1,0 +1,585 @@
+<title>Doorkeep Call Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  /* Layout: phone-first single column. Sticky header, scrolling list of venue cards, fixed bottom tab bar, full-screen venue sheet. */
+  :root {
+    --bg: #14111A; --surface: #1d1826; --surface-2: #272033; --line: #342b40;
+    --fg: #F4EBD9; --muted: #A39CAD; --gold: #FFC233; --green: #3DBE7A; --red: #E5483B; --ink: #14111A;
+    --display: "Anton", Impact, "Arial Narrow", sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+    --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--fg); font: 400 16px/1.5 var(--body); margin: 0; -webkit-font-smoothing: antialiased; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  a { color: inherit; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .wrap { padding-left: var(--gutter-l); padding-right: var(--gutter-r); max-width: 760px; margin: 0 auto; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  .display { font-family: var(--display); font-weight: 400; text-transform: uppercase; letter-spacing: .01em; line-height: .95; }
+  .sr { position: absolute; left: -9999px; width: 1px; height: 1px; }
+
+  /* header */
+  .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .top .wrap { padding-block: 12px 12px; display: grid; gap: 10px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .door { width: 16px; height: 22px; border: 3px solid var(--gold); border-bottom: none; border-radius: 8px 8px 0 0; position: relative; flex: none; }
+  .door::after { content: ""; position: absolute; right: 2px; top: 10px; width: 3px; height: 3px; border-radius: 50%; background: var(--gold); }
+  .brand b { font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: .1em; }
+  .sync { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .sync i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .sync[data-s="live"] i { background: var(--green); }
+  .sync[data-s="slow"] i, .sync[data-s="loading"] i { background: var(--gold); }
+  .sync[data-s="error"] i, .sync[data-s="off"] i { background: var(--red); }
+  .viewtitle { font-size: clamp(34px, 9vw, 48px); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); color: var(--fg); }
+  .chip b { font-family: var(--mono); }
+  .chip.go { background: rgba(61,190,122,.16); color: var(--green); }
+
+  main { padding-block: 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  section.view { display: grid; gap: 14px; }
+
+  /* filter */
+  .seg { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .seg button { flex: none; border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+
+  /* lead card */
+  .lead { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 8px; }
+  .lead.hot { border-color: rgba(61,190,122,.55); }
+  .lead-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .lead-top h3 { font-size: 18px; font-weight: 800; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+  .lead-top button { all: unset; cursor: pointer; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; color: var(--muted); }
+  .win { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; }
+  .win.go { background: rgba(61,190,122,.16); color: var(--green); }
+  .win.show { background: rgba(229,72,59,.14); color: var(--red); }
+  .win.off { background: var(--surface-2); color: var(--muted); }
+  .who { font-size: 14px; }
+  .stage { flex: none; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .stage.contacted { border-color: var(--gold); color: var(--gold); }
+  .stage.talking { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+  .stage.booked { border-color: var(--green); color: var(--green); }
+  .stage.pilot, .stage.live { background: var(--green); border-color: var(--green); color: var(--ink); }
+  .stage.notnow { color: var(--red); border-color: rgba(229,72,59,.5); }
+  .flag { font-size: 12px; font-weight: 700; color: var(--gold); }
+  .flag.hold { color: var(--red); }
+  .dots { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+  .dots span { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); }
+  .dots span.on { background: var(--gold); border-color: var(--gold); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px; border-radius: 10px; border: 0; background: var(--gold); color: var(--ink); font-weight: 800; font-size: 15px; text-decoration: none; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .btn.sm { min-height: 32px; padding: 5px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 16px; padding: 22px; text-align: left; }
+  .empty h3 { font-size: 18px; margin-bottom: 6px; }
+
+  /* forms */
+  label.f { display: grid; gap: 4px; font-size: 14px; font-weight: 600; }
+  input[type=text], input[type=tel], input[type=email], input[type=number], input[type=date], textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 16px; }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: var(--gold); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .card h2 { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  details.card > summary { cursor: pointer; font-weight: 800; list-style: none; }
+  details.card > summary::-webkit-details-marker { display: none; }
+
+  /* detail sheet */
+  .detail { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding-top: calc(env(safe-area-inset-top, 0px) + 8px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 32px); }
+  .detail .wrap { display: grid; gap: 14px; }
+  .dhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 8px; }
+  .dhead h2 { font-size: clamp(30px, 8vw, 42px); overflow-wrap: anywhere; min-width: 0; }
+  .stages { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stages button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .stages button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+  .kv { display: grid; gap: 10px; }
+  .kv div { display: grid; gap: 4px; min-width: 0; }
+  .kv span { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .kv p { margin: 0; overflow-wrap: anywhere; user-select: text; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .draft { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; font: 400 15px/1.5 var(--body); overflow-wrap: anywhere; user-select: text; }
+  .cad { display: grid; gap: 8px; }
+  .cad label { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .cad input { width: 20px; height: 20px; accent-color: var(--gold); flex: none; }
+  .cad small { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .log { display: grid; gap: 6px; font-size: 14px; }
+  .log div { display: flex; gap: 10px; }
+  .log time { color: var(--muted); font-family: var(--mono); font-size: 12px; flex: none; padding-top: 2px; min-width: 92px; }
+
+  /* pipeline */
+  .funnel { display: grid; gap: 8px; }
+  .fl { display: grid; grid-template-columns: 112px 1fr 32px; align-items: center; gap: 10px; font-size: 14px; }
+  .fl .track { height: 12px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+  .fl .track i { display: block; height: 100%; background: var(--gold); border-radius: 6px; }
+  .fl b { font-family: var(--mono); text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .stat b { display: block; font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1; }
+  .stat span { font-size: 13px; color: var(--muted); }
+  .nextlist { display: grid; gap: 8px; }
+  .nextlist button { all: unset; cursor: pointer; display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .nextlist time { font-family: var(--mono); font-size: 13px; color: var(--muted); min-width: 84px; }
+  .nextlist time.late { color: var(--red); }
+
+  /* calculator */
+  .big { font-family: var(--display); font-size: clamp(56px, 16vw, 84px); line-height: 1; color: var(--green); }
+  .rows { border-top: 1px dashed var(--line); }
+  .rows div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 15px; }
+  .rows b { font-family: var(--mono); white-space: nowrap; }
+  .toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; cursor: pointer; }
+  .toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--gold); flex: none; }
+  .warn { color: var(--red); font-weight: 700; margin: 0; }
+
+  /* scripts */
+  .script p { margin: 0; white-space: pre-wrap; user-select: text; }
+  .script .row { justify-content: space-between; }
+
+  /* tabs */
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(20,17,26,.96); border-top: 1px solid var(--line);
+          padding-bottom: env(safe-area-inset-bottom, 0px); backdrop-filter: blur(8px); }
+  .tabs .wrap { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .tabs a { text-decoration: none; text-align: center; padding: 10px 4px 12px; font-size: 13px; font-weight: 700; color: var(--muted); display: grid; gap: 4px; justify-items: center; }
+  .tabs a svg { width: 22px; height: 22px; }
+  .tabs a[aria-current="page"] { color: var(--gold); }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+           background: var(--fg); color: var(--ink); font-weight: 700; padding: 10px 16px; border-radius: 12px; max-width: calc(100% - 32px); }
+  @media (max-width: 380px) { .grid2, .stats { grid-template-columns: 1fr; } .fl { grid-template-columns: 96px 1fr 28px; } }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+</style>
+
+<header class="top"><div class="wrap">
+  <div class="bar">
+    <div class="brand"><span class="door" aria-hidden="true"></span><b>DOORKEEP</b></div>
+    <div class="sync" id="sync" data-s="loading" role="status"><i></i><span>Connecting</span></div>
+  </div>
+  <h1 class="viewtitle display" id="viewtitle">Call sheet</h1>
+  <div class="chips" id="summary"></div>
+</div></header>
+
+<main class="wrap">
+  <!-- SHEET -->
+  <section class="view" id="view-sheet">
+    <div class="seg" role="group" aria-label="Show">
+      <button type="button" data-filter="work" aria-pressed="true">To work</button>
+      <button type="button" data-filter="window" aria-pressed="false">In call window</button>
+      <button type="button" data-filter="booked" aria-pressed="false">Booked &amp; pilots</button>
+      <button type="button" data-filter="hold" aria-pressed="false">On hold</button>
+      <button type="button" data-filter="all" aria-pressed="false">All</button>
+    </div>
+    <div id="list" class="view"></div>
+    <details class="card" id="addcard">
+      <summary>+ Add a venue</summary>
+      <form id="addform" class="view" autocomplete="off">
+        <label class="f">Venue name<input id="add-name" type="text" required maxlength="120"></label>
+        <div class="grid2">
+          <label class="f">City and state<input id="add-metro" type="text" placeholder="Austin TX" maxlength="60"></label>
+          <label class="f">Phone<input id="add-phone" type="tel" maxlength="40"></label>
+        </div>
+        <div class="grid2">
+          <label class="f">Contact name<input id="add-contact" type="text" maxlength="80"></label>
+          <label class="f">Email<input id="add-email" type="email" maxlength="120"></label>
+        </div>
+        <label class="f">Notes<textarea id="add-notes" maxlength="2000" placeholder="Ticket platform, shows a week, who decides"></textarea></label>
+        <div class="row"><button class="btn" type="submit" id="add-submit">Add venue</button><span class="muted" id="add-msg"></span></div>
+      </form>
+    </details>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="view" id="view-pipeline" hidden>
+    <div class="card"><h2>Where every venue stands</h2><div class="funnel" id="funnel"></div></div>
+    <div class="card"><h2>This week</h2><div class="stats" id="stats"></div><p class="muted" id="rate" style="margin:0"></p></div>
+    <div class="card"><h2>Next steps</h2><div class="nextlist" id="nextlist"></div></div>
+  </section>
+
+  <!-- CALCULATOR -->
+  <section class="view" id="view-calc" hidden>
+    <form class="card" id="calc-form" onsubmit="return false">
+      <div class="grid2">
+        <label class="f">Average ticket ($)<input id="c-price" type="number" min="5" max="200" step="1" value="25" inputmode="decimal"></label>
+        <label class="f">Paid tickets a week<input id="c-tickets" type="number" min="10" max="5000" step="10" value="300" inputmode="numeric"></label>
+      </div>
+      <label class="f">Their booking fee ($)<input id="c-fee" type="number" min="0" max="10" step="0.25" value="2" inputmode="decimal"></label>
+      <label class="toggle"><input id="c-absorbed" type="checkbox"><span>They absorb the ticket site's fees today</span></label>
+    </form>
+    <div class="card" aria-live="polite">
+      <div class="big" id="c-big">$16,306</div>
+      <div class="muted" id="c-label">a year to the venue, no monthly fee</div>
+      <div class="rows" id="c-rows"></div>
+      <p class="warn" id="c-warn" hidden>Their fee doesn't cover card processing at this price. Suggest a higher fee.</p>
+      <div class="row"><button class="btn" type="button" id="c-copy">Copy line for email 2</button></div>
+      <p class="muted" style="margin:0;font-size:13px">2 tickets per order, Stripe 2.9% + 30¢, Eventbrite US 3.7% + $1.79 + 2.9%. Same maths as tools/roi.py.</p>
+    </div>
+  </section>
+
+  <!-- SCRIPTS -->
+  <section class="view" id="view-scripts" hidden></section>
+</main>
+
+<nav class="tabs" aria-label="Sections"><div class="wrap">
+  <a href="#sheet" data-tab="sheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Sheet</a>
+  <a href="#pipeline" data-tab="pipeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>Pipeline</a>
+  <a href="#calc" data-tab="calc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></svg>Calc</a>
+  <a href="#scripts" data-tab="scripts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M8 12h8M8 16h6"/></svg>Scripts</a>
+</div></nav>
+
+<div class="detail" id="detail" hidden role="dialog" aria-modal="true" aria-labelledby="d-name"><div class="wrap" id="d-body"></div></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(() => {
+  // ---------- constants ----------
+  const STAGES = [['new', 'New'], ['contacted', 'Contacted'], ['talking', 'Talking'], ['booked', 'Fee check booked'], ['pilot', 'Pilot'], ['live', 'Live'], ['notnow', 'Not now']];
+  const STAGE = Object.fromEntries(STAGES);
+  const WORK = new Set(['new', 'contacted', 'talking']);
+  const CADENCE = [['d1', 'Day 1', 'Email 1'], ['d2', 'Day 2', 'Call'], ['d4', 'Day 4', 'Instagram DM'], ['d6', 'Day 6', 'Call + email 2'], ['d10', 'Day 10', 'Closing email']];
+  const LISTS = { A: 'Eventbrite venue', E: 'Promoter on Eventbrite', D: 'Sells on own site', B: 'Other platform' };
+  const TZ = { TX: 'America/Chicago', IL: 'America/Chicago', LA: 'America/Chicago', MO: 'America/Chicago', TN: 'America/Chicago', MN: 'America/Chicago',
+               CO: 'America/Denver', OH: 'America/New_York', VA: 'America/New_York', NC: 'America/New_York', OR: 'America/Los_Angeles' };
+  const TITLES = { sheet: 'Call sheet', pipeline: 'Pipeline', calc: 'Fee calculator', scripts: 'Scripts' };
+
+  // ---------- state ----------
+  let db = null, leads = [], filter = 'work', openId = null, canWrite = true;
+  const queues = new Map();
+
+  // ---------- helpers ----------
+  const $ = id => document.getElementById(id);
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : String(v));
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+    return el;
+  }
+  const safeUrl = u => (typeof u === 'string' && /^(https?:|tel:|mailto:)/i.test(u.trim())) ? u.trim() : null;
+  const telHref = p => { const d = String(p || '').replace(/[^\d+]/g, ''); return d.length >= 7 ? 'tel:' + d : null; };
+  const str = v => (typeof v === 'string' ? v : v == null ? '' : String(v));
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600); }
+  async function copy(text, btn) {
+    const done = label => { if (!btn) return; const old = btn.textContent; btn.textContent = label; setTimeout(() => { btn.textContent = old; }, 1400); };
+    try { await navigator.clipboard.writeText(text); done('Copied'); }
+    catch { const ta = h('textarea', { class: 'sr', readonly: true }); ta.value = text; document.body.append(ta); ta.select();
+            let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove(); done(ok ? 'Copied' : 'Select the text to copy'); }
+  }
+  function tzFor(lead) {
+    if (lead.tz) return lead.tz;
+    const m = /\b([A-Z]{2})\b/.exec(str(lead.metro));
+    return (m && TZ[m[1]]) || 'America/Chicago';
+  }
+  function clock(tz, now = new Date()) {
+    let wd = 'Mon', hour = 12, label = '';
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(now);
+      wd = parts.find(p => p.type === 'weekday').value; hour = Number(parts.find(p => p.type === 'hour').value) % 24;
+      label = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(now);
+    } catch {}
+    let win;
+    if (['Fri', 'Sat', 'Sun'].includes(wd) || hour >= 17) win = ['show', 'Show hours'];
+    else if ((['Tue', 'Wed', 'Thu'].includes(wd) && hour >= 13 && hour < 16) || (wd === 'Mon' && hour >= 14 && hour < 16)) win = ['go', 'Call window'];
+    else win = ['off', 'Off hours'];
+    return { label, win };
+  }
+  const fmtDate = iso => { try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+  const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+
+  // ---------- writes (one at a time per venue, only on a user action) ----------
+  function write(id, patch) {
+    if (!db) { toast('Open this page in Claude to save changes.'); return Promise.resolve(false); }
+    const prev = queues.get(id) || Promise.resolve();
+    const next = prev.catch(() => {}).then(() => db.collection('leads').doc(id).update({ ...patch, updatedAt: new Date().toISOString() }));
+    queues.set(id, next);
+    return next.then(() => true, e => { saveError(e); return false; });
+  }
+  function saveError(e) {
+    const code = e && e.code;
+    if (code === 'invalid_argument') { canWrite = false; toast('You can view this sheet but not change it.'); renderAll(); }
+    else if (code === 'quota_exceeded') toast('The sheet is full. Delete old venues to add more.');
+    else toast('Couldn’t save just now. Try again in a moment.');
+  }
+  const withLog = (lead, entry) => ({ log: [...(Array.isArray(lead.log) ? lead.log : []), { at: new Date().toISOString(), ...entry }].slice(-80) });
+
+  // ---------- sync status ----------
+  function setSync(s, err) {
+    const el = $('sync'); el.dataset.s = s;
+    el.lastElementChild.textContent = { loading: 'Connecting', live: 'Synced', slow: 'Can’t reach your sheet yet', error: 'Sync stopped', off: 'Not syncing' }[s] || s;
+    if (s === 'error' && err && err.code === 'revoked') el.lastElementChild.textContent = 'Access changed';
+  }
+
+  // ---------- summary ----------
+  function renderSummary() {
+    const s = $('summary'); s.replaceChildren();
+    if (!leads.length) return;
+    const ready = leads.filter(l => l.readiness !== 'hold' && WORK.has(l.stage || 'new'));
+    const hot = ready.filter(l => clock(tzFor(l)).win[0] === 'go' && (l.phone || l.email));
+    const booked = leads.filter(l => ['booked', 'pilot', 'live'].includes(l.stage));
+    s.append(h('span', { class: 'chip go' }, h('b', { text: hot.length }), ' in call window now'),
+             h('span', { class: 'chip' }, h('b', { text: ready.length }), ' to work'),
+             h('span', { class: 'chip' }, h('b', { text: booked.length }), ' booked or live'));
+  }
+
+  // ---------- sheet ----------
+  function visibleLeads() {
+    const list = leads.map(l => ({ l, c: clock(tzFor(l)) }));
+    const keep = ({ l, c }) => {
+      const st = l.stage || 'new';
+      if (filter === 'all') return true;
+      if (filter === 'hold') return l.readiness === 'hold' || st === 'notnow';
+      if (filter === 'booked') return ['booked', 'pilot', 'live'].includes(st);
+      const work = WORK.has(st) && l.readiness !== 'hold';
+      return filter === 'window' ? work && c.win[0] === 'go' : work;
+    };
+    return list.filter(keep).sort((a, b) => (a.c.win[0] === 'go' ? 0 : 1) - (b.c.win[0] === 'go' ? 0 : 1) || (Number(a.l.priority) || 99) - (Number(b.l.priority) || 99));
+  }
+  function card({ l, c }) {
+    const st = l.stage || 'new', t = l.touches || {};
+    const tel = telHref(l.phone), d = l.draft || {};
+    const mail = l.email ? 'mailto:' + encodeURIComponent(l.email) + (d.subject ? '?subject=' + encodeURIComponent(d.subject) + (d.body ? '&body=' + encodeURIComponent(d.body) : '') : '') : null;
+    return h('article', { class: 'lead' + (c.win[0] === 'go' && WORK.has(st) ? ' hot' : '') },
+      h('div', { class: 'lead-top' },
+        h('button', { type: 'button', onclick: () => openDetail(l.id), 'aria-label': 'Open ' + str(l.name) }, h('h3', { text: str(l.name) || 'Untitled venue' })),
+        h('span', { class: 'stage ' + st, text: STAGE[st] || st })),
+      h('div', { class: 'meta' }, h('span', { text: str(l.metro) }), c.label && h('span', { class: 'mono', text: c.label }), h('span', { class: 'win ' + c.win[0], text: c.win[1] })),
+      h('div', { class: 'who' }, l.contactName ? [h('b', { text: str(l.contactName) }), l.contactTitle ? ' · ' + str(l.contactTitle) : ''] : h('span', { class: 'muted', text: l.email ? 'General inbox' : 'No named contact yet' }),
+        l.readiness === 'needs-contact' ? h('span', { class: 'flag', text: '  Needs contact details' }) : null,
+        l.readiness === 'hold' ? h('span', { class: 'flag hold', text: '  On hold' }) : null),
+      h('div', { class: 'dots', 'aria-label': 'Cadence' }, CADENCE.map(([k, , what]) => h('span', { class: t[k] ? 'on' : '', title: what })), h('small', { text: ' ' + CADENCE.filter(([k]) => t[k]).length + '/5 touches' })),
+      h('div', { class: 'actions' },
+        tel ? h('a', { class: 'btn', href: tel }, 'Call') : null,
+        mail ? h('a', { class: 'btn ghost', href: mail }, 'Email') : null,
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => openDetail(l.id) }, 'Open')));
+  }
+  function renderSheet() {
+    const box = $('list'); box.replaceChildren();
+    if (!db) {
+      box.append(h('div', { class: 'empty' }, h('h3', { text: 'Your leads live in your Claude account' }),
+        h('p', { class: 'muted', style: 'margin:0' }, 'Open this page in Claude, signed in, to see and update your call list. The calculator and scripts work anywhere.')));
+      return;
+    }
+    if (!leads.length) {
+      box.append(h('div', { class: 'empty' }, h('h3', { text: $('sync').dataset.s === 'live' ? 'No venues yet' : 'Loading your call list' }),
+        h('p', { class: 'muted', style: 'margin:0' }, 'Your ranked venues appear here, each with its local time, the call window and a draft ready to send. Add one yourself with "Add a venue" below.')));
+      return;
+    }
+    const vis = visibleLeads();
+    if (!vis.length) { box.append(h('div', { class: 'empty' }, h('h3', { text: 'Nothing here right now' }), h('p', { class: 'muted', style: 'margin:0' }, filter === 'window' ? 'No venue is in its call window (Tue–Thu 1–4 PM, Mon 2–4 PM, local time). Check back this afternoon.' : 'Try another filter.'))); return; }
+    box.append(...vis.map(card));
+  }
+
+  // ---------- detail ----------
+  function openDetail(id) { openId = id; renderDetail(true); $('detail').hidden = false; document.body.style.overflow = 'hidden'; $('detail').scrollTop = 0; }
+  function closeDetail() { openId = null; $('detail').hidden = true; document.body.style.overflow = ''; }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && openId) closeDetail(); });
+  function contactRow(label, value, href, action) {
+    if (!value) return null;
+    return h('div', {}, h('span', { text: label }), h('p', { class: 'mono', text: value }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost sm', onclick: e => copy(value, e.currentTarget) }, 'Copy'), href ? h('a', { class: 'btn sm', href }, action) : null));
+  }
+  function renderDetail(full) {
+    const l = leads.find(x => x.id === openId); const body = $('d-body');
+    if (!l) { if (openId) { closeDetail(); toast('That venue was removed.'); } return; }
+    const st = l.stage || 'new', c = clock(tzFor(l)), d = l.draft || {}, t = l.touches || {};
+    const keep = {};
+    if (!full) for (const id of ['d-notes', 'd-next-date', 'd-next-text']) { const el = $(id); if (el && el.dataset.dirty) keep[id] = el.value; }
+    body.replaceChildren(
+      h('div', { class: 'dhead' }, h('h2', { class: 'display', id: 'd-name', text: str(l.name) }), h('button', { type: 'button', class: 'btn ghost sm', onclick: closeDetail }, 'Done')),
+      h('div', { class: 'meta' }, h('span', { text: str(l.metro) }), c.label && h('span', { class: 'mono', text: c.label + ' local' }), h('span', { class: 'win ' + c.win[0], text: c.win[1] }), l.list ? h('span', { text: LISTS[l.list] || l.list }) : null),
+      h('div', { class: 'card' }, h('h2', { text: 'Stage' }),
+        h('div', { class: 'stages', role: 'group', 'aria-label': 'Stage' }, STAGES.map(([k, label]) => h('button', { type: 'button', 'aria-pressed': String(k === st), disabled: !canWrite,
+          onclick: () => { if (k !== st) write(l.id, { stage: k, ...withLog(l, { kind: 'stage', text: 'Stage: ' + label }) }); } }, label)))),
+      h('div', { class: 'card' }, h('h2', { text: 'Log a call' }),
+        h('div', { class: 'row' }, [['connected', 'Connected'], ['voicemail', 'Voicemail'], ['noanswer', 'No answer']].map(([k, label]) => h('button', { type: 'button', class: k === 'connected' ? 'btn' : 'btn ghost', disabled: !canWrite,
+          onclick: () => write(l.id, { ...(st === 'new' ? { stage: 'contacted' } : {}), ...withLog(l, { kind: 'call', outcome: k, text: 'Call: ' + label }) }).then(ok => ok && toast('Logged: ' + label)) }, label))),
+        h('p', { class: 'muted', style: 'margin:0;font-size:13px' }, 'Logging is yours to do: tapping Call doesn’t record anything.')),
+      h('div', { class: 'card' }, h('h2', { text: 'Contact' }),
+        h('div', { class: 'kv' },
+          l.contactName ? h('div', {}, h('span', { text: 'Decision maker' }), h('p', { text: str(l.contactName) + (l.contactTitle ? ' · ' + str(l.contactTitle) : '') })) : null,
+          contactRow('Phone', str(l.phone), telHref(l.phone), 'Call'),
+          contactRow('Email' + (l.emailType ? ' (' + str(l.emailType).replace(/-/g, ' ') + ')' : ''), str(l.email), l.email ? 'mailto:' + encodeURIComponent(l.email) : null, 'Email'),
+          safeUrl(l.website) ? h('div', {}, h('span', { text: 'Website' }), h('p', {}, h('a', { href: safeUrl(l.website), target: '_blank', rel: 'noopener' }, str(l.website)))) : null,
+          safeUrl(l.evidenceUrl) ? h('div', {}, h('span', { text: 'Their ticket link (evidence)' }), h('p', {}, h('a', { href: safeUrl(l.evidenceUrl), target: '_blank', rel: 'noopener' }, str(l.platform) || 'Open link'))) : null)),
+      (d.subject || d.body || d.opener) ? h('div', { class: 'card' }, h('h2', { text: d.subject ? 'Draft email' : 'Call opener' }),
+        d.subject ? h('div', { class: 'row' }, h('b', { text: 'Subject: ' + str(d.subject) }), h('button', { type: 'button', class: 'btn ghost sm', onclick: e => copy(str(d.subject), e.currentTarget) }, 'Copy subject')) : null,
+        d.body ? h('pre', { class: 'draft', text: str(d.body) }) : null,
+        d.body ? h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm', onclick: e => copy(str(d.body), e.currentTarget) }, 'Copy email'),
+          l.email ? h('a', { class: 'btn ghost sm', href: 'mailto:' + encodeURIComponent(l.email) + '?subject=' + encodeURIComponent(str(d.subject)) + '&body=' + encodeURIComponent(str(d.body)) }, 'Open in mail app') : null) : null,
+        d.opener ? h('pre', { class: 'draft', text: str(d.opener) }) : null,
+        d.opener ? h('button', { type: 'button', class: 'btn ghost sm', onclick: e => copy(str(d.opener), e.currentTarget) }, 'Copy opener') : null,
+        d.check ? h('p', { class: 'muted', style: 'margin:0;font-size:14px' }, 'Before sending: ' + str(d.check)) : null) : null,
+      h('div', { class: 'card' }, h('h2', { text: '10-day cadence' }),
+        h('div', { class: 'cad' }, CADENCE.map(([k, day, what]) => h('label', {},
+          h('input', { type: 'checkbox', checked: Boolean(t[k]), disabled: !canWrite, onchange: e => {
+            const on = e.currentTarget.checked;
+            write(l.id, { touches: { ...t, [k]: on ? new Date().toISOString() : null }, ...withLog(l, { kind: 'touch', text: (on ? 'Done: ' : 'Undone: ') + day + ' ' + what }) });
+          } }), h('span', {}, h('b', { text: day }), ' ' + what), t[k] ? h('small', { text: fmtDate(t[k]) }) : null)))),
+      h('div', { class: 'card' }, h('h2', { text: 'Next step' }),
+        h('div', { class: 'grid2' }, h('label', { class: 'f' }, 'Date', h('input', { id: 'd-next-date', type: 'date', value: str(l.next && l.next.date), oninput: e => { e.currentTarget.dataset.dirty = '1'; } })),
+          h('label', { class: 'f' }, 'What', h('input', { id: 'd-next-text', type: 'text', maxlength: '200', value: str(l.next && l.next.text), placeholder: 'Call back Thu 2 PM', oninput: e => { e.currentTarget.dataset.dirty = '1'; } }))),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm', disabled: !canWrite, onclick: () => {
+          const date = $('d-next-date').value, text = $('d-next-text').value.trim();
+          write(l.id, { next: { date, text }, ...withLog(l, { kind: 'next', text: 'Next step: ' + (text || '—') + (date ? ' (' + date + ')' : '') }) }).then(ok => { if (ok) { $('d-next-date').dataset.dirty = ''; $('d-next-text').dataset.dirty = ''; toast('Next step saved'); } });
+        } }, 'Save next step'))),
+      h('div', { class: 'card' }, h('h2', { text: 'Your notes' }),
+        h('textarea', { id: 'd-notes', maxlength: '5000', placeholder: 'What they said, who decides, their ticket price and volume', oninput: e => { e.currentTarget.dataset.dirty = '1'; } }),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm', disabled: !canWrite, onclick: () => {
+          const v = $('d-notes').value; write(l.id, { myNotes: v }).then(ok => { if (ok) { $('d-notes').dataset.dirty = ''; toast('Notes saved'); } });
+        } }, 'Save notes'))),
+      h('div', { class: 'card' }, h('h2', { text: 'Research' }),
+        h('div', { class: 'kv' },
+          l.volume ? h('div', {}, h('span', { text: 'Volume seen' }), h('p', { text: str(l.volume) })) : null,
+          l.pitch ? h('div', {}, h('span', { text: 'Pitch' }), h('p', { text: str(l.pitch) })) : null,
+          l.notes ? h('div', {}, h('span', { text: 'Research notes' }), h('p', { text: str(l.notes) })) : null)),
+      h('div', { class: 'card' }, h('h2', { text: 'Activity' }),
+        h('div', { class: 'log' }, (Array.isArray(l.log) && l.log.length) ? [...l.log].reverse().map(e => h('div', {}, h('time', { text: fmtDate(e.at) }), h('span', { text: str(e.text) }))) : h('span', { class: 'muted', text: 'Nothing logged yet.' }))));
+    const notes = $('d-notes'); notes.value = keep['d-notes'] ?? str(l.myNotes); if (keep['d-notes'] != null) notes.dataset.dirty = '1';
+    for (const id of ['d-next-date', 'd-next-text']) if (keep[id] != null) { $(id).value = keep[id]; $(id).dataset.dirty = '1'; }
+  }
+
+  // ---------- pipeline ----------
+  function renderPipeline() {
+    const counts = Object.fromEntries(STAGES.map(([k]) => [k, 0]));
+    for (const l of leads) counts[l.stage || 'new'] = (counts[l.stage || 'new'] || 0) + 1;
+    const max = Math.max(1, ...Object.values(counts));
+    $('funnel').replaceChildren(...STAGES.map(([k, label]) => h('div', { class: 'fl' }, h('span', { text: label }), h('div', { class: 'track' }, h('i', { style: `width:${(counts[k] / max) * 100}%` })), h('b', { text: counts[k] }))));
+    const now = new Date(), start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const week = leads.flatMap(l => (Array.isArray(l.log) ? l.log : [])).filter(e => new Date(e.at) >= start);
+    const calls = week.filter(e => e.kind === 'call'), conn = calls.filter(e => e.outcome === 'connected').length;
+    const touches = week.filter(e => e.kind === 'touch' && str(e.text).startsWith('Done')).length;
+    const booked = week.filter(e => e.kind === 'stage' && /Fee check booked|Pilot|Live/.test(str(e.text))).length;
+    $('stats').replaceChildren(...[[calls.length, 'calls'], [conn, 'connected'], [calls.filter(e => e.outcome === 'voicemail').length, 'voicemails'], [touches, 'cadence touches'], [booked, 'booked or better'], [leads.filter(l => l.stage === 'live').length, 'venues live']]
+      .map(([n, label]) => h('div', { class: 'stat' }, h('b', { text: n }), h('span', { text: label }))));
+    $('rate').textContent = calls.length ? `Connect rate this week: ${Math.round((conn / calls.length) * 100)}%. Replace the calling window with your own data after 50 dials.` : 'Log calls from a venue’s card to see your connect rate here.';
+    const nexts = leads.filter(l => l.next && (l.next.date || l.next.text)).sort((a, b) => str(a.next.date || '9999').localeCompare(str(b.next.date || '9999')));
+    const t = today();
+    $('nextlist').replaceChildren(...(nexts.length ? nexts.map(l => h('button', { type: 'button', onclick: () => openDetail(l.id) },
+      h('time', { class: l.next.date && l.next.date < t ? 'late' : '', text: l.next.date || 'No date' }), h('span', {}, h('b', { text: str(l.name) }), l.next.text ? ' · ' + str(l.next.text) : ''))) : [h('span', { class: 'muted', text: 'Set a next step on any venue and it shows up here, soonest first.' })]));
+  }
+
+  // ---------- calculator (same maths as tools/roi.py) ----------
+  const EB_PCT = 0.037, EB_FIX = 1.79, EB_PROC = 0.029, ST_PCT = 0.029, ST_FIX = 0.30, TPO = 2;
+  const money = (v, d = 2) => (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  let calcLine = '';
+  function calc() {
+    const P = Math.min(200, Math.max(5, +$('c-price').value || 25)), tw = Math.min(5000, Math.max(10, +$('c-tickets').value || 300));
+    const fee = Math.min(10, Math.max(0, +$('c-fee').value || 0)), absorbed = $('c-absorbed').checked;
+    const ours = P < 20 ? 0.50 : 0.75, yr = tw * 52;
+    let rows;
+    if (!absorbed) {
+      const eb = (P * (1 + EB_PCT) + EB_FIX) / (1 - EB_PROC) - P, fanFee = fee + ours;
+      const stripe = (ST_PCT * (P + fanFee) * TPO + ST_FIX) / TPO, kept = fanFee - stripe - ours, diff = eb - fanFee;
+      $('c-big').textContent = money(kept * yr, 0); $('c-label').textContent = 'a year to the venue, no monthly fee';
+      $('c-warn').hidden = kept >= 0;
+      rows = [['Fans pay today', money(P + eb)], ['Fans pay at their box office', money(P + fanFee)], [diff >= 0 ? 'Fans save per ticket' : 'Fans pay more per ticket', money(Math.abs(diff))], ['Venue keeps per ticket', money(kept)], ['Doorkeep earns a year', money(ours * yr, 0)]];
+      calcLine = `At about ${tw} tickets a week at $${P}, fans would pay ${money(P + fanFee)} all-in instead of ${money(P + eb)}, and you'd keep about ${money(kept)} a ticket, roughly ${money(kept * yr, 0)} a year. No monthly fee.`;
+    } else {
+      const ebCost = (EB_PCT * P + EB_FIX + EB_PROC * P) * yr, ourCost = (ST_PCT * P + ST_FIX / TPO + ours) * yr;
+      $('c-big').textContent = money(ebCost - ourCost, 0); $('c-label').textContent = 'a year saved, fans pay the same'; $('c-warn').hidden = true;
+      rows = [['Fees absorbed today', money(ebCost, 0) + '/yr'], ['With Doorkeep (Stripe + 75¢)', money(ourCost, 0) + '/yr'], ['Doorkeep earns a year', money(ours * yr, 0)]];
+      calcLine = `At about ${tw} tickets a week at $${P}, you're absorbing about ${money(ebCost, 0)} a year in ticket-site fees. On your own box office that drops to about ${money(ourCost, 0)}, saving roughly ${money(ebCost - ourCost, 0)} a year, with fans paying the same price.`;
+    }
+    $('c-rows').replaceChildren(...rows.map(([k, v]) => h('div', {}, h('span', { text: k }), h('b', { text: v }))));
+  }
+  for (const id of ['c-price', 'c-tickets', 'c-fee', 'c-absorbed']) $(id).addEventListener('input', calc);
+  $('c-copy').addEventListener('click', e => copy(calcLine, e.currentTarget));
+
+  // ---------- scripts ----------
+  const SCRIPTS = [
+    ['Cold-call opener (under 20 seconds)', 'Hi [first name], it’s [your name] with Doorkeep. I’ll be quick because I know doors are later. I help rooms like [venue] sell tickets on their own site and keep the booking fee Eventbrite is collecting now. No monthly fee, and for a room your size it’s usually five figures a year. Worth ten minutes on Thursday to see your own numbers?'],
+    ['Voicemail (under 20 seconds)', 'Hi [first name], [your name] from Doorkeep. I help venues like [venue] sell tickets on their own site and keep the booking fee their ticket site keeps today, with no monthly fee. I’ll send a short email with your numbers. If it’s easier, call me back on [phone]. Thanks.'],
+    ['Email 1: day 1', 'Subject: your [show] fees\n\nHi [first name], fans who bought tickets to [show] paid Eventbrite’s fees on top. On a $25 ticket that’s about $3.50, and none of it reached [venue].\n\nI set up branded box offices for independent venues: your domain, your Stripe account, one all-in price that’s still lower for your fans. You keep about $1.05 a ticket. No monthly fee: I earn 75¢ only when you sell. Live in 7 days.\n\nWant me to run the numbers on your last month of shows? Takes 10 minutes.\n\n[your name], Doorkeep\n[postal address]\nReply “no thanks” and I won’t email again.'],
+    ['Email 2: day 6, their numbers', 'Subject: [venue]: your numbers\n\nHi [first name], I ran a rough version for [venue] using public prices.\n\n[paste the line from the calculator]\n\nWant me to check it against your real numbers? 10 minutes, any afternoon this week.\n\n[your name], Doorkeep\n[postal address]\nReply “no thanks” and I won’t email again.'],
+    ['Email 3: day 10, closing the loop', 'Subject: should I close your file?\n\nHi [first name], I’ll stop here so I’m not clogging your inbox. If ticket fees come up later, reply “fees” and I’ll send [venue]’s numbers the same day.\n\n[your name], Doorkeep\n[postal address]'],
+    ['Instagram DM', 'Love what you’re booking at [venue]. Sent [first name] a quick email about keeping your ticket fees instead of Eventbrite. Happy to share the numbers here if that’s easier.'],
+    ['Opener for venues selling on their own site', 'You already sell on your own site, which is great. Most venues we talk to want three things their checkout doesn’t give them: phone check-in at the door, waitlists and presales that run themselves, and ad pixels that see sales. We set that up in 7 days, with no monthly fee.'],
+  ];
+  const OBJECTIONS = [
+    ['“Eventbrite brings us discovery.”', 'Check the data: most of your buyers come from your own Instagram, mailing list and posters. Keep Eventbrite for a couple of discovery shows if you like, and put your regulars and your own promotion through your box office.'],
+    ['“Fans hate fees.”', 'So show one honest all-in price. On a $25 show it’s 79¢ lower than an Eventbrite checkout, and you still keep about $1.05 a ticket.'],
+    ['“Switching sounds like a hassle.”', 'We do it: rebuild your upcoming shows, embed the box office on your site, set up door check-in on staff phones, and launch in 7 days. Shows already on sale stay where they are.'],
+    ['“What if it goes down on a Friday?”', 'It runs on its own server, monitored around the clock, backed up nightly, with a written Friday-night plan. Check-in runs from any phone browser.'],
+    ['“Who handles refunds and chargebacks?”', 'You, in your own Stripe dashboard. Money lands in your own Stripe account on Stripe’s standard payout schedule. Disputes come to you, not Eventbrite.'],
+    ['“Do you take a percentage?”', 'No percentage and no monthly fee. A flat 75¢ per paid ticket (50¢ under $20), built into your all-in price. Stripe’s 2.9% + 30¢ is the only other cost, and your booking fee covers both.'],
+    ['“What about door sales and reserved seats?”', 'Keep your bar POS for walk-ups. Hi.Events’ paid licence adds a door box office and seat maps if you need them; we pass that cost through without markup.'],
+    ['“Is adding our own fee legal?”', 'Yes, if it’s in the price people see first. The FTC fee rule (in force since May 12, 2025) requires all-in pricing for live-event tickets, and we set your box office up that way.'],
+  ];
+  function renderScripts() {
+    const v = $('view-scripts');
+    v.replaceChildren(
+      h('p', { class: 'muted', style: 'margin:0' }, 'Calls: Tue–Thu 1–4 PM venue time (Mon 2–4 PM second best). Never Fri–Sun or after 5 PM. Emails: Tue–Wed 10–11 AM.'),
+      ...SCRIPTS.map(([title, text]) => h('div', { class: 'card script' }, h('div', { class: 'row' }, h('h2', { text: title }), h('button', { type: 'button', class: 'btn ghost sm', onclick: e => copy(text, e.currentTarget) }, 'Copy')), h('p', { text }))),
+      h('div', { class: 'card' }, h('h2', { text: 'Objections' }), ...OBJECTIONS.map(([q, a]) => h('details', {}, h('summary', { style: 'cursor:pointer;font-weight:700;padding:6px 0', text: q }), h('p', { style: 'margin:4px 0 10px', text: a })))));
+  }
+
+  // ---------- add a venue ----------
+  $('addform').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!db) { $('add-msg').textContent = 'Open this page in Claude to add venues.'; return; }
+    const name = $('add-name').value.trim(); if (!name) return;
+    const metro = $('add-metro').value.trim();
+    const data = { name, metro, phone: $('add-phone').value.trim(), email: $('add-email').value.trim(), contactName: $('add-contact').value.trim(),
+                   myNotes: $('add-notes').value.trim(), list: 'A', readiness: 'ready', stage: 'new', priority: 50, createdAt: new Date().toISOString(),
+                   log: [{ at: new Date().toISOString(), kind: 'note', text: 'Added from the call sheet' }] };
+    const m = /\b([A-Z]{2})\b/.exec(metro); if (m && TZ[m[1]]) data.tz = TZ[m[1]];
+    $('add-submit').disabled = true;
+    try { await db.collection('leads').add(data); e.target.reset(); $('add-msg').textContent = 'Added ' + name; $('addcard').open = false; }
+    catch (err) { saveError(err); $('add-msg').textContent = ''; }
+    finally { $('add-submit').disabled = false; }
+  });
+
+  // ---------- views ----------
+  function showView() {
+    const name = (location.hash || '#sheet').slice(1);
+    const view = TITLES[name] ? name : 'sheet';
+    for (const k of Object.keys(TITLES)) $('view-' + k).hidden = k !== view;
+    document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === view ? 'page' : 'false'));
+    $('viewtitle').textContent = TITLES[view];
+    $('summary').hidden = view !== 'sheet';
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', showView);
+  document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    renderSheet();
+  }));
+  function renderAll() { renderSummary(); renderSheet(); renderPipeline(); if (openId) renderDetail(false); }
+
+  // ---------- boot ----------
+  calc(); renderScripts(); showView(); renderAll();
+  setInterval(() => { renderSummary(); renderSheet(); }, 60000);   // keeps clocks and call windows current; reads only
+  (async () => {
+    setSync('loading');
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch { db = null; }
+    if (!db) { setSync('off'); renderAll(); return; }
+    renderAll();
+    const timer = setTimeout(() => setSync('slow'), 10000);
+    db.collection('leads').onSnapshot(snap => {
+      if (!snap.metadata.fromCache) { clearTimeout(timer); setSync('live'); }
+      leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderAll();
+    }, err => { clearTimeout(timer); setSync('error', err); renderAll(); });
+  })();
+})();
+</script>
