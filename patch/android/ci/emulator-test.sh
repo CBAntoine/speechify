@@ -16,6 +16,9 @@ fail() {
   echo "FAILED: $*"
   echo "---- Patch's log ----"
   patch_log 300
+  # If Patch stopped, Android says why (killed for memory, crashed, or ended).
+  echo "---- Android on Patch's process ----"
+  adb logcat -d -b main,system,crash | grep -iE "app\.patch\.home|lowmemorykiller|lmkd|has died|Process .* died|Killing [0-9]+:|am_kill|FATAL" | grep -v "Patch   :" | tail -n 40 || true
   adb exec-out screencap -p > "$OUT/failure.png" || true
   exit 1
 }
@@ -50,8 +53,6 @@ const s = require(process.argv[1]);
 console.log(`Platform: ${s.app.platform}. Network: ${s.network.cidr}, router ${s.network.gateway}, this phone ${s.network.address}.`);
 if (s.app.platform !== "android") process.exit(1);
 ' "$OUT/state.json" || fail "Patch doesn't know it's on Android"
-node -e 'process.exit(require(process.argv[1]).setup.claudeSdk === true ? 0 : 1)' "$OUT/state.json" || fail "Anthropic's SDK didn't load on the phone, so Claude can't build apps"
-echo "Anthropic's SDK loads on the phone's Node.js (Claude can build apps)."
 
 api "$BASE/api/devices" > "$OUT/devices.json" || fail "/api/devices didn't answer"
 node -e '
@@ -137,6 +138,11 @@ node "$HERE/file-picker-check.mjs" "$OUT" "$(dirname "$OUT")/tvapp-notes.apk" ||
 
 echo "TV apps made by Patch, installed over ADB the way Patch does on a TV…"
 node "$HERE/tvapp-check.mjs" "$(dirname "$OUT")" "$OUT" || fail "the TV app check failed"
+
+echo "Claude: Anthropic's SDK, loaded only when it's needed, loads on the phone's Node.js…"
+api "$BASE/api/claude/sdk" > "$OUT/claude-sdk.json" || fail "/api/claude/sdk didn't answer"
+grep -q '"ok":true' "$OUT/claude-sdk.json" || fail "Anthropic's SDK didn't load on the phone, so Claude can't build apps: $(cat "$OUT/claude-sdk.json")"
+echo "It loads, so Claude can build apps from the phone."
 
 echo "---- Patch's log ----"
 patch_log 120

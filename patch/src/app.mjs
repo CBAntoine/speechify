@@ -140,13 +140,9 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     for (const c of clients) c.write(msg);
   };
   // Claude's builds report as they go, and once more when they're done (the conversation hears it).
+  // Anthropic's SDK itself is only loaded when Claude is used, so it costs a phone nothing until then.
   tvapps.onChange = () => broadcast("tvapps", tvapps.list());
   tvapps.onBuilt = (r) => broadcast("tvapp-built", r);
-  let claudeSdk = null;
-  sdkReady().then((ok) => {
-    claudeSdk = ok;
-    if (!ok) log("[patch] Anthropic's SDK didn't load: Claude can't build apps on this device.");
-  });
   // In the phone app, pages and videos for "this phone" go to the open dashboard, which hands them to Android.
   setPhoneOpener((url) => {
     if (!clients.size) return false;
@@ -287,7 +283,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
   const routes = [
     ["GET", /^\/api\/state$/, async () => ({
       app: { version: VERSION, demo, lan, platform: onPhone() ? "android" : process.platform },
-      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), claude: !!store.anthropic.apiKey, claudeSdk, agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
+      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), claude: !!store.anthropic.apiKey, agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
       network: scanner.network ? { cidr: scanner.network.cidr, gateway: scanner.network.gateway, address: scanner.network.address, iface: scanner.network.iface } : null,
       scan: { running: !!scanner.running, last: scanner.lastScan },
       devices: inventory.list(),
@@ -359,6 +355,8 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     ["POST", /^\/api\/tvapps$/, async (b) => tvChanged(await tvapps.create(b))],
     // Claude builds an app, or changes one (both answer at once; the work goes on, shown as it happens).
     ["POST", /^\/api\/tvapps\/build$/, async (b) => tvChanged(await tvapps.build(b))],
+    // Whether Anthropic's SDK loads here (loading it if it hasn't been): the phone app's tests ask.
+    ["GET", /^\/api\/claude\/sdk$/, async () => ({ ok: await sdkReady() })],
     ["POST", /^\/api\/tvapps\/([^/]+)\/improve$/, async (b, [id]) => tvChanged(await tvapps.improve(id, b))],
     ["POST", /^\/api\/tvapps\/([^/]+)\/retry$/, async (b, [id]) => tvChanged(await tvapps.retry(id))],
     ["POST", /^\/api\/tvapps\/([^/]+)\/cancel$/, async (b, [id]) => tvChanged(await tvapps.cancel(id))],

@@ -84,6 +84,7 @@ test("Claude builds a TV app from a description, installs it, and changes it", a
   assert.ok(!JSON.stringify(r.settings).includes(claude.key), "the key never goes back to the browser");
   assert.equal(claude.requests.at(-1).path, "/v1/models/claude-opus-5-5");
   assert.equal((await api("GET", "/api/state")).setup.claude, true);
+  assert.deepEqual(await api("GET", "/api/claude/sdk"), { ok: true }, "Anthropic's SDK loads (only when asked)");
 
   // Build: answered at once, then built while the dashboard watches.
   claude.queue.push({ app: { about: "Steer the snake with the arrows; OK pauses.", html: SNAKE }, chunks: 12, delay: 15 });
