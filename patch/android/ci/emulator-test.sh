@@ -50,6 +50,8 @@ const s = require(process.argv[1]);
 console.log(`Platform: ${s.app.platform}. Network: ${s.network.cidr}, router ${s.network.gateway}, this phone ${s.network.address}.`);
 if (s.app.platform !== "android") process.exit(1);
 ' "$OUT/state.json" || fail "Patch doesn't know it's on Android"
+node -e 'process.exit(require(process.argv[1]).setup.claudeSdk === true ? 0 : 1)' "$OUT/state.json" || fail "Anthropic's SDK didn't load on the phone, so Claude can't build apps"
+echo "Anthropic's SDK loads on the phone's Node.js (Claude can build apps)."
 
 api "$BASE/api/devices" > "$OUT/devices.json" || fail "/api/devices didn't answer"
 node -e '

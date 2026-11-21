@@ -22,6 +22,7 @@ import { localNetworks } from "./net/interfaces.mjs";
 import { safeJson } from "./util.mjs";
 import { onPhone, setPhoneOpener } from "./platform.mjs";
 import { TvApps } from "./tvapps/index.mjs";
+import { CLAUDE_NAME, checkKey as checkClaudeKey, sdkReady } from "./tvapps/claude.mjs";
 import { Uploads } from "./uploads.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -138,6 +139,14 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const c of clients) c.write(msg);
   };
+  // Claude's builds report as they go, and once more when they're done (the conversation hears it).
+  tvapps.onChange = () => broadcast("tvapps", tvapps.list());
+  tvapps.onBuilt = (r) => broadcast("tvapp-built", r);
+  let claudeSdk = null;
+  sdkReady().then((ok) => {
+    claudeSdk = ok;
+    if (!ok) log("[patch] Anthropic's SDK didn't load: Claude can't build apps on this device.");
+  });
   // In the phone app, pages and videos for "this phone" go to the open dashboard, which hands them to Android.
   setPhoneOpener((url) => {
     if (!clients.size) return false;
@@ -167,6 +176,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       elevenlabs: { hasKey: !!el.apiKey, keyHint: el.apiKey ? `…${el.apiKey.slice(-4)}` : null, agentId: el.agentId || DEFAULT_AGENT_ID, customAgent: !!el.agentId, fromEnv: !!process.env.ELEVENLABS_API_KEY },
       homeAssistant: { url: store.data.homeAssistant.url || ha?.url || "", hasToken: !!ha?.token },
       youtube: { hasKey: !!store.secrets.youtubeApiKey, keyHint: store.secrets.youtubeApiKey ? `…${store.secrets.youtubeApiKey.slice(-4)}` : null, fromEnv: !!process.env.YOUTUBE_API_KEY },
+      claude: { hasKey: !!store.anthropic.apiKey, keyHint: store.anthropic.apiKey ? `…${store.anthropic.apiKey.slice(-4)}` : null, fromEnv: !!process.env.PATCH_ANTHROPIC_API_KEY, model: CLAUDE_NAME },
       network: { subnet: store.data.network.subnet || "" },
       lan: { enabled: !!store.data.lan.enabled, active: lan, accessCode: lan ? store.data.lan.accessCode : null },
       features: store.data.features,
@@ -236,6 +246,15 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
         if (check.ok || check.network) store.data.youtube.apiKey = key;
       }
     }
+    if (typeof b.anthropicApiKey === "string") {
+      const key = b.anthropicApiKey.trim();
+      if (!key) store.data.anthropic.apiKey = "";
+      else {
+        const check = await checkClaudeKey({ apiKey: key, baseURL: overrides.claudeBase });
+        checks.claude = check;
+        if (check.ok || check.network) store.data.anthropic.apiKey = key;
+      }
+    }
     if (typeof b.agentId === "string") store.data.elevenlabs.agentId = /^agent_[a-z0-9]+$/i.test(b.agentId.trim()) ? b.agentId.trim() : "";
     if (typeof b.haUrl === "string" || typeof b.haToken === "string") {
       const url = (b.haUrl ?? store.data.homeAssistant.url).trim().replace(/\/+$/, "");
@@ -268,7 +287,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
   const routes = [
     ["GET", /^\/api\/state$/, async () => ({
       app: { version: VERSION, demo, lan, platform: onPhone() ? "android" : process.platform },
-      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
+      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), claude: !!store.anthropic.apiKey, claudeSdk, agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
       network: scanner.network ? { cidr: scanner.network.cidr, gateway: scanner.network.gateway, address: scanner.network.address, iface: scanner.network.iface } : null,
       scan: { running: !!scanner.running, last: scanner.lastScan },
       devices: inventory.list(),
@@ -338,6 +357,11 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     // The TV app maker.
     ["GET", /^\/api\/tvapps$/, async () => ({ apps: tvapps.list(), kinds: tvapps.kinds() })],
     ["POST", /^\/api\/tvapps$/, async (b) => tvChanged(await tvapps.create(b))],
+    // Claude builds an app, or changes one (both answer at once; the work goes on, shown as it happens).
+    ["POST", /^\/api\/tvapps\/build$/, async (b) => tvChanged(await tvapps.build(b))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/improve$/, async (b, [id]) => tvChanged(await tvapps.improve(id, b))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/retry$/, async (b, [id]) => tvChanged(await tvapps.retry(id))],
+    ["POST", /^\/api\/tvapps\/([^/]+)\/cancel$/, async (b, [id]) => tvChanged(await tvapps.cancel(id))],
     ["POST", /^\/api\/tvapps\/([^/]+)$/, async (b, [id]) => tvChanged(await tvapps.update(id, b))],
     ["POST", /^\/api\/tvapps\/([^/]+)\/photos$/, async (b, [id]) => tvChanged(await tvapps.addPhotos(id, Array.isArray(b.files) ? b.files : [], uploads))],
     ["POST", /^\/api\/tvapps\/([^/]+)\/photos\/remove$/, async (b, [id]) => tvChanged(await tvapps.removePhoto(id, b.name))],

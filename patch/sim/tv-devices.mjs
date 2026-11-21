@@ -398,7 +398,11 @@ function fireShell(s, cmd) {
 }
 
 export async function fireTv(ip, s) {
+  // Connections end with the simulator (Patch's ADB client would otherwise keep one open for a minute).
+  const open = new Set();
   const server = net.createServer((sock) => {
+    open.add(sock);
+    sock.on("close", () => open.delete(sock));
     let token = null;
     let authed = false;
     const streams = new Map();
@@ -493,6 +497,11 @@ export async function fireTv(ip, s) {
     sock.on("error", () => {});
   });
   await listen(server, 5555, ip);
+  const close = server.close.bind(server);
+  server.close = (cb) => {
+    for (const sock of open) sock.destroy();
+    return close(cb);
+  };
   return [server];
 }
 

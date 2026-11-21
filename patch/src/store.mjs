@@ -13,6 +13,8 @@ const DEFAULTS = () => ({
   pairings: {},
   adbKey: "",
   youtube: { apiKey: "" },
+  // The person's Anthropic API key, for Claude building TV apps.
+  anthropic: { apiKey: "" },
   credentials: {},
   meta: {},
   network: { subnet: "" },
@@ -64,6 +66,11 @@ export class Store {
       apiKey: process.env.ELEVENLABS_API_KEY || this.data.elevenlabs.apiKey || "",
       agentId: process.env.ELEVENLABS_AGENT_ID || this.data.elevenlabs.agentId || "",
     };
+  }
+
+  /** Only Patch's own variable: an ANTHROPIC_API_KEY set for other programs is never used by surprise. */
+  get anthropic() {
+    return { apiKey: process.env.PATCH_ANTHROPIC_API_KEY || this.data.anthropic.apiKey || "" };
   }
 
   get secrets() {

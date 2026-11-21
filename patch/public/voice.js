@@ -44,6 +44,8 @@ export function createVoice(ui) {
   let lines = 0;
   let lastUserAt = 0;
   let pendingText = null;
+  // What Patch itself told the agent (a build finished): never shown or counted as the person speaking.
+  const fromPatch = new Set();
   let lastIds = "";
   const pending = new Map();
 
@@ -140,7 +142,18 @@ export function createVoice(ui) {
     conv.sendContextualUpdate(intro.join(" "));
     conv.sendContextualUpdate(`Devices on the network right now (${s.devices.length}). Use these names with the tools:\n${directory() || "(none found yet: offer to scan)"}`);
     const made = ui.tvapps?.apps || [];
-    conv.sendContextualUpdate(made.length ? `TV apps the person made with Patch (tv_apps tool):\n${made.map((a) => `- ${a.name} | ${a.kindLabel}: ${a.summary} | ${a.tvs.length ? a.tvs.map((t) => `${t.how === "browser" ? "opens on" : "on"} ${t.name}${t.upToDate ? "" : " (old version)"}`).join(", ") : "not on a TV yet"}`).join("\n")}` : "The person hasn't made any TV apps yet (tv_apps can make one).");
+    const job = (a) => (!a.job ? "" : a.job.status === "failed" ? ` | Claude's last request failed: ${a.job.error}` : " | Claude is working on it right now");
+    conv.sendContextualUpdate(made.length ? `TV apps the person made with Patch (tv_apps tool):\n${made.map((a) => `- ${a.name} | ${a.kindLabel}: ${a.summary} | ${a.tvs.length ? a.tvs.map((t) => `${t.how === "browser" ? "opens on" : "on"} ${t.name}${t.upToDate ? "" : " (old version)"}`).join(", ") : a.built ? "not on a TV yet" : "not built yet"}${job(a)}`).join("\n")}` : "The person hasn't made any TV apps yet (tv_apps can make one).");
+    conv.sendContextualUpdate(s.setup?.claude ? "Claude (Anthropic's Claude Opus 5.5) is set up to build apps: tv_apps with action build writes any app the person describes, and improve changes one Claude built. Each build takes two to four minutes and uses the person's Anthropic account." : "Claude isn't set up to build apps yet: that needs the person's Anthropic API key in Settings → Claude. The ready-made kinds of TV app (tv_apps make) work without it.");
+  }
+
+  /** Tell the conversation Claude has finished (the agent then tells the person), when there is one. */
+  function announce(text, tries = 0) {
+    if (!conv || status !== "connected") return;
+    // Wait for the agent to finish what it's saying (up to half a minute).
+    if (speaking && tries < 20) return void setTimeout(() => announce(text, tries + 1), 1500);
+    fromPatch.add(text);
+    conv.sendUserMessage(text);
   }
 
   // ── client tools ──
@@ -292,7 +305,7 @@ export function createVoice(ui) {
     },
 
     // The person's own TV apps: make, change, put on a TV, open, remove, list.
-    tv_apps: async ({ action, app, kind, name, content, tv, emoji, color, add } = {}) => {
+    tv_apps: async ({ action, app, kind, name, content, tv, emoji, color, add, description, instruction } = {}) => {
       const what = String(action || "list").toLowerCase();
       const id = encodeURIComponent(String(app || name || "").trim());
       const done = (r, extra = {}) => {
@@ -302,7 +315,11 @@ export function createVoice(ui) {
       try {
         if (what === "list") {
           const r = await ui.api("GET", "/api/tvapps");
-          return json({ apps: r.apps.map((a) => ({ name: a.name, kind: a.kindLabel, what: a.summary, on_tvs: a.tvs.map((t) => `${t.name}${t.upToDate ? "" : " (old version)"}`) })), kinds: r.kinds.map((k) => `${k.id}: ${k.label}`) });
+          return json({
+            apps: r.apps.map((a) => ({ name: a.name, kind: a.kindLabel, what: a.summary, on_tvs: a.tvs.map((t) => `${t.name}${t.upToDate ? "" : " (old version)"}`), claude: a.job ? (a.job.status === "failed" ? `failed: ${a.job.error}` : `working on it (${a.job.phase || "starting"})`) : undefined, asked_for: a.madeBy === "claude" ? a.requests : undefined })),
+            kinds: r.kinds.map((k) => `${k.id}: ${k.label}`),
+            claude: ui.state.setup?.claude ? "set up: action build writes any app" : "not set up (needs an Anthropic API key in Settings → Claude)",
+          });
         }
         if (what === "make") {
           const look = { name: String(name || app || "").trim(), emoji: emoji || undefined, color: /^#[0-9a-f]{6}$/i.test(color || "") ? color : undefined };
@@ -320,13 +337,28 @@ export function createVoice(ui) {
           ui.tvapps.load();
           return done(r, { photos_needed: r.ok && kind === "photos" ? "Photos are added on the phone or computer: tell the person to tap the app under TV apps in Patch, then Add photos." : undefined });
         }
+        if (what === "build") {
+          const text = String(description ?? content ?? "").trim();
+          const look = { name: String(name || app || "").trim() || ui.tvapps.nameFrom(text), emoji: String(emoji || "").trim() || "✨", color: /^#[0-9a-f]{6}$/i.test(color || "") ? color : ui.tvapps.nextColor() };
+          toolLine("tv", `Asking Claude to build “${look.name}”…`);
+          const r = await ui.api("POST", "/api/tvapps/build", { description: text, ...look, ...ui.tvapps.pictures(look), device: tv ? String(tv) : undefined });
+          ui.tvapps.load();
+          return done(r, { building: r.ok || undefined, note: r.ok ? "Claude is building it now, in the background. Don't wait in silence: tell the person it takes two to four minutes and that you'll say when it's ready. You'll get a message from Patch when it's done." : undefined });
+        }
         if (!id) return json({ ok: false, message: "Which TV app?" });
         let r;
-        if (what === "change") r = await ui.api("POST", `/api/tvapps/${id}`, { content: content == null ? undefined : String(content), name: name && app ? String(name) : undefined, emoji: emoji || undefined, color: color || undefined, add: add === true || add === "true" });
+        if (what === "improve") {
+          r = await ui.api("POST", `/api/tvapps/${id}/improve`, { instruction: String(instruction ?? content ?? "").trim(), device: tv ? String(tv) : undefined });
+          ui.tvapps.load();
+          return done(r, { building: r.ok || undefined, note: r.ok ? "Claude is changing it now, in the background. Tell the person it takes two or three minutes; you'll get a message from Patch when it's done." : undefined });
+        }
+        if (what === "stop") r = await ui.api("POST", `/api/tvapps/${id}/cancel`, {});
+        else if (what === "retry") r = await ui.api("POST", `/api/tvapps/${id}/retry`, {});
+        else if (what === "change") r = await ui.api("POST", `/api/tvapps/${id}`, { content: content == null ? undefined : String(content), name: name && app ? String(name) : undefined, emoji: emoji || undefined, color: color || undefined, add: add === true || add === "true" });
         else if (what === "put_on_tv") r = await ui.api("POST", `/api/tvapps/${id}/tv`, { device: tv ? String(tv) : undefined });
         else if (what === "open") r = await ui.api("POST", `/api/tvapps/${id}/open`, { device: tv ? String(tv) : undefined });
         else if (what === "remove") r = await ui.api("POST", `/api/tvapps/${id}/remove`, {});
-        else return json({ ok: false, message: `Unknown action "${what}". Use make, change, put_on_tv, open, remove or list.` });
+        else return json({ ok: false, message: `Unknown action "${what}". Use list, make, build, improve, change, put_on_tv, open, stop, retry or remove.` });
         ui.tvapps.load();
         return done(r);
       } catch (err) {
@@ -474,6 +506,7 @@ export function createVoice(ui) {
         onMessage: ({ message, role }) => {
           if (!message?.trim()) return;
           if (role === "user") {
+            if (fromPatch.has(message.trim())) return;
             lastUserAt = Date.now();
             const last = els.log.lastElementChild;
             if (last?.classList.contains("msg--user") && last.textContent === message) return;
@@ -581,6 +614,12 @@ export function createVoice(ui) {
     },
     uiActivity(text) {
       if (conv && status === "connected") conv.sendContextualUpdate(text);
+    },
+    /** Claude finished building or changing a TV app, or couldn't. */
+    appBuilt(r) {
+      if (!conv || status !== "connected") return;
+      toolLine(r.ok ? "check" : "alert", r.message);
+      announce(`[Patch, not the person] ${r.message} ${r.ok ? "Tell the person it's ready, and in a sentence how to use it." : "Tell the person briefly, and offer to try again."}`);
     },
     /** Exposed for automated checks in development. */
     tools,

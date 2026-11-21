@@ -15,6 +15,7 @@ import { letterImage } from "../apk/png.mjs";
 import { newSigningKey } from "../apk/sign.mjs";
 import { customAppNames } from "../drivers/tv.mjs";
 import { ContentError, KINDS, makeSettings, summary } from "./kinds.mjs";
+import { CLAUDE_NAME, changeRequest, newAppRequest, writeApp } from "./claude.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
@@ -35,6 +36,19 @@ export class TvAppError extends Error {
 const imageType = (b) => (b[0] === 0xff && b[1] === 0xd8 ? ".jpg" : b.readUInt32BE(0) === 0x89504e47 ? ".png" : b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP" ? ".webp" : null);
 const cleanName = (s) => String(s ?? "").replace(/[\u0000-\u001f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
 const cleanColor = (c) => (/^#[0-9a-f]{6}$/i.test(String(c || "")) ? String(c).toLowerCase() : null);
+const cleanText = (s, max) => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, max);
+const NO_CLAUDE = "Claude isn't set up yet: add your Anthropic API key in Patch's Settings, under Claude.";
+const MAX_JOBS = 2;
+
+/** A short name from a description, for when none was given ("a snake game for the kids" → "Snake game"). */
+function nameFrom(text) {
+  const skip = /^(a|an|the|make|build|create|write|me|us|my|our|please|app|an?|for|that|which|with)$/i;
+  const words = String(text).replace(/[^\p{L}\p{N}' -]+/gu, " ").split(/\s+/).filter(Boolean);
+  while (words.length && skip.test(words[0])) words.shift();
+  const cut = words.findIndex((w, i) => i > 0 && skip.test(w));
+  const name = (cut > 0 ? words.slice(0, cut) : words).slice(0, 3).join(" ");
+  return cleanName(name ? name[0].toUpperCase() + name.slice(1) : "") || "New app";
+}
 
 /** A PNG sent from the dashboard as a data: URL, checked for size. */
 function pngFrom(dataUrl, width, height) {
@@ -60,7 +74,18 @@ export class TvApps {
     this.bundles = new Map();
     this.apks = new Map();
     this.lan = null;
+    // Claude's builds in progress (app id → AbortController), and who to tell when something changes.
+    this.jobs = new Map();
+    this.onChange = () => {};
+    this.onBuilt = () => {};
+    for (const a of Object.values(this.data.apps)) {
+      if (a.job && a.job.status !== "failed") a.job = { ...a.job, status: "failed", error: "Patch was closed while Claude was working on this. Try again.", code: "interrupted" };
+    }
     this.syncNames();
+  }
+
+  get claudeKey() {
+    return this.store.anthropic.apiKey;
   }
 
   get web() {
@@ -114,13 +139,20 @@ export class TvApps {
       package: a.package,
       name: a.name,
       kind: a.kind,
-      kindLabel: KINDS[a.kind].label,
+      kindLabel: a.madeBy === "claude" ? "Built by Claude" : KINDS[a.kind].label,
       emoji: a.emoji,
       color: a.color,
       version: a.version,
       created: a.created,
       updated: a.updated,
-      summary: summary(a),
+      summary: a.madeBy === "claude" ? a.about || a.requests?.[0]?.text || a.job?.text || "" : summary(a),
+      madeBy: a.madeBy || null,
+      about: a.about || null,
+      // What the person asked Claude for, oldest first, and what Claude is doing now.
+      requests: (a.requests || []).map((r) => r.text),
+      built: a.version > 0,
+      job: a.job ? { status: a.job.status, kind: a.job.kind, text: a.job.text, phase: a.job.phase || null, kb: Math.round((a.job.chars || 0) / 1024), started: a.job.started, error: a.job.error || null } : null,
+      lastBuild: a.lastBuild || null,
       settings: a.settings,
       photos: (a.photos || []).map((p) => ({ name: p.name, caption: p.caption || null })),
       hasIcon: !!a.icon,
@@ -200,6 +232,7 @@ export class TvApps {
     const a = this.need(id);
     let notes = [];
     if (input.content != null || input.settings != null) {
+      if (this.jobs.has(a.id)) throw new TvAppError(`Claude is working on “${a.name}” right now. Wait until it's done.`, 409);
       const made = await this.#settings(a.kind, input, a);
       const field = LIST_FIELD[a.kind];
       if (input.add && field) made.settings[field] = [...(a.settings[field] || []), ...(made.settings[field] || [])];
@@ -211,7 +244,8 @@ export class TvApps {
     if (input.emoji) a.emoji = String(input.emoji).slice(0, 8);
     if (cleanColor(input.color)) a.color = cleanColor(input.color);
     await this.#saveArt(a, input);
-    a.version++;
+    // An app Claude hasn't built yet stays unbuilt (version 0) until it has its page.
+    if (a.version) a.version++;
     a.updated = Date.now();
     await this.save();
     const stale = Object.keys(a.installs || {}).length;
@@ -259,6 +293,9 @@ export class TvApps {
   /** Delete an app from Patch, and (by default) from the Android TVs it's installed on. */
   async remove(id, { fromTvs = true } = {}) {
     const a = this.need(id);
+    this.jobs.get(a.id)?.abort();
+    this.jobs.delete(a.id);
+    a.job = null;
     const results = [];
     if (fromTvs) {
       for (const [deviceId, inst] of Object.entries(a.installs || {})) {
@@ -280,6 +317,7 @@ export class TvApps {
   /** All of an app's files: index.html, the runtime, app.json and its photos. Map(name → Buffer). */
   async bundle(id) {
     const a = this.need(id);
+    if (!a.version) throw new TvAppError(this.jobs.has(a.id) ? `Claude is still building “${a.name}”.` : `“${a.name}” wasn't built. Ask Claude to try again.`, 409);
     const cached = this.bundles.get(a.id);
     if (cached?.version === a.version) return cached.files;
     const files = new Map();
@@ -390,6 +428,7 @@ export class TvApps {
   /** Put an app on a TV: install it (Android TV, Fire TV) or open it in the TV's browser (Samsung, LG). */
   async putOnTv(id, query) {
     const a = this.need(id);
+    if (!a.version) throw new TvAppError(this.jobs.has(a.id) ? `Claude is still building “${a.name}”. I'll put it on the TV when it's ready.` : `“${a.name}” wasn't built. Ask Claude to try again.`, 409);
     const d = this.#tv(query, a);
     const name = this.inventory.displayName(d);
     if (d.driver === "androidtv") {
@@ -426,6 +465,193 @@ export class TvApps {
     const r = await this.controller.act(d.id, "launch_app", a.name);
     if (!r.ok && /isn't installed|doesn't seem to be installed/.test(r.message)) return this.putOnTv(a.id, d.id);
     return { ...r, app: this.publicApp(a) };
+  }
+
+  // ── Apps Claude builds ────────────────────────────────────────────────────
+
+  /** A device that can take apps (the TVs, and phones and computers through their browser). */
+  #target(query) {
+    const d = this.#tv(query, { kind: "custom" });
+    if (d.driver === "androidtv" || d.driver === "samsung" || d.driver === "lgwebos" || d.actions?.includes("open_website")) return d;
+    throw new TvAppError(`${this.inventory.displayName(d)} can't take apps from Patch. Android TV, Google TV and Fire TV can install them, and Samsung and LG TVs, phones and computers can open them in their browser.`);
+  }
+
+  /** Where an app will run, for Claude: "Living Room TV, an Amazon Fire TV Stick (installed as an app)". */
+  #where(deviceIds) {
+    const parts = [];
+    for (const id of deviceIds) {
+      const d = this.inventory.get(id);
+      if (!d) continue;
+      const how = d.driver === "androidtv" ? "installed as an app, used with the remote" : d.kind === "tv" ? "in the TV's web browser, used with the remote" : `in the web browser of a ${d.kind === "phone" ? "phone, with touch" : "computer, with a mouse"}`;
+      const what = this.inventory.toPublic(d).what;
+      parts.push(`${this.inventory.displayName(d)}${what ? `, ${what}` : ""} (${how})`);
+    }
+    return parts.join("; ");
+  }
+
+  #checkClaude() {
+    if (!this.claudeKey) throw new TvAppError(NO_CLAUDE, 412);
+    if (this.jobs.size >= MAX_JOBS) throw new TvAppError(`Claude is already working on ${this.jobs.size} apps. Wait for one to finish first.`, 429);
+  }
+
+  /** Claude builds a new app from the person's description: { description, name?, emoji?, color?, icon?, banner?, device? }. */
+  async build(input = {}) {
+    this.#checkClaude();
+    const description = cleanText(input.description ?? input.content, 6000);
+    if (description.length < 3) throw new TvAppError("What should the app do? Describe it in a sentence or two.");
+    if (Object.keys(this.data.apps).length >= 50) throw new TvAppError("That's 50 TV apps already. Remove one you don't use first.");
+    const target = input.device ? this.#target(String(input.device)) : null;
+    let id;
+    do id = `a${crypto.randomBytes(5).toString("hex")}`;
+    while (this.data.apps[id]);
+    const now = Date.now();
+    const a = {
+      id,
+      package: `app.patch.tvapp.${id}`,
+      name: cleanName(input.name) || nameFrom(description),
+      kind: "custom",
+      madeBy: "claude",
+      emoji: String(input.emoji || "✨").slice(0, 8),
+      color: cleanColor(input.color) || COLORS[Object.keys(this.data.apps).length % COLORS.length],
+      version: 0,
+      created: now,
+      updated: now,
+      settings: {},
+      photos: [],
+      installs: {},
+      requests: [],
+    };
+    await fsp.mkdir(this.appDir(id), { recursive: true });
+    await this.#saveArt(a, input);
+    this.data.apps[id] = a;
+    this.#startJob(a, { kind: "new", text: description, devices: target ? [target.id] : [] });
+    await this.save();
+    return {
+      ok: true,
+      app: this.publicApp(a),
+      message: `Claude (${CLAUDE_NAME}) is building “${a.name}”. That usually takes two to four minutes${target ? `, then I'll put it on ${this.inventory.displayName(target)}` : ""}. I'll say when it's ready.`,
+    };
+  }
+
+  /** Claude changes an app it built (or one in the person's own code): { instruction, device? }. */
+  async improve(id, input = {}) {
+    const a = this.need(id);
+    if (this.jobs.has(a.id)) throw new TvAppError(`Claude is still working on “${a.name}”. I'll say when it's done.`, 409);
+    if (a.kind !== "custom") throw new TvAppError(`Claude changes the apps it built. “${a.name}” is a ${KINDS[a.kind].label.toLowerCase()}: change what's in it instead, or ask Claude to build a new app.`);
+    if (!a.version) throw new TvAppError(`“${a.name}” wasn't built yet. Ask Claude to try again first.`, 409);
+    this.#checkClaude();
+    const instruction = cleanText(input.instruction ?? input.content, 6000);
+    if (instruction.length < 3) throw new TvAppError(`What should Claude change in “${a.name}”?`);
+    const devices = input.device ? [this.#target(String(input.device)).id] : Object.keys(a.installs || {}).filter((d) => this.inventory.get(d));
+    this.#startJob(a, { kind: "change", text: instruction, devices });
+    await this.save();
+    const names = devices.map((d) => this.inventory.displayName(this.inventory.get(d)));
+    return { ok: true, app: this.publicApp(a), message: `Claude is changing “${a.name}”. That usually takes two or three minutes${names.length ? `, then I'll update it on ${names.join(" and ")}` : ""}. I'll say when it's done.` };
+  }
+
+  /** Run a request that didn't work again. */
+  async retry(id) {
+    const a = this.need(id);
+    if (this.jobs.has(a.id)) throw new TvAppError(`Claude is already working on “${a.name}”.`, 409);
+    if (a.job?.status !== "failed") throw new TvAppError(`There's nothing to try again for “${a.name}”.`, 409);
+    this.#checkClaude();
+    this.#startJob(a, { kind: a.job.kind, text: a.job.text, devices: (a.job.devices || []).filter((d) => this.inventory.get(d)) });
+    await this.save();
+    return { ok: true, app: this.publicApp(a), message: `Claude is trying “${a.name}” again.` };
+  }
+
+  /** Stop Claude. A new app that was never built goes away; a change leaves the app as it was. */
+  async cancel(id) {
+    const a = this.need(id);
+    const abort = this.jobs.get(a.id);
+    if (!abort && a.job?.status !== "failed") throw new TvAppError(`Claude isn't working on “${a.name}”.`, 409);
+    const kind = a.job?.kind;
+    abort?.abort();
+    this.jobs.delete(a.id);
+    a.job = null;
+    if (!a.version) {
+      delete this.data.apps[a.id];
+      await fsp.rm(this.appDir(a.id), { recursive: true, force: true });
+      await this.save();
+      return { ok: true, message: `Stopped. “${a.name}” wasn't built.` };
+    }
+    await this.save();
+    return { ok: true, app: this.publicApp(a), message: kind === "change" ? `Stopped. “${a.name}” is as it was.` : `Stopped.` };
+  }
+
+  #startJob(a, { kind, text, devices = [] }) {
+    const job = { status: "building", kind, text, devices, phase: "starting", chars: 0, started: Date.now() };
+    const abort = new AbortController();
+    a.job = job;
+    this.jobs.set(a.id, abort);
+    this.#run(a, job, abort).catch((err) => this.log(`[patch] Claude: ${err.stack || err.message}`));
+  }
+
+  async #run(a, job, abort) {
+    const current = () => this.data.apps[a.id] === a && a.job === job;
+    let shown = 0;
+    let made;
+    try {
+      const where = this.#where(job.devices.length ? job.devices : Object.keys(a.installs || {}));
+      const request =
+        job.kind === "change"
+          ? changeRequest({ name: a.name, html: await fsp.readFile(path.join(this.appDir(a.id), "custom.html"), "utf8"), instruction: job.text, history: (a.requests || []).map((r) => r.text), where })
+          : newAppRequest({ description: job.text, name: a.name, where });
+      made = await writeApp({
+        apiKey: this.claudeKey,
+        baseURL: this.overrides.claudeBase,
+        request,
+        signal: abort.signal,
+        onProgress: (p) => {
+          if (!current()) return;
+          job.phase = p.phase;
+          job.chars = p.chars;
+          if (Date.now() - shown > 750) {
+            shown = Date.now();
+            this.onChange();
+          }
+        },
+      });
+    } catch (err) {
+      if (!current()) return;
+      this.jobs.delete(a.id);
+      a.job = { ...job, status: "failed", error: err.message, code: err.code || "claude", ended: Date.now() };
+      await this.save();
+      this.onChange();
+      const what = job.kind === "change" ? `change “${a.name}”` : `build “${a.name}”`;
+      this.onBuilt({ ok: false, app: this.publicApp(a), message: `Claude couldn't ${what}. ${err.message}` });
+      return;
+    }
+    if (!current()) return;
+    await fsp.writeFile(path.join(this.appDir(a.id), "custom.html"), made.html);
+    a.madeBy = "claude";
+    if (made.about) a.about = made.about;
+    a.requests = [...(a.requests || []), { text: job.text, at: Date.now() }].slice(-20);
+    a.version++;
+    a.updated = Date.now();
+    job.status = "installing";
+    job.phase = "installing";
+    await this.save();
+    this.onChange();
+    // Then onto the TVs it's for (a new version installs over the old one).
+    const notes = [];
+    for (const d of job.devices) {
+      if (!current()) break;
+      try {
+        const r = await this.putOnTv(a.id, d);
+        notes.push(r.message);
+      } catch (err) {
+        notes.push(err.message);
+      }
+    }
+    if (!this.data.apps[a.id]) return;
+    this.jobs.delete(a.id);
+    if (a.job === job) a.job = null;
+    const message = `${job.kind === "change" ? `Claude changed “${a.name}”.` : `Claude built “${a.name}”.`}${a.about ? ` ${a.about}` : ""}${notes.length ? ` ${notes.join(" ")}` : " It isn't on a TV yet: say which one to put it on."}`;
+    a.lastBuild = { at: Date.now(), kind: job.kind, model: made.model, cost: made.cost, message };
+    await this.save();
+    this.onChange();
+    this.onBuilt({ ok: true, app: this.publicApp(a), message, cost: made.cost });
   }
 
   // ── Serving apps to TV browsers over the WiFi ─────────────────────────────

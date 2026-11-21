@@ -100,6 +100,10 @@ jobs:
         working-directory: patch
         run: node android/prepare-assets.mjs
 
+      - name: Check the app's copy of Patch can use Claude
+        working-directory: patch
+        run: node android/ci/claude-sdk-check.mjs android/app/src/main/assets/patch
+
       - name: Download Node.js for Android
         run: |
           curl -sSfL -o nodejs-mobile.zip "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v${NODEJS_MOBILE_VERSION}/nodejs-mobile-v${NODEJS_MOBILE_VERSION}-android.zip"

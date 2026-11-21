@@ -3272,3 +3272,160 @@ details summary {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Build with Claude ──────────────────────────────── */
+.btn--claude {
+  background: linear-gradient(135deg, #d97757, #b9532f);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 5px 16px color-mix(in srgb, #d97757 30%, transparent);
+}
+
+.btn--claude:hover {
+  filter: brightness(1.06);
+  border-color: transparent;
+  background: linear-gradient(135deg, #d97757, #b9532f);
+}
+
+.btn--claude:disabled {
+  filter: grayscale(0.6);
+  opacity: 0.6;
+}
+
+.kind--claude {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, #d97757 45%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, #d97757 14%, var(--surface)), var(--surface));
+}
+
+.kind--claude:hover,
+.kind--claude:focus-visible {
+  border-color: #d97757;
+}
+
+.tvjob {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #d97757 10%, var(--surface-2));
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+
+.tvjob small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tvjob.is-bad {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-2));
+  color: var(--text);
+}
+
+.tvjob.is-bad > svg {
+  color: var(--danger);
+  flex: none;
+}
+
+.tvjob > span:not(.tvjob__btns):not(.tvjob__spin) {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.tvjob__btns {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tvjob__spin {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, #d97757 30%, transparent);
+  border-top-color: #d97757;
+  animation: spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tvjob__spin {
+    animation-duration: 3s;
+  }
+}
+
+.claude-box {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+
+.claude-about {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.claude-asked,
+.code-details {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.claude-asked summary,
+.code-details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.claude-asked ol {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+}
+
+.code-details {
+  margin: 6px 0 10px;
+}
+
+.code-details .field {
+  margin-top: 10px;
+}
+
+.tvmaker__warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface-2));
+  color: var(--text);
+  font-size: 14px;
+}
+
+.linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--voice);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tvapps__head .btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

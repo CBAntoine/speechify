@@ -906,6 +906,15 @@ async function openSettings(focus) {
         <div class="check" id="ytCheck"></div>
       </label>
     </form>
+    <form data-form="settings-claude" class="panel">
+      <h3>Claude (builds apps for you)</h3>
+      <p style="margin:0 0 10px;color:var(--text-2);font-size:13.5px">With your Anthropic API key, Claude writes whole apps for your TVs from a description: games, family boards, tools. Say “ask Claude to build a snake game for the living room TV”, or tap <b>Build with Claude</b> under TV apps. Then ask for changes the same way.</p>
+      <label class="field"><span>Anthropic API key</span>
+        <div class="row"><input name="anthropicApiKey" type="password" autocomplete="off" placeholder="${s.claude?.hasKey ? `Saved (${esc(s.claude.keyHint)}). Paste a new one to replace it` : "sk-ant-…"}" ${s.claude?.fromEnv ? "disabled" : ""}><button class="btn btn--claude">Save & test</button></div>
+        <small>Create one in the <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console → API keys</a>, and add some credit under Billing. Each app Claude builds or changes uses your account (${esc(s.claude?.model || "Claude Opus 5.5")}); a build usually costs well under a dollar, and Patch shows what it cost. The key stays on ${HERE} and is only ever sent to Anthropic.${s.claude?.fromEnv ? " It's currently set by the PATCH_ANTHROPIC_API_KEY environment variable." : ""}</small>
+        <div class="check" id="claudeCheck"></div>
+      </label>
+    </form>
     <form data-form="settings-ha" class="panel">
       <h3>Home Assistant (optional)</h3>
       <p style="margin:0 0 10px;color:var(--text-2);font-size:13.5px">Already use Home Assistant? Connect it and Patch can control everything it controls, from thermostats and locks to Tapo, Tuya, Nest and ecobee devices.</p>
@@ -922,7 +931,7 @@ ${BOOT.phone ? "" : `<label class="field" style="grid-template-columns:auto 1fr;
       <p style="color:var(--muted);font-size:12.5px;margin:12px 0 0">Settings and saved passwords live in <code>${esc(s.dataDir)}</code>.</p>
     </form>`,
   );
-  const target = focus === "ha" ? 'input[name="haUrl"]' : focus === "el" ? 'input[name="elevenlabsApiKey"]' : null;
+  const target = focus === "ha" ? 'input[name="haUrl"]' : focus === "el" ? 'input[name="elevenlabsApiKey"]' : focus === "claude" ? 'input[name="anthropicApiKey"]' : null;
   if (target) $(target, $("#modal"))?.focus();
 }
 
@@ -935,6 +944,7 @@ async function saveSettings(form) {
     body.agentId = String(fd.get("agentId") || "");
   }
   if (kind === "settings-yt" && fd.get("youtubeApiKey")) body.youtubeApiKey = String(fd.get("youtubeApiKey"));
+  if (kind === "settings-claude" && fd.get("anthropicApiKey")) body.anthropicApiKey = String(fd.get("anthropicApiKey"));
   if (kind === "settings-ha") {
     body.haUrl = String(fd.get("haUrl") || "");
     if (fd.get("haToken")) body.haToken = String(fd.get("haToken"));
@@ -948,7 +958,7 @@ async function saveSettings(form) {
   btn.disabled = true;
   const r = await api("POST", "/api/settings", body).catch((err) => ({ ok: false, checks: { x: { ok: false, message: err.message } } }));
   btn.disabled = false;
-  const check = r.checks?.elevenlabs || r.checks?.youtube || r.checks?.homeAssistant || r.checks?.subnet;
+  const check = r.checks?.elevenlabs || r.checks?.youtube || r.checks?.claude || r.checks?.homeAssistant || r.checks?.subnet;
   const out = $(".check", form);
   if (check) {
     out.className = `check ${check.ok ? "check--ok" : "check--bad"}`;
@@ -964,6 +974,11 @@ async function saveSettings(form) {
     voice.refresh();
   }
   if (kind === "settings-ha" && check?.ok) state.setup.homeAssistant = true;
+  if (kind === "settings-claude" && r.settings?.claude) {
+    state.setup.claude = r.settings.claude.hasKey;
+    tvApps.render();
+    voice.refresh();
+  }
 }
 
 export function toast(text, kind = "ok") {
@@ -1246,6 +1261,12 @@ function connectEvents() {
   es.addEventListener("tvapps", (e) => {
     tvApps.set(JSON.parse(e.data));
     if (state.openId) renderDrawer();
+  });
+  // Claude finished building or changing an app (or couldn't): show it, and tell the conversation.
+  es.addEventListener("tvapp-built", (e) => {
+    const r = JSON.parse(e.data);
+    tvApps.built(r);
+    voice.appBuilt(r);
   });
   es.addEventListener("tuneup", (e) => {
     state.tuneup = JSON.parse(e.data);
