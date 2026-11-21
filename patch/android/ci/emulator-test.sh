@@ -10,6 +10,26 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PKG=app.patch.home
 BASE=http://127.0.0.1:4545
 
+# Google Play services on a freshly booted emulator sometimes crashes or restarts itself, and Android
+# then also stops every app using one of its services (Patch's web view uses its font service). That
+# isn't Patch failing: when Android says that's why it stopped Patch, start from scratch and run every
+# check again, once. Any other failure fails the test.
+if [ -z "${PATCH_EMULATOR_RUN:-}" ]; then
+  if PATCH_EMULATOR_RUN=1 bash "$0" "$@"; then exit 0; fi
+  adb logcat -d -b system,main > "$OUT/android-first-run.txt" 2> /dev/null || true
+  if ! grep -qE "Killing [0-9]+:$PKG/.*depends on provider .* in dying proc" "$OUT/android-first-run.txt"; then exit 1; fi
+  echo
+  echo "Android stopped Patch because Google Play services went down on the emulator (not Patch's doing)."
+  echo "Starting again from scratch, and running every check again…"
+  adb uninstall "$PKG" > /dev/null 2>&1 || true
+  for p in $(adb shell pm list packages app.patch.tvapp | tr -d '\r' | cut -d: -f2); do adb uninstall "$p" > /dev/null 2>&1 || true; done
+  adb shell settings delete secure enabled_accessibility_services > /dev/null 2>&1 || true
+  adb shell settings put secure accessibility_enabled 0 || true
+  adb shell rm -f /sdcard/Download/patch-test.apk || true
+  sleep 20
+  PATCH_EMULATOR_RUN=2 exec bash "$0" "$@"
+fi
+
 # The emulator's graphics driver also writes to the app's output; leave its chatter out.
 patch_log() { adb logcat -d -s Patch:V AndroidRuntime:E DEBUG:V libc:F | grep -v -E "s_gl|glUtils|EGL|Vulkan|eglMakeCurrent" | tail -n "${1:-200}"; }
 fail() {
