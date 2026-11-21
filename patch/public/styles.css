@@ -2055,6 +2055,8 @@ input.range-ct::-moz-range-progress {
 
 .field {
   display: grid;
+  /* One column that can be narrower than a text box's natural width (phones). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   margin-bottom: 14px;
 }
@@ -2072,6 +2074,10 @@ input.range-ct::-moz-range-progress {
 .field .row {
   display: flex;
   gap: 8px;
+}
+
+.field .row .btn {
+  flex: none;
 }
 
 .check {
@@ -2626,6 +2632,10 @@ details summary {
     height: 38px;
   }
   .voice-fab.is-hidden {
+    display: none;
+  }
+  /* A dialog's own buttons sit at its bottom, where the button would cover them. */
+  body:has(#modal.is-open) .voice-fab {
     display: none;
   }
 }
