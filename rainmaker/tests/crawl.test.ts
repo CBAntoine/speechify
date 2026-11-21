@@ -35,8 +35,14 @@ test("phones, emails, address and the contact page from a business's homepage", 
 
 test("domain guesses come from the distinctive part of the name", () => {
   assert.deepEqual(distinctiveWords("Coverall Roofing Ltd."), ["coverall"]);
-  assert.deepEqual(domainCandidates("Coverall Roofing Ltd."), ["coverallroofing.ca", "coverallroofing.com", "coverall-roofing.ca", "coverall-roofing.com"]);
-  assert.deepEqual(domainCandidates("MT Plumbing and Heating", ["com"]), ["mtplumbingandheating.com", "mt-plumbing-and-heating.com", "mtplumbingheating.com"]);
+  assert.deepEqual(domainCandidates("Coverall Roofing Ltd."), [
+    "coverallroofing.ca", "coverallroofing.com", "coverall-roofing.ca", "coverall-roofing.com", "coverall.ca", "coverall.com",
+  ]);
+  assert.deepEqual(domainCandidates("MT Plumbing and Heating", ["com"]), [
+    "mtplumbingandheating.com", "mtplumbing.com", "mt-plumbing-and-heating.com", "mtplumbingheating.com",
+  ]);
+  assert.ok(domainCandidates("Peakflow Plumbing and Drains").includes("peakflowplumbing.ca"), "the first two words");
+  assert.ok(domainCandidates("Peakflow Plumbing and Drains").length <= 8);
   assert.deepEqual(domainCandidates("Roofing Services Ltd."), [], "too generic to guess");
   assert.ok(domainCandidates("A Very Long Business Name That Goes On And On Forever Inc").every((d) => d.split(".")[0].length <= 40));
 });

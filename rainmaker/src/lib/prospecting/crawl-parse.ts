@@ -186,10 +186,16 @@ export function domainCandidates(name: string, tlds: string[] = ["ca", "com"]): 
   const words = nameKey(name).split(" ").filter(Boolean);
   if (!words.length || !distinctiveWords(name).length) return [];
   const joined = words.join("");
+  const firstTwo = words.slice(0, 2).join("");
   const hyphen = words.join("-");
   const noAnd = words.filter((w) => w !== "and").join("");
-  const slugs = [...new Set([joined, hyphen, noAnd])].filter((s) => s.length >= 5 && s.length <= 40);
-  return slugs.flatMap((s) => tlds.map((t) => `${s}.${t}`)).slice(0, 6);
+  // "Peakflow Plumbing and Drains" often lives at peakflowplumbing.ca, or at
+  // peakflow.ca when the distinctive part is long enough to be its own name.
+  const distinct = distinctiveWords(name).join("");
+  const slugs = [...new Set([joined, firstTwo, hyphen, noAnd, ...(distinct.length >= 6 ? [distinct] : [])])].filter(
+    (s) => s.length >= 5 && s.length <= 40
+  );
+  return slugs.flatMap((s) => tlds.map((t) => `${s}.${t}`)).slice(0, 8);
 }
 
 const PARKED =
