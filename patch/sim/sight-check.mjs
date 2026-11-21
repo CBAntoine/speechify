@@ -60,7 +60,9 @@ try {
   await tool({ device: tv, action: "launch_app", value: "Netflix" });
   let r = await tool({ device: tv, action: "read_screen" });
   check(r.ok && /can't be read as a list/.test(r.message) && /picture/.test(r.picture || ""), `read_screen in Netflix says a picture follows: ${r.message}`);
-  await sleep(1500);
+  await sleep(700);
+  check((await sent()).uploads.length === 0, "an app that was only just opened is given a few seconds to appear before it's looked at");
+  await sleep(5800);
   let s = await sent();
   check(s.uploads.length === 1 && s.uploads[0].type === "image/jpeg" && s.uploads[0].head.join() === "255,216,255", `one JPEG went up: ${JSON.stringify(s.uploads[0])}`);
   check(s.uploads[0]?.size && s.uploads[0].size[0] <= 1280 && s.uploads[0].size[0] >= 320, "it's a real picture, at most 1280 across");
@@ -108,7 +110,7 @@ try {
   const before = (await sent()).messages.length;
   await page.evaluate((id) => { const real = window.__patch.ui.picture; window.__patch.ui.picture = async () => { window.__patch.ui.picture = real; throw new Error("Kids Room Fire TV didn't give a picture of its screen."); }; }, null);
   r = await tool({ device: tv, action: "read_screen" });
-  await sleep(1500);
+  await sleep(6000);
   s = await sent();
   check(s.messages.length === before + 1 && s.messages.at(-1).kind === "words" && /couldn't show you Kids Room Fire TV's screen/.test(s.messages.at(-1).text), `no picture: ${s.messages.at(-1)?.text?.slice(0, 110)}…`);
 

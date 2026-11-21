@@ -179,6 +179,10 @@ test("Fire TV over ADB: the allow prompt, then apps, YouTube, browser and typing
   r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "baby shark" });
   assert.equal(r.message, "Asked the YouTube app on Kids Room Fire TV to play “baby shark”. It's playing “Baby shark (Official Video)”.");
   assert.equal(sim.state.firetv.lastIntent.data, "youtube://search?query=baby+shark&isVoice=true&method=play");
+  // Asked by an assistant that can look: the TV has already said what started, so no picture of the screen is needed.
+  r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "wheels on the bus", sight: true });
+  assert.match(r.message, /It's playing “Wheels on the bus \(Official Video\)”\.$/);
+  assert.equal(r.picture, undefined);
   sim.state.firetv.playing = null;
   r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "dQw4w9WgXcQ" });
   assert.equal(sim.state.firetv.lastIntent.data, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
@@ -604,7 +608,8 @@ test("sight: when a TV's screen can't be read as a list, whoever can look is sen
   // Asked by the assistant in a conversation that takes pictures: a picture is to follow.
   r = await control({ device: tv, action: "read_screen", sight: true });
   assert.match(r.message, /^Netflix is on Kids Room Fire TV\. It draws its own picture, so it can't be read as a list\. A picture of the screen follows/);
-  assert.deepEqual(r.picture, { wait: 0 });
+  assert.ok(r.picture.wait > 3000 && r.picture.wait <= 5000, `an app that was only just opened is given a few seconds to appear before it's looked at: ${JSON.stringify(r.picture)}`);
+  assert.equal(r.screen, undefined, "nothing was asked of Android for a list this app doesn't have");
   // The picture itself is the TV's screen, as a PNG.
   const d = await named(tv);
   const png = Buffer.from(await (await fetch(`${base}/api/devices/${encodeURIComponent(d.id)}/screen.png`, { headers: { "x-patch-token": app.token } })).arrayBuffer());

@@ -384,13 +384,25 @@ async function readScreen(client, device, ctx) {
   }
   if (!xml.includes("<hierarchy")) throw new DeviceError(`I couldn't see ${device.name}'s screen just now (it may be playing a video). Try again in a moment.`, { code: "ESCREEN" });
   const tree = readUiTree(xml);
-  const screen = { app: tree.package ? (LAUNCHERS.test(tree.package) ? "Home screen" : appName(tree.package)) : device.name, items: tree.items, more: tree.more, full: tree.full, at: Date.now() };
+  const screen = { app: tree.package ? (LAUNCHERS.test(tree.package) ? "Home screen" : appName(tree.package)) : device.name, pkg: tree.package || null, items: tree.items, more: tree.more, full: tree.full, at: Date.now() };
   ctx.memory?.set(`tv-screen:${device.id}`, screen);
   return screen;
 }
 
 // Said to an assistant that can look, when a picture of the screen is on its way to it.
 const SEE = "A picture of the screen follows in the next message: look at it before the next step.";
+// Apps that draw their own picture, so there's nothing to read as a list: with sight they're looked
+// at straight away, without first asking Android for a list it doesn't have. More are learnt as they're met.
+const DRAWS = new Set(["com.google.android.youtube.tv", "com.amazon.firetv.youtube", "com.google.android.youtube.tvkids", "com.google.android.youtube.tvmusic", "com.google.android.youtube.tvunplugged", "com.netflix.ninja"]);
+// A just-opened app needs a few seconds before there's anything to look at.
+const OPENING_MS = 5000;
+const openedAgo = (ctx, device) => Date.now() - (ctx.memory?.get(`tv-opened:${device.id}`) || 0);
+/** With sight: the app in front, if it's one that draws its own picture. */
+async function drawsOwn(client, ctx) {
+  if (!ctx.sight) return null;
+  const pkg = await focusedPkg(client);
+  return pkg && DRAWS.has(pkg) ? pkg : null;
+}
 
 /**
  * After something in an app that can't be read as a list (the YouTube app): with sight, a picture of
@@ -398,6 +410,8 @@ const SEE = "A picture of the screen follows in the next message: look at it bef
  */
 function seen(ctx, wait, r) {
   if (!ctx.sight || !r?.ok || !r.next) return r;
+  // The TV has already said what started playing: nothing more to look for.
+  if (/It's playing “/.test(r.message)) return { ...r, next: "To see the screen at any time, use read_screen: a picture of it is sent to you. The remote (press_button) works the app." };
   return { ...r, next: `${SEE} Then work the app with the remote (press_button), or point at a spot with tap "at X% Y%".`, picture: { wait } };
 }
 
@@ -432,10 +446,12 @@ async function afterButtons(client, device, ctx, steps, lead) {
       const page = await web.session.snapshot();
       return done(lead, { screen: describePage(page, { where: appName(web.pkg) === web.pkg ? "Patch's browser" : appName(web.pkg) }).text });
     }
+    if (await drawsOwn(client, ctx)) return done(`${lead} ${SEE}`, { picture: { wait: 300 } });
     const screen = await readScreen(client, device, ctx);
     const on = screen.items.find((it) => /selected/.test(it.state || ""));
     const d = describeScreen(screen);
     // An app that draws its own picture can't be read as a list: whoever can look is shown the picture instead.
+    if (screen.items.length < 3 && screen.pkg && !LAUNCHERS.test(screen.pkg)) DRAWS.add(screen.pkg);
     if (screen.items.length < 3) return ctx.sight ? done(`${lead} ${SEE}`, { picture: { wait: 300 } }) : done(`${lead} ${screen.app} draws its own picture, so I can't see where that left the remote.`);
     return done(`${lead}${on ? ` The remote is on “${on.text}” now.` : ""}`, { screen: d.text });
   } catch {
@@ -827,6 +843,7 @@ export default {
         case "launch_app": {
           const pkg = await findPackage(client, device, need(value, "app"));
           await launchPkg(client, pkg);
+          ctx.memory?.set(`tv-opened:${device.id}`, Date.now());
           return done(`Opening ${appName(pkg)} on ${device.name}.`, { state: { ...device.state, on: true, app: appName(pkg) } });
         }
         case "list_apps": {
@@ -855,11 +872,16 @@ export default {
             const d = describePage(page, { where: appName(web.pkg) === web.pkg ? "Patch's browser" : appName(web.pkg) });
             return done(d.summary, { screen: d.text });
           }
-          // With sight, an app that can't be read as a list (or is in the middle of a video) is looked at instead.
+          // With sight, an app that can't be read as a list (or is in the middle of a video) is looked at instead:
+          // once it has had a few seconds to appear, if it was only just opened.
+          const wait = Math.max(0, OPENING_MS - openedAgo(ctx, device));
+          const own = await drawsOwn(client, ctx);
+          if (own) return done(`${appName(own)} is on ${device.name}. It draws its own picture, so it can't be read as a list. ${SEE}`, { picture: { wait } });
           const screen = await readScreen(client, device, ctx).catch((err) => (ctx.sight ? null : Promise.reject(err)));
-          if (!screen) return done(`${device.name}'s screen can't be read as a list just now. ${SEE}`, { picture: { wait: 0 } });
+          if (!screen) return done(`${device.name}'s screen can't be read as a list just now. ${SEE}`, { picture: { wait } });
           const d = describeScreen(screen);
-          if (screen.items.length < 3 && ctx.sight) return done(`${screen.app} is on ${device.name}. It draws its own picture, so it can't be read as a list. ${SEE}`, { screen: d.text, picture: { wait: 0 } });
+          if (screen.items.length < 3 && screen.pkg && !LAUNCHERS.test(screen.pkg)) DRAWS.add(screen.pkg);
+          if (screen.items.length < 3 && ctx.sight) return done(`${screen.app} is on ${device.name}. It draws its own picture, so it can't be read as a list. ${SEE}`, { screen: d.text, picture: { wait } });
           const thin = screen.items.length < 3 ? ` ${screen.app} draws its own picture, so I can only read a little of it; I can still press the remote's buttons.` : "";
           return done(`${d.summary}${thin}`, { screen: d.text });
         }
