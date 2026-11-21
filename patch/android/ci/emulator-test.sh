@@ -130,6 +130,9 @@ echo "Music: no Spotify on this emulator, so Patch should say so."
 expect no-spotify "$(phone '"action":"play_music","value":"Bohemian Rhapsody on Spotify"')" '!r.ok && /Spotify/.test(r.message)'
 expect volume "$(phone '"action":"volume_up"')" 'r.ok && /Volume \d+%/.test(r.message)'
 
+echo "Choosing files on the phone (an app file to send to a TV, photos for a TV app)…"
+node "$HERE/file-picker-check.mjs" "$OUT" "$(dirname "$OUT")/tvapp-notes.apk" || fail "the file picker check failed"
+
 echo "TV apps made by Patch, installed over ADB the way Patch does on a TV…"
 node "$HERE/tvapp-check.mjs" "$(dirname "$OUT")" "$OUT" || fail "the TV app check failed"
 

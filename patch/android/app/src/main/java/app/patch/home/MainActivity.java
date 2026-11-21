@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -16,13 +17,16 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -40,6 +44,9 @@ import android.widget.Toast;
 import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Locale;
 
 /**
  * Patch's screen: the same dashboard as on a computer, shown from Patch's server running on this phone.
@@ -50,6 +57,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "Patch";
     private static final int ASK_MIC = 1;
     private static final int ASK_NOTIFY = 2;
+    private static final int PICK_FILES = 3;
     private static WeakReference<MainActivity> current = new WeakReference<>(null);
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -60,6 +68,7 @@ public class MainActivity extends Activity {
     private Button retry;
     private WifiManager.MulticastLock multicast;
     private PermissionRequest waitingForMic;
+    private ValueCallback<Uri[]> waitingForFiles;
     private boolean loaded;
     private boolean loadFailed;
 
@@ -314,6 +323,11 @@ public class MainActivity extends Activity {
             public void onPermissionRequest(PermissionRequest request) {
                 main.post(() -> answerPermission(request));
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                return pickFiles(callback, params);
+            }
         });
     }
 
@@ -433,6 +447,77 @@ public class MainActivity extends Activity {
             waitingForMic.deny();
         }
         waitingForMic = null;
+    }
+
+    // ── Files (an app file for a TV, photos for a TV app) ───────────────────
+
+    /** The dashboard's file buttons open Android's own picker, for the kinds of file the button takes. */
+    private boolean pickFiles(ValueCallback<Uri[]> callback, WebChromeClient.FileChooserParams params) {
+        // The page waits for an answer to every pick, even an unfinished one, before it can ask again.
+        if (waitingForFiles != null) waitingForFiles.onReceiveValue(null);
+        waitingForFiles = null;
+        String[] types = mimeTypes(params.getAcceptTypes());
+        Intent pick = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE);
+        if (types.length == 1) {
+            pick.setType(types[0]);
+        } else {
+            pick.setType("*/*");
+            pick.putExtra(Intent.EXTRA_MIME_TYPES, types);
+        }
+        if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try {
+            startActivityForResult(pick, PICK_FILES);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, R.string.no_files, Toast.LENGTH_LONG).show();
+            return false;
+        }
+        waitingForFiles = callback;
+        Log.i(TAG, "Choosing " + (pick.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) ? "files" : "a file") + " (" + TextUtils.join(", ", types) + ")");
+        return true;
+    }
+
+    /** A file button's accept list as Android file types: ".apk" is an app file, "image/*" stays; anything else means any file. */
+    static String[] mimeTypes(String[] accept) {
+        LinkedHashSet<String> types = new LinkedHashSet<>();
+        if (accept != null) {
+            for (String item : accept) {
+                if (item == null) continue;
+                for (String part : item.split(",")) {
+                    String t = part.trim().toLowerCase(Locale.ROOT);
+                    if (t.isEmpty()) continue;
+                    if (t.startsWith(".")) t = MimeTypeMap.getSingleton().getMimeTypeFromExtension(t.substring(1));
+                    if (t == null || !t.contains("/") || "*/*".equals(t)) return new String[] {"*/*"};
+                    types.add(t);
+                }
+            }
+        }
+        return types.isEmpty() ? new String[] {"*/*"} : types.toArray(new String[0]);
+    }
+
+    @Override
+    protected void onActivityResult(int code, int result, Intent data) {
+        super.onActivityResult(code, result, data);
+        if (code != PICK_FILES || waitingForFiles == null) return;
+        ValueCallback<Uri[]> callback = waitingForFiles;
+        waitingForFiles = null;
+        Uri[] files = result == RESULT_OK ? pickedFiles(data) : null;
+        Log.i(TAG, files == null ? "No file chosen" : "Chose " + files.length + (files.length == 1 ? " file" : " files"));
+        callback.onReceiveValue(files);
+    }
+
+    /** One file comes back as the answer's data, several as its clip (some pickers send one file both ways). */
+    private static Uri[] pickedFiles(Intent data) {
+        if (data == null) return null;
+        ArrayList<Uri> files = new ArrayList<>();
+        ClipData clip = data.getClipData();
+        if (clip != null) {
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri u = clip.getItemAt(i).getUri();
+                if (u != null) files.add(u);
+            }
+        }
+        if (files.isEmpty() && data.getData() != null) files.add(data.getData());
+        return files.isEmpty() ? null : files.toArray(new Uri[0]);
     }
 
     // ── Hearing devices announce themselves ─────────────────────────────────
