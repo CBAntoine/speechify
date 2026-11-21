@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A 9:16 crop frame with a play mark: the app in one glyph. -->
+    <path
+        android:pathData="M40,30h28v48h-28z"
+        android:strokeColor="#FF5EEAD4"
+        android:strokeWidth="3"
+        android:fillColor="#00000000" />
+    <path android:pathData="M37,27h6v6h-6zM65,27h6v6h-6zM37,75h6v6h-6zM65,75h6v6h-6z" android:fillColor="#FF5EEAD4" />
+    <path android:pathData="M49,44l14,10l-14,10z" android:fillColor="#FFFF3D8B" />
+</vector>
