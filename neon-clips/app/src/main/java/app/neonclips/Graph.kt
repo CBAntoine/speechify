@@ -17,7 +17,7 @@ object Graph {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val settings by lazy { Settings(app) }
     val store by lazy { ProjectStore(app) }
-    val ytDlp by lazy { YtDlp(app) }
+    val ytDlp by lazy { YtDlp(app, settings, scope) }
     val imports by lazy { ImportManager(app, store, settings, ytDlp, scope) }
 
     fun init(application: Application) {

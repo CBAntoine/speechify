@@ -139,7 +139,10 @@ class ImportManager(
             heatOffsetMs = origin?.offsetMs ?: 0,
             clipMs = settings.clipSeconds * 1000L,
         )
+        require(probe.durationMs > 0) { "This video has no length the app can read." }
+        // Every project has something to edit, even when nothing stood out.
         val clips = moments.mapIndexed { i, m -> Clip(id = "c${i + 1}", startMs = m.startMs, endMs = m.endMs) }
+            .ifEmpty { listOf(Clip(id = "c1", startMs = 0, endMs = minOf(probe.durationMs, settings.clipSeconds * 1000L))) }
         store.save(
             Project(
                 id = id,

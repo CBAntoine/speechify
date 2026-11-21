@@ -10,6 +10,8 @@ import app.neonclips.core.CamKey
 import app.neonclips.core.Caption
 import app.neonclips.core.Captions
 import app.neonclips.core.Clip
+import app.neonclips.core.Discover
+import app.neonclips.core.TimeWindow
 import app.neonclips.core.Highlights
 import app.neonclips.core.Project
 import app.neonclips.core.Reframe
@@ -19,6 +21,8 @@ import app.neonclips.media.AudioScan
 import app.neonclips.media.Exporter
 import app.neonclips.media.FaceScan
 import app.neonclips.media.MediaProbe
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -204,5 +208,34 @@ class PipelineTest {
         // The cut is at 3.0 s; the crop must switch within a couple of frames of it.
         assertTrue("still left at 2.9 s", Reframing.sample(keys, 2900).first < 0.4f)
         assertTrue("already right at 3.1 s", Reframing.sample(keys, 3100).first > 0.6f)
+    }
+
+    /**
+     * Runs the bundled yt-dlp on the device against the live site. Only runs when a proxy is
+     * passed (`-e proxy http://10.0.2.2:PORT`), which is how an emulator inside a locked-down
+     * build machine reaches the internet; certificate checks are off for that hop only, in this
+     * test only. The app itself never does either.
+     */
+    @Test
+    fun bundledDownloaderSearchesFromTheDevice() {
+        val proxy = InstrumentationRegistry.getArguments().getString("proxy")
+        assumeTrue("no proxy given", proxy != null)
+        YoutubeDL.getInstance().init(context)
+        val request = YoutubeDLRequest(Discover.searchUrl("gta 6", TimeWindow.WEEK)).apply {
+            addOption("--flat-playlist")
+            addOption("--dump-json")
+            addOption("--playlist-end", 6)
+            addOption("--extractor-args", "youtubetab:approximate_date")
+            addOption("--no-warnings")
+            addOption("--proxy", proxy!!)
+            addOption("--no-check-certificates")
+        }
+        val response = YoutubeDL.getInstance().execute(request)
+        File(outDir, "search.jsonl").writeText(response.out)
+        val hits = Discover.parseSearch(response.out)
+        assertTrue("got ${hits.size} results; stderr: ${response.err.take(400)}", hits.size >= 3)
+        assertTrue(hits.all { it.url.startsWith("https://") && it.title.isNotBlank() })
+        assertTrue("view counts present", hits.count { (it.views ?: 0) > 0 } >= 3)
+        assertTrue("most viewed first", hits.zipWithNext().count { (a, b) -> (a.views ?: 0) >= (b.views ?: 0) } >= hits.size - 2)
     }
 }

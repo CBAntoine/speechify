@@ -1,20 +1,26 @@
 package app.neonclips.source
 
 import android.content.Context
+import android.util.Log
 import app.neonclips.core.Discover
 import app.neonclips.core.Length
 import app.neonclips.core.RemoteInfo
 import app.neonclips.core.TimeWindow
 import app.neonclips.core.VideoHit
+import app.neonclips.data.Settings
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /** [raw] is the downloader's own error text, when there was one. */
@@ -24,19 +30,50 @@ class SourceException(message: String, val raw: String = message) : Exception(me
  * Finds and fetches videos with yt-dlp, which runs on the phone itself. The first call unpacks
  * its Python runtime, which takes a few seconds.
  */
-class YtDlp(private val context: Context) {
+class YtDlp(private val context: Context, private val settings: Settings, private val scope: CoroutineScope) {
     private val initLock = Mutex()
     private var ready = false
     private var updatedThisRun = false
 
     private suspend fun ensureReady() = initLock.withLock {
-        if (ready) return@withLock
+        if (!ready) start()
+        refreshIfStale()
+    }
+
+    /**
+     * The yt-dlp that ships inside the app is as old as the app. Video sites break old versions
+     * within weeks, so the newest one is fetched before first use and every few days after.
+     * Being offline or slow just skips it; the next call tries again.
+     */
+    private suspend fun refreshIfStale() {
+        if (System.currentTimeMillis() - settings.downloaderUpdatedAt < REFRESH_EVERY_MS) return
+        // The fetch runs on its own so a dead connection cannot hold a search hostage: after
+        // half a minute the caller carries on with the version it has and the fetch finishes
+        // (or fails) in the background.
+        val job = refreshing?.takeIf { it.isActive } ?: scope.async(Dispatchers.IO) {
+            try {
+                YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel._NIGHTLY)
+                updatedThisRun = true
+                settings.downloaderUpdatedAt = System.currentTimeMillis()
+            } catch (e: Throwable) {
+                Log.w("NeonClips", "Downloader update skipped", e)
+            }
+            Unit
+        }.also { refreshing = it }
+        withTimeoutOrNull(30_000) { job.await() }
+    }
+
+    private var refreshing: Deferred<Unit>? = null
+
+    private suspend fun start() {
         withContext(Dispatchers.IO) {
             try {
                 YoutubeDL.getInstance().init(context)
                 FFmpeg.getInstance().init(context)
-            } catch (e: Exception) {
-                throw SourceException("The downloader could not start: ${e.message}")
+            } catch (e: Throwable) {
+                // Errors too, not just exceptions: a downloader that cannot start must never take the app down.
+                Log.e("NeonClips", "Downloader failed to start", e)
+                throw SourceException("The downloader could not start: ${e.message ?: e.javaClass.simpleName}")
             }
         }
         ready = true
@@ -127,6 +164,7 @@ class YtDlp(private val context: Context) {
             try {
                 YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel._NIGHTLY)
                 updatedThisRun = true
+                settings.downloaderUpdatedAt = System.currentTimeMillis()
                 YoutubeDL.getInstance().versionName(context) ?: "updated"
             } catch (e: Exception) {
                 throw SourceException("Could not update the downloader: ${e.message}")
@@ -189,8 +227,7 @@ class YtDlp(private val context: Context) {
                 "The site asked this network to sign in before it will serve the video. Try again later or on another connection."
             raw.contains("Private video", true) -> "That video is private."
             raw.contains("live event will begin", true) || raw.contains("is live", true) -> "That stream is still live. Clip it once it has ended."
-            raw.contains("Unable to download webpage", true) || raw.contains("resolve host", true) || raw.contains("timed out", true) ->
-                "No connection to the site. Check your internet and try again."
+            OFFLINE.any { raw.contains(it, true) } -> "No connection to the site. Check your internet and try again."
             raw.contains("Unsupported URL", true) -> "That link is not a video the downloader recognises."
             line.isNotBlank() -> line.removePrefix("ERROR:").trim().take(220)
             else -> "The download failed."
@@ -198,6 +235,14 @@ class YtDlp(private val context: Context) {
     }
 
     private companion object {
+        const val REFRESH_EVERY_MS = 3 * 24 * 3600 * 1000L
         val FFMPEG_TIME = Regex("""time=(\d+):(\d+):(\d+(?:\.\d+)?)""")
+
+        /** Ways the downloader says the network is not there. */
+        val OFFLINE = listOf(
+            "No address associated with hostname", "Temporary failure in name resolution", "Name or service not known",
+            "Network is unreachable", "resolve host", "timed out", "Connection refused", "Connection reset",
+            "Unable to download webpage", "Unable to download API page", "TransportError",
+        )
     }
 }

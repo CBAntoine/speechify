@@ -240,8 +240,10 @@ class EditorController(
 
     /** Moves the clip's ends. Keeps it inside the source and between the shortest and longest allowed lengths. */
     fun setRange(startMs: Long, endMs: Long) = update { c ->
-        var s = startMs.coerceIn(0, project.durationMs - MIN_CLIP_MS)
-        var e = endMs.coerceIn(s + MIN_CLIP_MS, project.durationMs)
+        // A source shorter than the usual minimum is allowed to be one whole clip.
+        val shortest = min(MIN_CLIP_MS, project.durationMs)
+        var s = startMs.coerceIn(0, max(0, project.durationMs - shortest))
+        var e = endMs.coerceIn(min(project.durationMs, s + shortest), project.durationMs)
         if (e - s > MAX_CLIP_MS) {
             if (s != c.startMs) s = e - MAX_CLIP_MS else e = s + MAX_CLIP_MS
         }

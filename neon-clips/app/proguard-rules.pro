@@ -2,7 +2,10 @@
 # metadata with Jackson. Keep both whole; they are small next to the binaries they drive.
 -keep class com.yausername.** { *; }
 -keep class com.fasterxml.jackson.** { *; }
--keepnames class org.apache.commons.compress.** { *; }
+# Unpacking Python goes through commons-compress, which builds its zip "extra field" handlers
+# by reflection. Shrunk, that throws the first time the downloader starts.
+-keep class org.apache.commons.compress.** { *; }
+-keep class org.apache.commons.io.** { *; }
 -dontwarn com.fasterxml.jackson.**
 -dontwarn org.apache.commons.**
 -dontwarn java.beans.**
@@ -22,3 +25,8 @@
 -keep class com.google.android.libraries.vision.** { *; }
 -keep class com.google.android.odml.** { *; }
 -keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
+
+# Image loading finds its network and decoder parts through ServiceLoader.
+-keep class coil3.network.** { *; }
+-keep class * implements coil3.util.FetcherServiceLoaderTarget { *; }
+-keep class * implements coil3.util.DecoderServiceLoaderTarget { *; }

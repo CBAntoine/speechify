@@ -25,6 +25,11 @@ class Settings(context: Context) {
         get() = prefs.getString("last_query", "GTA 6").orEmpty()
         set(v) = prefs.edit { putString("last_query", v) }
 
+    /** When the downloader last fetched its newest version, in epoch milliseconds. */
+    var downloaderUpdatedAt: Long
+        get() = prefs.getLong("downloader_updated_at", 0)
+        set(v) = prefs.edit { putLong("downloader_updated_at", v) }
+
     var rightsNoticeSeen: Boolean
         get() = prefs.getBoolean("rights_notice", false)
         set(v) = prefs.edit { putBoolean("rights_notice", v) }
