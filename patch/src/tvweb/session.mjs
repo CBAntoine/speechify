@@ -13,6 +13,17 @@ import { sleep } from "../util.mjs";
 
 const PAGE_JS = fs.readFileSync(new URL("./page.js", import.meta.url), "utf8");
 export const PAGE_VERSION = Number(PAGE_JS.match(/var VERSION = (\d+);/)?.[1]);
+// The page's message boxes, while Patch is carrying out a step (see boxes.js).
+const BOXES_JS = fs.readFileSync(new URL("./boxes.js", import.meta.url), "utf8");
+// How long one step may keep the boxes for itself, by the page's own clock.
+const STEP_MS = 9000;
+const forget = `try{window.sessionStorage.removeItem("__patchBoxes")}catch(e){}`;
+const takeBoxes = (yes) => `(function(){var b=window.__patchBoxes;if(!b)return "none";b.until=Date.now()+${STEP_MS};b.yes=${yes ? "true" : "false"};b.seen.length=0;${forget};return "ok"})()`;
+const GIVE_BOXES = `(function(){var b=window.__patchBoxes;if(!b)return "[]";b.until=0;b.yes=false;${forget};return JSON.stringify(b.seen.splice(0,b.seen.length))})()`;
+// How long to wait for the page to hear of a pointer move (it hears with its next frame, which a
+// busy TV can take a while to draw), and of a press.
+const MOVE_WAIT = 720;
+const PRESS_WAIT = 900;
 
 // The page's own world went away (it's moving to another page): wait and look again.
 const gone = (e) => e?.code === "ECDP" && /context|navigat|destroyed|detached|closed/i.test(e.message || "");
@@ -26,7 +37,10 @@ const risky = (info) => (info.kind === "Link" ? RISKY_LINK.test(info.text || "")
  * or told to the page directly when those didn't arrive. The Android build prints these after
  * using a real WebView, to show which way a real TV takes them.
  */
-export const stats = { clicks: 0, clicksInside: 0, strays: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0 };
+export const stats = { clicks: 0, clicksInside: 0, strays: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0, boxes: 0, boxesOutside: 0, misses: [] };
+const missed = (what, why) => {
+  if (stats.misses.length < 30) stats.misses.push(`${what}: ${why}`);
+};
 
 export const hostOf = (url) => {
   try {
@@ -85,14 +99,32 @@ export class WebSession {
         this.contextId = null;
       }
     });
-    // A page's own message box stops the page until it's answered. An "OK" box is answered; a
-    // question ("Are you sure?") gets Cancel unless the person has already said yes to this step.
+    // A page's own message box stops the page until it's answered. During a step, boxes.js answers
+    // them inside the page. One that gets past it (a box from another frame, or as a page loads) is
+    // answered here at once if Patch is in the middle of a step: an "OK" box is accepted, a question
+    // ("Are you sure?") gets Cancel unless the person has already said yes to this step. At any
+    // other time the box is the person's, with the remote; Patch answers it only if it's still up
+    // when Patch next needs the page.
     this.sayYes = false;
+    this.busyUntil = 0;
+    this.pending = null;
+    this.moveWait = MOVE_WAIT;
     cdp.on("Page.javascriptDialogOpening", ({ type, message }) => {
-      const accept = type === "alert" || type === "beforeunload" || (type === "confirm" && this.sayYes);
-      this.dialog = { type, message: String(message || "").slice(0, 300), accepted: accept };
-      cdp.send("Page.handleJavaScriptDialog", { accept }).catch(() => {});
+      const box = { type, message: String(message || "").slice(0, 300) };
+      if (Date.now() < this.busyUntil) this.#answer(box);
+      else this.pending = box;
     });
+    cdp.on("Page.javascriptDialogClosed", () => {
+      this.pending = null;
+    });
+  }
+
+  #answer(box) {
+    const accept = box.type === "alert" || box.type === "beforeunload" || (box.type === "confirm" && this.sayYes);
+    this.pending = null;
+    this.dialog = { ...box, accepted: accept };
+    stats.boxesOutside++;
+    return this.cdp.send("Page.handleJavaScriptDialog", { accept }, { timeout: 4000 }).catch(() => {});
   }
 
   /** Connect to the page the browser is showing. `open` opens a new stream to the browser's debugging socket. */
@@ -107,6 +139,9 @@ export class WebSession {
       session.close();
       throw e;
     }
+    // boxes.js goes into every page from now on, before the page's own scripts, and into this one.
+    await session.send("Page.addScriptToEvaluateOnNewDocument", { source: BOXES_JS }).catch(() => session.send("Page.addScriptToEvaluateOnLoad", { scriptSource: BOXES_JS }).catch(() => {}));
+    await s.#main(BOXES_JS);
     return s;
   }
 
@@ -135,7 +170,41 @@ export class WebSession {
     return this.contextId;
   }
 
+  /** Run something in the page's own world, where its scripts live. Undefined if the page can't answer just now. */
+  async #main(expression) {
+    try {
+      const r = await this.cdp.send("Runtime.evaluate", { expression, returnByValue: true }, { timeout: 4000 });
+      return r.exceptionDetails ? undefined : r.result?.value;
+    } catch (e) {
+      if (e?.code === "ECDP" || e?.code === "ETIMEDOUT") return undefined;
+      throw e;
+    }
+  }
+
+  /** A step begins: until it's done, the page's message boxes are answered and noted, not shown (boxes.js). */
+  async #begin(yes = false, ms = STEP_MS) {
+    this.sayYes = yes;
+    this.busyUntil = Date.now() + ms;
+    if ((await this.#main(takeBoxes(yes))) === "none") {
+      await this.#main(BOXES_JS);
+      await this.#main(takeBoxes(yes));
+    }
+  }
+
+  /** The step is over: the boxes are the person's again. Resolves with the ones the page showed meanwhile. */
+  async #end() {
+    this.busyUntil = 0;
+    this.sayYes = false;
+    try {
+      return JSON.parse((await this.#main(GIVE_BOXES)) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
   async #eval(expression) {
+    // A message box left up on the page (one the person hasn't answered) stops the page: answer it first.
+    if (this.pending) await this.#answer(this.pending);
     const contextId = await this.#world();
     const r = await this.cdp.send("Runtime.evaluate", { expression, returnByValue: true, ...(contextId ? { contextId } : {}) }, { timeout: 8000 });
     if (r.exceptionDetails) throw new DeviceError(`The page didn't let Patch look at it (${String(r.exceptionDetails.exception?.description || r.exceptionDetails.text || "script error").split("\n")[0].slice(0, 120)}).`, { code: "EPAGE" });
@@ -193,7 +262,10 @@ export class WebSession {
   /** What a step did, and the page as it is afterwards. */
   async #after(result, opts) {
     await this.settle(opts);
-    const dialog = this.dialog;
+    const said = await this.#end();
+    stats.boxes += said.length;
+    // A question that got "no" comes first (the person decides it); else the last thing the page said.
+    const dialog = said.find((d) => d.type === "confirm" && !d.accepted) || said[said.length - 1] || this.dialog;
     this.dialog = null;
     return { ...result, ...(dialog ? { dialog } : {}), page: await this.snapshot() };
   }
@@ -202,6 +274,9 @@ export class WebSession {
 
   async goto(url) {
     this.dialog = null;
+    if (this.pending) await this.#answer(this.pending);
+    // Leaving a page that asks "are you sure you want to leave?": yes, the person asked for another.
+    this.busyUntil = Date.now() + 20_000;
     const r = await this.cdp.send("Page.navigate", { url }, { timeout: 20_000 });
     if (r.errorText && !/ERR_ABORTED/.test(r.errorText)) {
       const why = /NAME_NOT_RESOLVED/.test(r.errorText) ? "there's no site at that address" : /INTERNET_DISCONNECTED|NETWORK_CHANGED|ADDRESS_UNREACHABLE/.test(r.errorText) ? "the TV isn't on the internet" : /CONNECTION_REFUSED|CONNECTION_RESET|TIMED_OUT/.test(r.errorText) ? "the site didn't answer" : /CERT|SSL/.test(r.errorText) ? "the site's security certificate isn't right" : "it wouldn't load";
@@ -250,21 +325,24 @@ export class WebSession {
     try {
       // Move the pointer there first and see where the page says it arrived: if the browser
       // counts positions differently (a zoomed-out page), aim again before pressing.
-      await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }, { timeout: 4000 });
-      await sleep(40);
-      const first = await this.#seen("seenSoFar", id);
+      const first = await this.#moveTo(x, y, id);
       if (first.changed) return "changed";
       const move = first.move;
-      if (!move) return "missed";
+      if (!move) {
+        // A browser that never passes the pointer on: stop waiting so long for it.
+        this.moveWait = Math.max(160, Math.round(this.moveWait / 2));
+        this.why = "the pointer's move didn't reach the page";
+        return "missed";
+      }
+      this.moveWait = MOVE_WAIT;
       let cx = x;
       let cy = y;
       if (Math.abs(move.x - x) > 3 || Math.abs(move.y - y) > 3) {
+        this.why = `the pointer arrived at ${move.x}, ${move.y}, not ${x}, ${y}`;
         if (move.x < 1 || move.y < 1) return "missed";
         cx = Math.round((x * x) / move.x);
         cy = Math.round((y * y) / move.y);
-        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: cx, y: cy }, { timeout: 4000 });
-        await sleep(40);
-        const second = await this.#seen("seenSoFar", id);
+        const second = await this.#moveTo(cx, cy, id, move);
         if (second.changed) return "changed";
         const again = second.move;
         if (!again || Math.abs(again.x - x) > 4 || Math.abs(again.y - y) > 4) return "missed";
@@ -274,8 +352,21 @@ export class WebSession {
       return "sent";
     } catch (e) {
       if (gone(e)) return "sent"; // the page is already on its way somewhere else
+      this.why = `the browser wouldn't take a click (${String(e?.message || e).slice(0, 80)})`;
       return "missed";
     }
+  }
+
+  /** Move the pointer and wait for the page to say where it arrived. `old` is where it was said to be before. */
+  async #moveTo(x, y, id, old = null) {
+    await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }, { timeout: 4000 });
+    let seen = {};
+    for (let waited = 0; waited < this.moveWait; waited += 40) {
+      await sleep(40);
+      seen = await this.#seen("seenSoFar", id);
+      if (seen.changed || (seen.move && !(old && seen.move.x === old.x && seen.move.y === old.y))) break;
+    }
+    return seen;
   }
 
   /** Choose something on the page. Text boxes are made ready for typing rather than clicked. */
@@ -295,19 +386,25 @@ export class WebSession {
       throw Object.assign(new DeviceError(`“${info.text}” is behind something else on the page${info.covered ? ` (“${info.covered}”)` : ""}. Deal with that first: it may have a Close or Accept button.`, { code: "ECOVERED" }), { screen: page ? describePage(page).text : undefined });
     }
     this.dialog = null;
-    this.sayYes = confirmed;
+    await this.#begin(confirmed);
     const id = pageId(await this.call("watch"));
+    this.why = "";
     const sent = await this.#clickAt(info.x, info.y, id);
     if (sent === "changed") {
       // Another page loaded by itself before the press: nothing was chosen, and the numbers are old.
-      this.sayYes = false;
+      await this.#end();
       const page = await this.snapshot().catch(() => null);
       throw Object.assign(new DeviceError(`The page changed just as I went to choose “${info.text}”. Here's what it shows now.`, { code: "ESTALE" }), { screen: page ? describePage(page).text : undefined });
     }
     let seen = null;
     if (sent === "sent") {
-      await sleep(120);
-      seen = await this.#seen("watched", id);
+      for (let waited = 0; waited < PRESS_WAIT; waited += 60) {
+        await sleep(60);
+        seen = await this.#seen("seenSoFar", id);
+        if (seen.changed || seen.clicked) break;
+      }
+      if (!seen.changed) seen = await this.#seen("watched", id);
+      if (!seen.clicked && !seen.changed) this.why = "the press didn't reach the page";
     }
     // It arrived if this page saw it, or if another page has loaded in its place (the click opened it).
     let stray = false;
@@ -323,15 +420,23 @@ export class WebSession {
       // The real click didn't arrive (an old browser, or the page was covered at the last moment):
       // click it from inside. Only ever on the page it was meant for.
       stats.clicksInside++;
+      missed(`“${info.text}”`, this.why || "the click didn't reach the page");
       await this.call("clickNow", id).catch((e) => {
         if (!gone(e)) throw e;
       });
     }
     const after = await this.#after({}, { min: 400 }).finally(() => {
       this.sayYes = false;
+      this.busyUntil = 0;
     });
     // The page asked a question and got Cancel: the person decides, then the same step says yes.
-    if (after.dialog?.type === "confirm" && !after.dialog.accepted) throw new DeviceError(`After “${info.text}”, the page asks: “${after.dialog.message}”`, { code: "ECONFIRM" });
+    if (after.dialog?.type === "confirm" && !after.dialog.accepted) {
+      this.asked = { text: info.text, message: after.dialog.message };
+      throw new DeviceError(`After “${info.text}”, the page asks: “${after.dialog.message}”`, { code: "ECONFIRM" });
+    }
+    // The yes took the page somewhere its note of the question couldn't follow (another site): Patch remembers it.
+    if (confirmed && !after.dialog && this.asked?.text === info.text) after.dialog = { type: "confirm", message: this.asked.message, accepted: true };
+    this.asked = null;
     return { ...after, chose: info, ...(stray ? { stray: true } : {}) };
   }
 
@@ -367,14 +472,19 @@ export class WebSession {
     const t = await this.call("enterTarget");
     if (t.button && riskyButton(t.button) && !confirmed) throw new DeviceError(`Pressing Enter here chooses “${t.button}”, which could buy, send or delete something.`, { code: "ECONFIRM" });
     this.dialog = null;
+    await this.#begin(confirmed);
     const id = pageId(await this.call("watch"));
     const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
     let seen = null;
     try {
       await this.cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key, text: "\r", unmodifiedText: "\r" }, { timeout: 4000 });
       await this.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...key }, { timeout: 4000 });
-      await sleep(120);
-      seen = await this.#seen("watched", id);
+      for (let waited = 0; waited < 480; waited += 60) {
+        await sleep(60);
+        seen = await this.#seen("seenSoFar", id);
+        if (seen.changed || seen.key) break;
+      }
+      if (!seen.changed) seen = await this.#seen("watched", id);
     } catch (e) {
       if (gone(e)) seen = { changed: true };
     }
@@ -385,6 +495,7 @@ export class WebSession {
     if (seen?.changed || (seen?.key && !unsent)) stats.enters++;
     else {
       stats.entersInside++;
+      missed("Enter", unsent ? "the key arrived, but the form it should have sent stayed put" : "the key didn't reach the page");
       await this.call("submitNow", id).catch((e) => {
         if (!gone(e)) throw e;
       });
@@ -399,8 +510,10 @@ export class WebSession {
   }
 
   async back() {
+    if (this.pending) await this.#answer(this.pending);
     const h = await this.cdp.send("Page.getNavigationHistory");
     if (!(h.currentIndex > 0)) return null;
+    this.busyUntil = Date.now() + 10_000; // a page that asks before it's left: yes, go back
     await this.cdp.send("Page.navigateToHistoryEntry", { entryId: h.entries[h.currentIndex - 1].id });
     this.contextId = null;
     return this.#after({}, { min: 300 });

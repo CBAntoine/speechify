@@ -166,6 +166,7 @@ export async function startPretendBrowser() {
     };
     const methods = {
       "Page.enable": () => ({}),
+      "Page.addScriptToEvaluateOnNewDocument": () => ({ identifier: "1" }),
       "Page.getFrameTree": () => ({ frameTree: { frame: { id: "MAIN", url: state.url } } }),
       "Page.createIsolatedWorld": () => ({ executionContextId: 7 }),
       "Page.navigate": ({ url }) => {
@@ -181,6 +182,8 @@ export async function startPretendBrowser() {
       },
       "Page.handleJavaScriptDialog": () => ({}),
       "Runtime.evaluate": ({ expression }) => {
+        // The page's message boxes (src/tvweb/boxes.js): this pretend page never shows any.
+        if (expression.includes("__patchBoxes")) return { result: { type: "string", value: expression.includes("b.seen.splice") ? "[]" : "ok" } };
         if (expression.includes("var VERSION =")) {
           page.hasScript = true;
           return { result: { type: "number", value: 1 } };

@@ -6,7 +6,7 @@
 // Written for old TV browsers (Chrome 55 and later): no async/await, no "?.", no "??", no spread.
 (function () {
   "use strict";
-  var VERSION = 5;
+  var VERSION = 6;
   var MAX_ITEMS = 45;
   var MAX_TEXT = 1500;
   var doc = document;
@@ -79,14 +79,39 @@
     var s = style(el);
     return !s || (s.visibility !== "hidden" && s.visibility !== "collapse" && s.display !== "none" && Number(s.opacity) > 0.05);
   }
+  /** Can a person see it? It isn't hidden itself, and nothing it sits inside has been made see-through. */
+  function visible(el) {
+    if (!shown(el)) return false;
+    for (var n = parentOf(el), i = 0; n && i < 80; n = parentOf(n), i++) {
+      if (n.nodeType !== 1) continue;
+      var s = style(n);
+      if (s && Number(s.opacity) <= 0.05) return false;
+    }
+    return true;
+  }
+  /** Does the pointer land on it at all? (Some things are drawn but let clicks through.) */
+  function hittable(el) {
+    var s = style(el);
+    return !s || s.pointerEvents !== "none";
+  }
+  /**
+   * Is a click on `top` a click on `el`? Yes if it's el or part of it, or el's label, or a link,
+   * button or label wrapped around el. Not if it's just the page behind showing through where el
+   * should be: then el is cut off by the box it's in (a slide waiting its turn), or lets clicks through.
+   */
+  function reaches(top, el) {
+    if (!top) return false;
+    if (inside(top, el) || labelFor(top) === el) return true;
+    if (!inside(el, top)) return false;
+    return top.tagName === "LABEL" || pressable(top) || /^(checkbox|switch|radio|option|menuitemcheckbox|menuitemradio|treeitem)$/.test(role(top));
+  }
   /** The point to click: the middle of the part that's on screen, if something else isn't on top of it. */
   function clickPoint(el, r, v) {
     var x1 = Math.max(r.left, 0), y1 = Math.max(r.top, 0), x2 = Math.min(r.right, v.w), y2 = Math.min(r.bottom, v.h);
     if (x2 - x1 < 2 || y2 - y1 < 2) return null;
     var spots = [[(x1 + x2) / 2, (y1 + y2) / 2], [x1 + Math.min(12, (x2 - x1) / 2), (y1 + y2) / 2], [(x1 + x2) / 2, y1 + Math.min(8, (y2 - y1) / 2)]];
     for (var i = 0; i < spots.length; i++) {
-      var top = topAt(spots[i][0], spots[i][1]);
-      if (top && (inside(top, el) || inside(el, top) || labelFor(top) === el)) return { x: spots[i][0], y: spots[i][1] };
+      if (reaches(topAt(spots[i][0], spots[i][1]), el)) return { x: spots[i][0], y: spots[i][1] };
     }
     return null;
   }
@@ -269,7 +294,7 @@
       if (info === undefined) {
         // Decided once per block: most of a long page is off screen, and skipped here.
         var br = block.getBoundingClientRect();
-        if (br.width < 1 || br.height < 1 || br.bottom < 0 || br.top > v.h || br.right < 0 || br.left > v.w || !shown(block)) {
+        if (br.width < 1 || br.height < 1 || br.bottom < 0 || br.top > v.h || br.right < 0 || br.left > v.w || !visible(block)) {
           blocks.set(block, null);
           continue;
         }
@@ -293,8 +318,10 @@
         if (!info.entry) {
           var cx = Math.min(Math.max(r.left + Math.min(r.width / 2, 40), 1), v.w - 1), cy = Math.min(Math.max(r.top + r.height / 2, 1), v.h - 1);
           var top = topAt(cx, cy);
-          if (top && !inside(top, block) && !inside(block, top)) {
-            if (!info.big) blocks.set(block, null); // something is on top of it
+          // Something is on top of it; or the page behind shows where it should be, so it's cut off
+          // by the box it's in (unless it's the kind of thing that lets the pointer through).
+          if (top && !inside(top, block) && (!inside(block, top) || hittable(block))) {
+            if (!info.big) blocks.set(block, null);
             continue;
           }
           info.entry = { heading: info.heading, text: "", top: r.top, left: r.left, h: r.height };
@@ -351,7 +378,7 @@
       if (!r) continue;
       if (r.bottom <= 0) { above++; continue; }
       if (r.top >= v.h) { below++; continue; }
-      if (r.right <= 0 || r.left >= v.w || !shown(el)) continue;
+      if (r.right <= 0 || r.left >= v.w || !visible(el)) continue;
       var pt = clickPoint(el, r, v);
       if (!pt) continue; // covered by something else (a pop-up, a sticky bar)
       var d = describe(el);
@@ -457,7 +484,7 @@
       }
       if (!score) continue;
       var r = box(els[i]);
-      if (!r || !shown(els[i])) continue;
+      if (!r || !visible(els[i])) continue;
       // Prefer what's on screen now, and things that really are buttons and links.
       if (r.bottom > 0 && r.top < v.h) score += 6;
       if (d.kind !== "Item") score += 2;
@@ -474,12 +501,20 @@
     var el = p.el, v = view(), r = box(el);
     if (!r) return { error: "hidden" };
     var moved = false;
-    if (r.top < 60 || r.bottom > v.h - 40) {
+    if (r.top < 60 || r.bottom > v.h - 40 || r.left < 0 || r.right > v.w) {
       jumpTo(el);
       r = box(el) || r;
       moved = true;
     }
     var pt = clickPoint(el, r, v);
+    if (!pt && !moved) {
+      // On screen, but not where the pointer can get at it (a slide waiting its turn in a row of
+      // slides): bringing it into view moves the row along too.
+      jumpTo(el);
+      r = box(el) || r;
+      moved = true;
+      pt = clickPoint(el, r, v);
+    }
     state.target = el;
     var info = describeFor(el);
     info.moved = moved;
@@ -506,7 +541,7 @@
     var onClick = function (e) {
       seen.clicked = true;
       var t = e.composedPath ? e.composedPath()[0] : e.target;
-      if (target && t && (inside(t, target) || inside(target, t) || labelFor(t) === target)) seen.hit = true;
+      if (target && t && reaches(t, target)) seen.hit = true;
     };
     var enter = function (e) {
       return e.key === "Enter" || e.keyCode === 13;
@@ -593,7 +628,7 @@
         var v = view(), boxes = queryDeep(doc, "input,textarea,[contenteditable]:not([contenteditable=false]),[role=searchbox],[role=textbox]", [], 0), search = null, first = null;
         for (var i = 0; i < boxes.length; i++) {
           var b = boxes[i], r = box(b);
-          if (!editable(b) || !r || !shown(b) || isSecret(b)) continue;
+          if (!editable(b) || !r || !visible(b) || isSecret(b)) continue;
           var onScreen = r.bottom > 0 && r.top < v.h;
           var hint = [b.type, b.name, b.id, b.placeholder, b.getAttribute("aria-label"), role(b)].join(" ");
           if (!search && /search|query|\bq\b|find/i.test(hint)) search = b;
@@ -751,7 +786,7 @@
       seen++;
       if (node.nodeValue.toLowerCase().indexOf(want) === -1) continue;
       var parent = node.parentElement;
-      if (!parent || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(parent.tagName) || !box(parent) || !shown(parent)) continue;
+      if (!parent || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(parent.tagName) || !box(parent) || !visible(parent)) continue;
       count++;
       if (!first) first = parent;
     }

@@ -85,18 +85,20 @@ test("a page is described the way Patch says it: numbered things to choose, the 
   assert.match(describePage({ ...page, scroll: { y: 0, max: 0, page: 540 }, frames: [], ready: "interactive", extra: 7, shown: 45 }).text, /That's the whole page\. Only the first 45 things on screen are listed; 7 more are there\. Say the words of the one you want\. It's still loading\.\)$/);
 });
 
-test("the script Patch runs inside pages is written for old TV browsers", () => {
-  const src = fs.readFileSync(path.join(HERE, "../src/tvweb/page.js"), "utf8");
-  assert.ok(PAGE_VERSION > 0, "it says which version it is");
-  // No syntax newer than 2015 (a Fire TV stick from 2016 has Chrome 59 inside): the page would fail to load it.
-  const code = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/\/(?![*/])(?:[^/\\\n[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+\/[gimuy]*/g, "/x/");
-  for (const [what, re] of [["optional chaining (?.)", /\?\.[a-zA-Z_(\[]/], ["nullish (??)", /\?\?/], ["async or await", /\b(async|await)\b/], ["spread or rest (...)", /\.\.\./], ["exponent (**)", /\*\*/], ["arrow functions", /=>/], ["template strings", /`/], ["let or const", /\b(let|const)\s/]]) {
-    assert.doesNotMatch(code, re, `page.js uses ${what}`);
+test("the scripts Patch runs inside pages are written for old TV browsers", () => {
+  assert.ok(PAGE_VERSION > 0, "page.js says which version it is");
+  for (const file of ["page.js", "boxes.js"]) {
+    const src = fs.readFileSync(path.join(HERE, "../src/tvweb", file), "utf8");
+    // No syntax newer than 2015 (a Fire TV stick from 2016 has Chrome 59 inside): the page would fail to load it.
+    const code = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/\/(?![*/])(?:[^/\\\n[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+\/[gimuy]*/g, "/x/");
+    for (const [what, re] of [["optional chaining (?.)", /\?\.[a-zA-Z_(\[]/], ["nullish (??)", /\?\?/], ["async or await", /\b(async|await)\b/], ["spread or rest (...)", /\.\.\./], ["exponent (**)", /\*\*/], ["arrow functions", /=>/], ["template strings", /`/], ["let or const", /\b(let|const)\s/]]) {
+      assert.doesNotMatch(code, re, `${file} uses ${what}`);
+    }
+    // And nothing that isn't plain text: a stray invisible character once broke its patterns.
+    assert.deepEqual([...new Set(src.match(/[^\x09\x0a\x20-\x7e…]/g) || [])], [], file);
+    // Each defines itself and nothing else.
+    assert.match(src, file === "page.js" ? /Object\.defineProperty\(self, "__patch"/ : /Object\.defineProperty\(window, "__patchBoxes"/);
   }
-  // And nothing that isn't plain text: a stray invisible character once broke its patterns.
-  assert.deepEqual([...new Set(src.match(/[^\x09\x0a\x20-\x7e…]/g) || [])], []);
-  // It defines itself and nothing else.
-  assert.match(src, /Object\.defineProperty\(self, "__patch"/);
 });
 
 test("the TV app template says what it can do, and apps made from it keep that", async () => {
@@ -402,6 +404,42 @@ test("in a real browser: a step that opens another page is done once, even when 
   assert.equal(stats.clicksInside - clicks.clicksInside, 0);
 });
 
+test("in a real browser: on a busy front page, only what a person could see and reach is listed", needsChrome, async () => {
+  const { rig, site } = await realRig();
+  let r = await rig.act("open_website", `${site.url}/news`);
+  assert.ok(r.ok, r.message);
+  // Not the links hidden every way a page can hide them, the menu kept off to the side, or the slides waiting their turn.
+  assert.doesNotMatch(r.screen, /Hidden|Skip to content|Section \d|Slide [2-8]/);
+  assert.match(r.screen, /\d+\. Button: Menu\n\d+\. Link: Sport\n\d+\. Link: Weather\n\d+\. Link: Slide 1\n\d+\. Link: Story number 1 about the day's events\n/);
+  assert.match(r.screen, /it goes on below \(2\d\d more links and buttons\)/);
+  // It's quick to read, hundreds of links or not.
+  const t = Date.now();
+  r = await rig.act("read_screen");
+  assert.ok(Date.now() - t < 1500, `reading the page took ${Date.now() - t} ms`);
+
+  // A menu that slides in over the page: its links are listed once it's open, and what it covers isn't.
+  r = await rig.act("tap", "Menu");
+  assert.match(r.screen, /1\. Button: Close menu\n/);
+  assert.match(r.screen, /\d+\. Link: Section 1\n/);
+  assert.doesNotMatch(r.screen, /Link: The Daily Example|Story number 1 about/);
+  r = await rig.act("tap", "Close menu");
+  assert.doesNotMatch(r.screen, /Section \d/);
+
+  // Something far down the page, by its words: the bar that stays at the top isn't in the way.
+  r = await rig.act("tap", "Local elections");
+  assert.match(r.message, /^Chose “Local elections: what you need to know” on Kids Room Fire TV\. It's showing “Story 150”/);
+  // A slide waiting its turn is brought round and chosen, when it's asked for by name.
+  r = await rig.act("press_button", "back");
+  r = await rig.act("tap", "Slide 3");
+  assert.match(r.message, /It's showing “Slide 3”/);
+  // What isn't there for a person isn't there for Patch.
+  r = await rig.act("press_button", "back");
+  r = await rig.act("tap", "Hidden by display none");
+  assert.equal(r.error, "ENOTFOUND");
+  r = await rig.act("tap", "Hidden by being see-through");
+  assert.equal(r.error, "ENOTFOUND");
+});
+
 test("in a real browser: no passwords or card numbers, pages that redraw themselves, message boxes, long pages and parts from other sites", needsChrome, async () => {
   const { rig, site } = await realRig();
   // Passwords and card details are the person's to type.
@@ -435,6 +473,20 @@ test("in a real browser: no passwords or card numbers, pages that redraw themsel
   r = await rig.yes(r, "tap", "Clear basket");
   assert.match(r.message, /The page asked “Clear your basket\?” and I answered OK\.$/);
   assert.match(r.screen, /Heading: Your basket is empty now/);
+  // Those boxes were answered inside the page, so none was drawn on the TV for someone to clear away.
+  assert.equal(stats.boxes, 3);
+  assert.equal(stats.boxesOutside, 0);
+  // A box the page puts up by itself is the person's to answer. If it's still up when Patch next
+  // needs the page, Patch answers it then, rather than wait for ever.
+  r = await rig.act("open_website", `${site.url}/nag`);
+  assert.match(r.screen, /^On screen: Still there\?/);
+  await sleep(2200);
+  const t = Date.now();
+  r = await rig.act("read_screen");
+  assert.ok(r.ok, r.message);
+  assert.ok(Date.now() - t < 3000, `it took ${Date.now() - t} ms`);
+  assert.match(r.screen, /^On screen: Welcome back/, "the page went on once its box was answered");
+  assert.equal(stats.boxesOutside, 1);
 
   // A long page: scrolling, finding words further down, and something to choose that's off screen.
   r = await rig.act("open_website", `${site.url}/article`);

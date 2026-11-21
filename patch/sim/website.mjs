@@ -108,6 +108,47 @@ function route(url, cookie, state) {
   if (p === "/newsletter") {
     return page("One more thing", `<h1>One more thing</h1><p>Your order is going to ${esc(state.steps.filter((x) => x.startsWith("delivery:")).pop()?.slice(9) || "you")}.</p><form action="/newsletter" method="post"><label>Email for offers <input name="email" value="someone@example.com" autofocus></label> <button>Sign me up</button></form>`);
   }
+  // A busy front page, like a news site's: hundreds of links, a bar that stays at the top, a menu
+  // kept off the side until it's opened, a row of slides with one showing, and links hidden every way.
+  if (p === "/news") {
+    const dot = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    const stories = Array.from({ length: 220 }, (_, i) => `<article class="story"><a href="/story/${i + 1}"><img alt="" width="160" height="90" src="${dot}"><h3>${i === 149 ? "Local elections: what you need to know" : `Story number ${i + 1} about the day's events`}</h3></a><p>Summary of story ${i + 1}.</p></article>`).join("");
+    return page("The Daily Example", `<style>
+        .skip { position: absolute; left: -9999px; }
+        .bar { position: sticky; top: 0; background: #111; padding: 12px 20px; display: flex; gap: 18px; align-items: center; z-index: 5; }
+        .bar a, .bar button { color: #fff; background: none; border: 0; font: inherit; }
+        #drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: #222; transform: translateX(-100%); transition: transform .2s; z-index: 6; overflow: auto; }
+        #drawer.open { transform: none; }
+        #drawer a, #drawer button { display: block; color: #fff; padding: 8px 16px; background: none; border: 0; font: inherit; }
+        .carousel { overflow: hidden; width: 600px; }
+        .track { display: flex; width: 4800px; }
+        .slide { flex: 0 0 600px; height: 70px; background: #dde; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .story a { text-decoration: none; color: inherit; display: block; }
+        .story h3 { margin: 4px 0; font-size: 18px; }
+      </style>
+      <a class="skip" href="#stories">Skip to content</a>
+      <div class="bar"><a href="/news">The Daily Example</a><button id="menu" aria-expanded="false">Menu</button><a href="/news/sport">Sport</a><a href="/news/weather">Weather</a></div>
+      <nav id="drawer"><button id="shut">Close menu</button>${Array.from({ length: 30 }, (_, i) => `<a href="/section/${i + 1}">Section ${i + 1}</a>`).join("")}</nav>
+      <ul hidden><li><a href="/hidden/1">Hidden by the hidden attribute</a></li></ul>
+      <div style="display:none"><a href="/hidden/2">Hidden by display none</a></div>
+      <div style="visibility:hidden"><a href="/hidden/3">Hidden by visibility</a></div>
+      <div style="opacity:0;pointer-events:none"><a href="/hidden/4">Hidden by being see-through</a></div>
+      <div aria-hidden="true" style="position:absolute;left:-9999px"><a href="/hidden/5" tabindex="-1">Hidden off the side</a></div>
+      <a href="/pixel"><img src="${dot}" width="1" height="1" alt=""></a>
+      <div class="carousel"><div class="track">${Array.from({ length: 8 }, (_, i) => `<a class="slide" href="/slide/${i + 1}">Slide ${i + 1}</a>`).join("")}</div></div>
+      <div id="stories" class="grid">${stories}</div>
+      <footer><a href="/contact">Contact the newsroom</a></footer>
+      <script>
+        function menu(open) { document.getElementById("drawer").classList.toggle("open", open); document.getElementById("menu").setAttribute("aria-expanded", String(open)); }
+        document.getElementById("menu").addEventListener("click", function () { menu(true); });
+        document.getElementById("shut").addEventListener("click", function () { menu(false); });
+      </script>`);
+  }
+  let story = p.match(/^\/(story|section|slide)\/(\d+)$/);
+  if (story) return page(`${story[1] === "story" ? "Story" : story[1] === "section" ? "Section" : "Slide"} ${story[2]}`, `<h1>${story[1] === "story" ? "Story number" : story[1] === "section" ? "Section" : "Slide"} ${story[2]}</h1><p>The whole of it would be here.</p><p><a href="/news">Back to the front page</a></p>`);
+  // A page that puts up a message box by itself, a moment after it has loaded.
+  if (p === "/nag") return page("Still there?", `<h1>Are you still watching?</h1><p>This page asks after a while.</p><a href="/">Back to the shop</a><script>setTimeout(function () { alert("Are you still there?"); document.title = "Welcome back"; }, 1500);</script>`);
   // A button that jumps away as the pointer reaches it: the click lands on what was underneath.
   if (p === "/tricky") {
     return page("A page that moves", `<h1>A page that moves</h1><div style="position:relative;height:420px"><p id="under" style="position:absolute;left:0;top:10px;margin:0;width:400px;height:60px">Nothing to press here</p><button id="dodge" style="position:absolute;left:0;top:0;width:260px;height:60px" onclick="document.title='Caught'">Catch me</button></div>

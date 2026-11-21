@@ -88,12 +88,13 @@ app.inventory.upsert({ id, driver: "androidtv", kind: "tv", brand: "Google", mod
 const how = (was) => {
   const d = (k) => stats[k] - was[k];
   const said = [d("clicks") && "a real click", d("clicksInside") && "a click told to the page", d("strays") && "it landed on something else", d("typed") && "real typing", d("typedInside") && "typing told to the page", d("enters") && "a real Enter", d("entersInside") && "Enter told to the page"].filter(Boolean);
-  return said.length ? ` [${said.join(", ")}]` : "";
+  const why = stats.misses.slice(was.misses.length);
+  return said.length ? ` [${said.join(", ")}${why.length ? `: ${why.join("; ")}` : ""}]` : "";
 };
 let step = 0;
 const act = async (action, value, { confirmToken, quiet = false } = {}) => {
   const t = Date.now();
-  const was = { ...stats };
+  const was = { ...stats, misses: [...stats.misses] };
   const r = await app.controller.act(id, action, value, { confirmToken });
   if (!quiet) console.log(`${String(++step).padStart(2)}. ${action}${value ? ` “${value}”` : ""} (${Date.now() - t} ms): ${r.ok ? "" : r.needsConfirmation ? "[asks first] " : `[${r.error}] `}${r.message}${how(was)}`);
   return r;
@@ -148,6 +149,13 @@ r = await act("tap", "Clearance");
 await check(r.ok && /Last year's remote: half price/.test(r.screen) && !/20% off/.test(r.screen), `the page's own tabs should work: ${r.message}`);
 r = await act("tap", "When do offers end?");
 await check(r.ok && /The page said: “Offers end on Sunday\.”/.test(r.message), `the page's message box should be read out: ${r.message}`);
+// A question from the page waits for the person, and their yes answers it.
+r = await act("tap", "Clear basket");
+await check(r.needsConfirmation && /the page asks: “Clear your basket\?”/.test(r.message), `the page's question should be passed on: ${r.message}`);
+r = await act("tap", "Clear basket", { confirmToken: r.confirmToken });
+await check(r.ok && /I answered OK/.test(r.message) && /Your basket is empty now/.test(r.screen || ""), `after the yes, the page should have gone on: ${r.message}`);
+// None of those boxes was drawn on the TV: Android would have left each one there, on top of the page.
+await check(stats.boxes === 3 && stats.boxesOutside === 0, `the page's message boxes should be answered inside the page: ${JSON.stringify({ boxes: stats.boxes, outside: stats.boxesOutside })}`);
 r = await act("open_website", `${site.url}/article`);
 r = await act("scroll", "down");
 await check(r.ok && /part of the way down/.test(r.screen), `scrolling should move down the page: ${r.message}`);
@@ -206,8 +214,8 @@ for (let i = 0; i < 4; i++) {
 await check(r.ok && !/in Patch Browser/.test(r.screen || ""), `with the home screen in front, Patch should read the home screen: ${r.message}`);
 console.log("With the home screen in front, Patch reads the home screen again.");
 
-console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told.`);
-await check(stats.clicks >= 8 && stats.clicksInside === 0 && stats.strays === 0 && stats.typed >= 3 && stats.typedInside === 0 && stats.enters >= 2 && stats.entersInside === 0, `in Android's own WebView every step should go in as a real click, key press or typing: ${JSON.stringify(stats)}`);
+console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told; ${stats.boxes} message boxes answered inside the page and ${stats.boxesOutside} from outside.${stats.misses.length ? ` Not real: ${stats.misses.join("; ")}.` : ""}`);
+await check(stats.clicks >= 10 && stats.clicksInside === 0 && stats.strays === 0 && stats.typed >= 3 && stats.typedInside === 0 && stats.enters >= 2 && stats.entersInside === 0, `in Android's own WebView every step should go in as a real click, key press or typing: ${JSON.stringify(stats)}`);
 const browser = app.tvapps.list().find((a) => a.kind === "browser");
 if (browser) await adb("shell", "pm", "uninstall", browser.package).catch(() => {});
 await tidy();
