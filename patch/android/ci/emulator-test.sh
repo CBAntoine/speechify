@@ -40,8 +40,12 @@ fail() {
   echo "---- Android on Patch's process ----"
   adb logcat -d -b main,system,crash | grep -iE "app\.patch\.home|lowmemorykiller|lmkd|has died|Process .* died|Killing [0-9]+:|am_kill|FATAL" | grep -v "Patch   :" | tail -n 40 || true
   adb exec-out screencap -p > "$OUT/failure.png" || true
+  # Said again last, where it's easy to find under everything above.
+  echo "FAILED: $*"
+  if [ -f "$OUT/why-it-failed.txt" ]; then echo "Why: $(cat "$OUT/why-it-failed.txt")"; fi
   exit 1
 }
+rm -f "$OUT/why-it-failed.txt"
 
 adb wait-for-device
 adb install -r -g "$APK"

@@ -26,26 +26,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let app;
 let site;
+const reversed = [];
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "patch-tvweb-"));
 const tidy = async () => {
-  await adb("reverse", "--remove-all").catch(() => {});
+  for (const port of reversed) await adb("reverse", "--remove", `tcp:${port}`).catch(() => {});
   await app?.close().catch(() => {});
   await site?.close().catch(() => {});
   fs.rmSync(dataDir, { recursive: true, force: true });
 };
+let failing = false;
 const fail = async (msg) => {
+  if (failing) process.exit(1);
+  failing = true;
   console.error(`FAILED: ${msg}`);
-  fs.writeFileSync(path.join(outDir, "tvweb-failure.png"), await adb("exec-out", "screencap", "-p").catch(() => Buffer.alloc(0)));
-  await tidy();
+  try {
+    // The test script prints this again as the last line of its report, under its long diagnostics.
+    fs.writeFileSync(path.join(outDir, "why-it-failed.txt"), `${msg}\n`);
+    fs.writeFileSync(path.join(outDir, "tvweb-failure.png"), await adb("exec-out", "screencap", "-p").catch(() => Buffer.alloc(0)));
+    await tidy();
+  } catch {
+    /* the reason is already printed */
+  }
   process.exit(1);
 };
+process.on("uncaughtException", (err) => fail(`the check itself broke: ${err?.stack || err}`));
+process.on("unhandledRejection", (err) => fail(`the check itself broke: ${err?.stack || err}`));
 const check = async (ok, msg) => {
   if (!ok) await fail(msg);
 };
 
-/** Choose "Always allow" and "Allow" when Android asks about Patch's key (as the person does on a TV). */
-async function allowOnScreen() {
-  for (let i = 0; i < 40; i++) {
+/** Choose "Always allow" and "Allow" when Android asks about Patch's key (as the person does on a TV),
+ *  for as long as Patch is still waiting for that answer. */
+async function allowOnScreen(waiting) {
+  for (let i = 0; i < 40 && waiting(); i++) {
     const out = (await adb("exec-out", "uiautomator", "dump", "/dev/tty").catch(() => Buffer.alloc(0))).toString("utf8");
     const s = readUiTree(out.slice(Math.max(0, out.indexOf("<?xml"))));
     const allow = s.items.find((it) => /^allow$/i.test(it.text));
@@ -60,15 +73,12 @@ async function allowOnScreen() {
   }
 }
 
-// Sideways, like a TV.
-await adb("shell", "settings", "put", "system", "accelerometer_rotation", "0");
-await adb("shell", "settings", "put", "system", "user_rotation", "1");
-
 // The pretend shop runs on this machine; the emulator reaches it at the same address through ADB.
 site = await startWebsite();
-const port = new URL(site.url).port;
-await adb("reverse", `tcp:${port}`, `tcp:${port}`);
-await adb("reverse", `tcp:${site.state.otherPort}`, `tcp:${site.state.otherPort}`);
+for (const port of [new URL(site.url).port, site.state.otherPort]) {
+  await adb("reverse", `tcp:${port}`, `tcp:${port}`);
+  reversed.push(port);
+}
 
 app = await startApp({ port: 0, dataDir, autoScan: false, overrides: { tvappTemplate: fs.readFileSync(templatePath) }, log: () => {} });
 const id = "androidtv:emulator";
@@ -82,7 +92,8 @@ const act = async (action, value, { confirmToken, quiet = false } = {}) => {
   return r;
 };
 
-const [paired] = await Promise.all([act("pair"), allowOnScreen()]);
+let pairing = true;
+const [paired] = await Promise.all([act("pair").finally(() => (pairing = false)), allowOnScreen(() => pairing)]);
 await check(paired.ok, `Patch couldn't connect to the emulator: ${paired.message}`);
 
 let r = await act("open_website", `${site.url}/`);
@@ -139,22 +150,47 @@ r = await act("scroll", "top");
 r = await act("tap", "See the HDMI cable");
 await check(r.ok && /It's showing “HDMI cable, 2 metres”/.test(r.message), `a link far below the screen should be found by its words: ${r.message}`);
 
-// The picture of the screen, for the dashboard.
+// The picture of the screen, for the dashboard: the size Android says its screen is, whichever way up.
 const png = await app.controller.picture(id);
 const size = pngSize(png);
-await check(size && size.width > size.height, `the picture of the screen should be a wide PNG, got ${JSON.stringify(size)}`);
+const real = ((await adb("shell", "wm", "size")).toString().match(/(\d+)x(\d+)\s*$/) || []).slice(1).map(Number);
+await check(size && png.length > 2000, `the picture of the screen should be a PNG, got ${png.length} bytes, ${JSON.stringify(size)}`);
+if (real.length === 2) await check([size.width, size.height].sort().join() === [...real].sort().join(), `the picture should be the screen's size (${real.join(" by ")}), got ${size.width} by ${size.height}`);
+fs.writeFileSync(path.join(outDir, "tvweb-picture.png"), png);
 console.log(`A picture of the screen: ${size.width} by ${size.height}, ${Math.round(png.length / 1024)} KB.`);
+
+// A tap on that picture (as in the dashboard) lands on the TV: on the product page's "Add to basket".
+// Where that button is on the screen comes from Android's own list of what's showing.
+const before = site.state.basket.length;
+let spot = null;
+for (let i = 0; i < 4 && !spot; i++) {
+  const xml = (await adb("exec-out", "uiautomator", "dump", "/dev/tty").catch(() => Buffer.alloc(0))).toString("utf8");
+  const m = xml.match(/<node[^>]*(?:text|content-desc)="Add to basket"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+  if (m) spot = { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round((Number(m[2]) + Number(m[4])) / 2) };
+  else await sleep(1000);
+}
+if (spot) {
+  const tapped = await app.controller.tapAt(id, spot.x, spot.y);
+  for (let i = 0; i < 20 && site.state.basket.length === before; i++) await sleep(250);
+  await check(tapped.ok && site.state.basket.length === before + 1, `a tap at ${spot.x}, ${spot.y} on the picture should have pressed “Add to basket”: ${tapped.message}`);
+  console.log(`A tap on the picture at ${spot.x}, ${spot.y} pressed “Add to basket” on the TV.`);
+} else {
+  console.log("(Android didn't list the page's buttons this time, so the tap on the picture wasn't tried here.)");
+}
 
 // With another app in front, Patch reads the screen the usual way again.
 await act("press_button", "home", { quiet: true });
-await sleep(1500);
-r = await act("read_screen");
+for (let i = 0; i < 4; i++) {
+  await sleep(1500);
+  r = await act("read_screen", "", { quiet: i < 3 });
+  if (r.ok) break;
+}
 await check(r.ok && !/in Patch Browser/.test(r.screen || ""), `with the home screen in front, Patch should read the home screen: ${r.message}`);
+console.log("With the home screen in front, Patch reads the home screen again.");
 
 console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page; typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told.`);
 const browser = app.tvapps.list().find((a) => a.kind === "browser");
-await adb("shell", "pm", "uninstall", browser.package).catch(() => {});
-await adb("shell", "settings", "put", "system", "user_rotation", "0");
+if (browser) await adb("shell", "pm", "uninstall", browser.package).catch(() => {});
 await tidy();
 console.log("Patch's browser on the TV: Patch reads pages in it, chooses, types, searches and scrolls, and asks before buying.");
 process.exit(0);
