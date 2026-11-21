@@ -135,7 +135,7 @@ Without a database, Vercel forgets your data whenever its servers restart. The a
 
 - **Tab bar** at the bottom (Today, Find, Pipeline, Inbox, More), with large tap targets and room for Android's gesture bar.
 - **Find clients near me:** tap the target icon next to the city to search around where you're standing, and tap it again to go back to the city. Good for walk-in prospecting. The app remembers the last place you searched.
-- **Map search runs from your phone.** The free OpenStreetMap servers turn away requests from cloud hosts like Vercel, so Find clients asks them from your phone's own connection, and the server scores the results. Agent searches run on the server, so on Vercel they need a Google Places key.
+- **Free search, no key needed.** Without a Google key, Find clients searches OpenStreetMap through Nominatim, its search server, which answers reliably from Vercel. It lists most dentists, salons, gyms, restaurants, vets, lawyers, realtors and accountants, but few tradespeople: London, ON has 40+ dentists on the map and 1 plumber. For complete results, connect Google Places (Settings shows the steps; Google's free allowance covers about 1,000 searches a month).
 - **Pipeline:** one stage at a time, with swipeable stage tabs and a **Move to** menu on each card. Drag-and-drop doesn't work with touch, so this replaces it.
 - **Lead screen:** big **Call, Text, Email, Website, Directions and Share** buttons. They open your phone's dialer, Messages, Gmail and Google Maps.
 - **Inbox:** tap a message to read it full screen, then send it from your own email or Messages app, or **Share** it to WhatsApp or any other app.
@@ -173,7 +173,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 40 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap parsing and server fallback, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
+npm test          # 42 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
 npm run build
 ```
 

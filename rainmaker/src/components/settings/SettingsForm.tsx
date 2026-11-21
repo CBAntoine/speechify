@@ -231,7 +231,30 @@ export function SettingsForm({
                   <b>Google Places</b>
                   <Status ok={i.googlePlaces} on="Connected" off="Using OpenStreetMap" />
                 </div>
-                <div className="muted small">Adds ratings and review counts to search. Set GOOGLE_PLACES_API_KEY (Places API (New)).</div>
+                <div className="muted small">
+                  Finds every kind of business, roofers and plumbers included, with ratings and review counts. Free OpenStreetMap data lists few tradespeople.
+                </div>
+                {!i.googlePlaces && (
+                  <ol className="muted small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                    <li>
+                      In{" "}
+                      <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank" rel="noreferrer">
+                        Google Cloud
+                      </a>
+                      , enable <b>Places API (New)</b>. Google asks for billing details, and gives a free monthly allowance of about 1,000 searches.
+                    </li>
+                    <li>
+                      Open{" "}
+                      <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+                        Credentials
+                      </a>
+                      , create an <b>API key</b>, and restrict it to Places API (New).
+                    </li>
+                    <li>
+                      In your Vercel project, open <b>Settings → Environment Variables</b>, add <code>GOOGLE_PLACES_API_KEY</code> with the key, then redeploy.
+                    </li>
+                  </ol>
+                )}
               </span>
             </div>
             <div className="list-item">

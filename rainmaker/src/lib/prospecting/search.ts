@@ -3,8 +3,7 @@ import { NICHES, getNiche, matchNiche, type Niche } from "@/lib/niches";
 import { listLeads, findDuplicate } from "@/lib/repo";
 import type { LeadSource, Prospect } from "@/lib/types";
 import { auditWebsite, mapLimit } from "./audit";
-import { geocode, OVERPASS_URLS, searchOsm, type Place } from "./osm";
-import { buildOverpassQuery, parseOverpass, type OsmElement } from "./osm-parse";
+import { geocode, searchOsm, type Place } from "./osm";
 import { placesEnabled, searchPlaces } from "./places";
 import { deriveSignals, scoreProspect } from "./score";
 
@@ -41,6 +40,9 @@ function customNiche(text: string): Niche {
     query: clean,
     osmTags: [],
     osmName: clean.replace(/[^a-z0-9 ]/gi, "").split(/\s+/).filter((w) => w.length > 2).join("|") || clean,
+    // Map search looks for these words in business names: the whole phrase,
+    // then its longer words ("tattoo studio", "tattoo", "studio").
+    nameWords: [...new Set([clean, ...clean.split(/\s+/).filter((w) => w.replace(/[^a-z0-9]/gi, "").length > 3)])].slice(0, 3),
     booking: false,
     customerValue: "Varies",
     retainer: "Varies",
@@ -190,14 +192,14 @@ function usesOsm(wanted: Normalized["wanted"]): boolean {
 async function osmCenter(n: Normalized): Promise<Place> {
   const center = n.near ? { lat: n.near.lat, lon: n.near.lon, label: "your location" } : ((await geocode(n.location)) ?? undefined);
   if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Pick a province or state and a city, or type it as "City, ON".`);
-  if (n.niche.id === "custom" && !n.niche.osmName) throw new Error("Pick a niche from the list for map search");
+  if (n.niche.id === "custom" && !n.niche.nameWords?.length) throw new Error("Pick a niche from the list for map search");
   return center;
 }
 
 function osmNote(): string | undefined {
   return placesEnabled()
     ? undefined
-    : "Free OpenStreetMap data: no ratings or review counts, and some listings miss websites. Add a Google Places key for richer results.";
+    : "Free OpenStreetMap data (© OpenStreetMap contributors). It lists few tradespeople such as roofers, plumbers and HVAC companies, and has no ratings. Connect Google Places in Settings for complete results.";
 }
 
 /** Audit, score, mark ones already saved, best first. */
@@ -229,32 +231,5 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
   }
   const center = await osmCenter(n);
   const prospects = await searchOsm({ niche: n.niche, center, radiusKm: n.radiusKm, limit: n.limit });
-  return finish(n, { source: "openstreetmap", prospects, center, note: osmNote() }, input.audit);
-}
-
-/** What the browser needs to run a map search itself: where, and what to ask. */
-export interface OsmPlan {
-  query: string;
-  center: Place;
-  urls: string[];
-}
-
-/**
- * First half of a map search that the browser runs. The free Overpass servers
- * throttle the shared cloud addresses that hosts like Vercel use, so the phone
- * asks them from its own connection. Locating the city still happens here.
- * Google Places and sample searches don't need the browser and finish here.
- */
-export async function planSearch(input: SearchInput): Promise<{ plan: OsmPlan } | SearchResult> {
-  const n = normalize(input);
-  if (n.wanted === "sample" || !usesOsm(n.wanted)) return findBusinesses(input);
-  const center = await osmCenter(n);
-  return { plan: { query: buildOverpassQuery(n.niche, center.lat, center.lon, n.radiusKm * 1000), center, urls: OVERPASS_URLS } };
-}
-
-/** Second half: score the Overpass results the browser fetched. */
-export async function finishOsmSearch(input: SearchInput, center: Place, elements: OsmElement[]): Promise<SearchResult> {
-  const n = normalize(input);
-  const prospects = parseOverpass(elements, n.niche, center, n.limit);
   return finish(n, { source: "openstreetmap", prospects, center, note: osmNote() }, input.audit);
 }

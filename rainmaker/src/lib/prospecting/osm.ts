@@ -3,17 +3,20 @@ import { friendlyNetError } from "@/lib/net";
 import { expandPlace } from "@/lib/regions";
 import type { Niche } from "@/lib/niches";
 import type { Prospect } from "@/lib/types";
-import { buildOverpassQuery, parseOverpass } from "./osm-parse";
-import { OverpassUnavailableError, overpassUrls, queryOverpass } from "./overpass";
+import { nominatimTerms, nominatimToElements, viewboxAround, type NominatimRow } from "./nominatim-parse";
+import { buildOverpassQuery, parseOverpass, type OsmElement } from "./osm-parse";
+import { overpassUrls, queryOverpass } from "./overpass";
 
-// OpenStreetMap: free, no key. Nominatim turns "Austin, TX" into coordinates,
-// Overpass finds tagged businesses around them. Both public servers ask for an
-// identifying User-Agent and light use.
+// OpenStreetMap: free, no key. Nominatim, OpenStreetMap's search server,
+// turns "London, ON" into coordinates and finds the businesses around them.
+// The public Overpass servers turn away requests from cloud hosts like
+// Vercel, so Overpass is used only when OVERPASS_URL points at a server you
+// run or pay for. Both ask for an identifying User-Agent and light use:
+// Nominatim allows one request per second.
 
 const UA = "Rainmaker/0.1 (self-hosted agency CRM)";
 const NOMINATIM = (process.env.NOMINATIM_URL || "https://nominatim.openstreetmap.org").replace(/\/$/, "");
-/** Overpass servers to try, in order (`OVERPASS_URL`, comma-separated). */
-export const OVERPASS_URLS = overpassUrls(process.env.OVERPASS_URL);
+const OVERPASS_URL = process.env.OVERPASS_URL;
 
 export interface Place {
   lat: number;
@@ -21,18 +24,36 @@ export interface Place {
   label: string;
 }
 
-const geoCache = ((globalThis as { __rmGeoCache?: Map<string, Place> }).__rmGeoCache ??= new Map());
+type Caches = { __rmGeoCache?: Map<string, Place>; __rmPoiCache?: Map<string, { at: number; elements: OsmElement[] }> };
+const geoCache = ((globalThis as Caches).__rmGeoCache ??= new Map());
+const poiCache = ((globalThis as Caches).__rmPoiCache ??= new Map());
+const POI_TTL_MS = 10 * 60_000;
 
-async function nominatim(location: string, params: Record<string, string>): Promise<{ lat: string; lon: string; display_name: string }[]> {
+// Every Nominatim request from this server waits its turn, at least 1.1s
+// after the previous one.
+let lastCall = 0;
+let queue: Promise<unknown> = Promise.resolve();
+function nominatimTurn(): Promise<void> {
+  const turn = queue.then(async () => {
+    const wait = lastCall + 1_100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastCall = Date.now();
+  });
+  queue = turn.catch(() => {});
+  return turn;
+}
+
+async function nominatim<T>(what: string, params: Record<string, string>): Promise<T[]> {
+  await nominatimTurn();
   const url = `${NOMINATIM}/search?${new URLSearchParams({ format: "jsonv2", limit: "1", ...params })}`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "en" }, signal: AbortSignal.timeout(12_000) });
+    res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "en" }, signal: AbortSignal.timeout(15_000) });
   } catch (err) {
-    throw new Error(`Couldn't reach OpenStreetMap to look up "${location}" (${friendlyNetError(err, 12_000)}). Check this server's internet connection, or try sample data.`);
+    throw new Error(`Couldn't reach OpenStreetMap to look up ${what} (${friendlyNetError(err, 15_000)}). Try again in a minute, or try sample data.`);
   }
-  if (!res.ok) throw new Error(`Location lookup failed (HTTP ${res.status})`);
-  return (await res.json()) as { lat: string; lon: string; display_name: string }[];
+  if (!res.ok) throw new Error(`OpenStreetMap search failed (HTTP ${res.status}). Try again in a minute.`);
+  return (await res.json()) as T[];
 }
 
 /**
@@ -44,21 +65,56 @@ export async function geocode(location: string): Promise<Place | null> {
   const p = expandPlace(location);
   const key = `${p.query.toLowerCase()}|${p.countryCode ?? ""}`;
   if (geoCache.has(key)) return geoCache.get(key)!;
+  type Row = { lat: string; lon: string; display_name: string };
   const within: Record<string, string> = p.countryCode ? { countrycodes: p.countryCode } : {};
+  const what = `"${location}"`;
   let rows =
     p.city && p.state && p.country
-      ? await nominatim(location, { city: p.city, state: p.state, country: p.country, ...within })
-      : await nominatim(location, { q: p.query });
+      ? await nominatim<Row>(what, { city: p.city, state: p.state, country: p.country, ...within })
+      : await nominatim<Row>(what, { q: p.query });
   if (!rows.length && p.city) {
     // Not filed as a city (a neighbourhood, say): try plain text, still
-    // inside the country. Nominatim allows one request per second.
-    await new Promise((r) => setTimeout(r, 1_100));
-    rows = await nominatim(location, { q: p.query, ...within });
+    // inside the country.
+    rows = await nominatim<Row>(what, { q: p.query, ...within });
   }
   if (!rows.length) return null;
   const place = { lat: Number(rows[0].lat), lon: Number(rows[0].lon), label: rows[0].display_name };
   geoCache.set(key, place);
   return place;
+}
+
+/**
+ * Businesses of a niche around a point, from Nominatim: its OSM categories
+ * first, then words from business names, until there are plenty.
+ */
+async function nominatimBusinesses(niche: Niche, center: Place, radiusKm: number, limit: number): Promise<OsmElement[]> {
+  const key = `${niche.id}|${niche.label}|${center.lat.toFixed(3)},${center.lon.toFixed(3)}|${radiusKm}`;
+  const hit = poiCache.get(key);
+  if (hit && Date.now() - hit.at < POI_TTL_MS) return hit.elements;
+
+  const viewbox = viewboxAround(center.lat, center.lon, radiusKm);
+  const terms = nominatimTerms(niche);
+  if (!terms.length) throw new Error("Pick a niche from the list for map search");
+  const want = Math.max(limit * 2, 30);
+  const found = new Map<string, OsmElement>();
+  const started = Date.now();
+  let failed = 0;
+  let lastError: unknown;
+  for (const q of terms) {
+    if (Date.now() - started > 25_000) break;
+    try {
+      const rows = await nominatim<NominatimRow>(`${niche.plural}`, { q, viewbox, bounded: "1", limit: "40", addressdetails: "1", extratags: "1" });
+      for (const el of nominatimToElements(rows)) found.set(`${el.type}/${el.id}`, el);
+    } catch (err) {
+      failed++;
+      lastError = err;
+    }
+    if (found.size >= want) break;
+  }
+  if (failed && failed === terms.length) throw lastError;
+  const elements = [...found.values()];
+  poiCache.set(key, { at: Date.now(), elements });
+  return elements;
 }
 
 export async function searchOsm(params: {
@@ -68,24 +124,20 @@ export async function searchOsm(params: {
   limit: number;
 }): Promise<Prospect[]> {
   const { niche, center, radiusKm, limit } = params;
-  const query = buildOverpassQuery(niche, center.lat, center.lon, radiusKm * 1000);
-  try {
-    const { elements } = await queryOverpass(OVERPASS_URLS, query, {
-      userAgent: UA,
-      describeError: friendlyNetError,
-      // One line per server tried, so the host's logs show which one answered.
-      onAttempt: (a) =>
-        (a.ok ? console.info : console.warn)(
-          `[overpass] ${a.host} ${a.ok ? `ok, ${a.elements} elements` : `failed: ${a.problem}`} in ${a.ms}ms`,
-        ),
-    });
-    return parseOverpass(elements, niche, center, limit);
-  } catch (err) {
-    if (err instanceof OverpassUnavailableError) {
-      throw new Error(
-        `OpenStreetMap's free search servers are overloaded right now (tried ${err.attempts.length}). Try again in a few minutes, or search sample data. A Google Places key (GOOGLE_PLACES_API_KEY) makes search faster and steadier.`,
-      );
+  if (OVERPASS_URL) {
+    try {
+      const query = buildOverpassQuery(niche, center.lat, center.lon, radiusKm * 1000);
+      const { elements } = await queryOverpass(overpassUrls(OVERPASS_URL), query, {
+        userAgent: UA,
+        describeError: friendlyNetError,
+        onAttempt: (a) =>
+          (a.ok ? console.info : console.warn)(`[overpass] ${a.host} ${a.ok ? `ok, ${a.elements} elements` : `failed: ${a.problem}`} in ${a.ms}ms`),
+      });
+      return parseOverpass(elements, niche, center, limit);
+    } catch (err) {
+      console.warn("[overpass] no answer, using Nominatim:", err instanceof Error ? err.message : err);
     }
-    throw err;
   }
+  const elements = await nominatimBusinesses(niche, center, radiusKm, limit);
+  return parseOverpass(elements, niche, center, limit);
 }
