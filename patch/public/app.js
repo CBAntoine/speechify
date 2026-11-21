@@ -490,7 +490,9 @@ async function doAction(id, action, value, { confirmToken } = {}) {
   if (r.device) mergeDevice(r.device);
   if (r.apps) state.tvAppList = { id, apps: r.apps };
   if (r.screen && d?.driver === "androidtv") state.tvScreen = { id, text: r.screen };
-  if (r.ok && ["tap", "scroll", "press_button", "launch_app"].includes(action) && state.tvScreen?.id === id) state.tvScreen = null;
+  // The screen has changed and the TV didn't say what's on it now: the old list is out of date.
+  else if (r.ok && ["tap", "scroll", "press_button", "launch_app", "open_website", "web_search", "search", "type_text"].includes(action) && state.tvScreen?.id === id) state.tvScreen = null;
+  if (r.ok && d?.driver === "androidtv" && state.tvShot?.id === id && !["read_screen", "list_apps", "volume_up", "volume_down", "mute"].includes(action)) setTimeout(() => showTvScreen(id, { quiet: true }), 900);
   renderAll();
   toast(r.message || (r.ok ? "Done." : "That didn't work."), r.ok ? "ok" : "bad");
   if (r.ok) voice.uiActivity(`The person used the dashboard: ${r.message}`);
@@ -600,16 +602,67 @@ function remoteHtml(d) {
   return out.join("");
 }
 
-/** What's on an Android TV's screen, as buttons to choose things with. */
+/**
+ * What's on an Android TV's screen: a picture of it to look at and tap, and the list Patch reads
+ * (in Patch's browser, every link, button and box on the page), as buttons to choose things with.
+ */
 function tvScreenHtml(d) {
   const id = esc(d.id);
   const shot = state.tvScreen?.id === d.id ? state.tvScreen.text : null;
-  const items = (shot || "").split("\n").map((l) => l.match(/^(\d+)\. ([^:]+): (.*)$/)).filter(Boolean);
+  const pic = state.tvShot?.id === d.id ? state.tvShot : null;
+  const lines = (shot || "").split("\n");
+  const rows = lines.slice(1).map((l) => {
+    const item = l.match(/^(\d+)\. ([^:]+): (.*)$/);
+    if (item) {
+      const [, n, kind, text] = item;
+      const here = /\((?:[^)]*, )?selected(?:, [^)]*)?\)$/.test(text);
+      return `<button class="screen-item${here ? " is-here" : ""}" data-act="tap" data-value="${n}" data-id="${id}"><span class="screen-item__n">${n}</span><span>${esc(text.replace(/ \((?:[^)]*, )?selected(?:, [^)]*)?\)$/, ""))}</span><em>${here ? "remote is here" : esc(kind)}</em></button>`;
+    }
+    const words = l.match(/^(Heading|Text): (.*)$/);
+    if (words) return `<p class="screen-line${words[1] === "Heading" ? " screen-line--head" : ""}">${esc(words[2])}</p>`;
+    return /^\(.*\)$/.test(l) ? `<p class="screen-line screen-line--note">${esc(l.slice(1, -1))}</p>` : "";
+  }).join("");
   return `<div class="panel"><h3>On the TV's screen</h3>
-    <p class="panel__hint">Patch can read what's on ${esc(d.name)}'s screen and choose things for you. Some apps (like Netflix) draw their own picture; use the remote for those.</p>
-    <div class="btns"><button class="btn btn--sm" data-act="read_screen" data-id="${id}">${icon("eye", 14)} ${shot ? "Look again" : "What's on the screen?"}</button>${btn(id, "scroll", `${icon("down", 14)} Move down`, "", "down")}${btn(id, "scroll", `${icon("up", 14)} Move up`, "", "up")}</div>
-    ${items.length ? `<div class="screen-items">${items.map(([, n, kind, text]) => { const here = /\((?:[^)]*, )?selected(?:, [^)]*)?\)$/.test(text); return `<button class="screen-item${here ? " is-here" : ""}" data-act="tap" data-value="${n}" data-id="${id}"><span class="screen-item__n">${n}</span><span>${esc(text.replace(/ \((?:[^)]*, )?selected(?:, [^)]*)?\)$/, ""))}</span><em>${here ? "remote is here" : esc(kind)}</em></button>`; }).join("")}</div>` : shot ? `<p class="panel__hint">${esc(shot.split("\n")[0])}</p>` : ""}
+    <p class="panel__hint">Patch can see ${esc(d.name)}'s screen and use it for you. In Patch's browser it reads every link, button and box on a page; other apps it reads when they say what's on them (some, like Netflix, only draw a picture). Ask it by voice, or use the buttons here.</p>
+    <div class="btns"><button class="btn btn--sm" data-act="read_screen" data-id="${id}">${icon("eye", 14)} ${shot ? "Look again" : "What's on the screen?"}</button><button class="btn btn--sm" data-ui="tv-shot" data-id="${id}">${icon("tv", 14)} ${pic ? "New picture" : "Show me the screen"}</button>${btn(id, "scroll", `${icon("down", 14)} Move down`, "", "down")}${btn(id, "scroll", `${icon("up", 14)} Move up`, "", "up")}</div>
+    ${pic ? `<div class="tvshot${pic.loading ? " is-loading" : ""}">${pic.url ? `<img src="${pic.url}" alt="${esc(d.name)}'s screen" data-tv-shot="${id}" draggable="false">` : `<span class="tvshot__wait">${icon("refresh", 22, 'class="spin"')}</span>`}<small>${pic.url ? "Tap the picture to tap that spot on the TV." : "Getting a picture of the screen…"}</small></div>` : ""}
+    ${shot ? `<p class="screen-title">${esc(lines[0].replace(/^On screen: /, ""))}</p>` : ""}
+    ${rows ? `<div class="screen-items">${rows}</div>` : ""}
   </div>`;
+}
+
+/** Get a picture of a TV's screen and show it in the TV's card. */
+async function showTvScreen(id, { quiet = false } = {}) {
+  const old = state.tvShot?.id === id ? state.tvShot : null;
+  if (old?.loading) return;
+  state.tvShot = { id, url: old?.url || null, loading: true };
+  if (!quiet || !old?.url) renderAll();
+  try {
+    const res = await fetch(`/api/devices/${encodeURIComponent(id)}/screen.png`, { headers: { "x-patch-token": BOOT.token } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "The TV didn't give a picture of its screen.");
+    const url = URL.createObjectURL(await res.blob());
+    if (old?.url) URL.revokeObjectURL(old.url);
+    // Still wanted? (The person may have closed the card or asked another TV meanwhile.)
+    if (state.tvShot?.id !== id) return URL.revokeObjectURL(url);
+    state.tvShot = { id, url, loading: false };
+  } catch (err) {
+    state.tvShot = old?.url ? { id, url: old.url, loading: false } : null;
+    if (!quiet) toast(err.message, "bad");
+  }
+  renderAll();
+}
+
+/** A tap on the picture: tap that spot on the TV, then look again. */
+async function tapTvScreen(img, e) {
+  const id = img.dataset.tvShot;
+  const box = img.getBoundingClientRect();
+  if (!img.naturalWidth || !box.width) return;
+  const x = Math.round(((e.clientX - box.left) / box.width) * img.naturalWidth);
+  const y = Math.round(((e.clientY - box.top) / box.height) * img.naturalHeight);
+  const r = await api("POST", `/api/devices/${encodeURIComponent(id)}/screen/tap`, { x, y }).catch((err) => ({ ok: false, message: err.message }));
+  if (!r.ok) return toast(r.message || "That didn't work.", "bad");
+  if (state.tvScreen?.id === id) state.tvScreen = null;
+  setTimeout(() => showTvScreen(id, { quiet: true }), 900);
 }
 
 /** The TV's apps, adding one (from its store, or an app file on Android TVs), and your own TV apps. */
@@ -1035,6 +1088,8 @@ document.addEventListener("click", async (e) => {
     confirmResolve = null;
     return;
   }
+  const picture = e.target.closest("img[data-tv-shot]");
+  if (picture) return tapTvScreen(picture, e);
   const dismiss = e.target.closest("[data-dismiss]");
   if (dismiss) {
     state.dismissed.add(dismiss.dataset.dismiss);
@@ -1073,6 +1128,7 @@ document.addEventListener("click", async (e) => {
     else if (what === "speed") runSpeed();
     else if (what === "settings") openSettings(ui.dataset.focus);
     else if (what === "ask") voice.open();
+    else if (what === "tv-shot") showTvScreen(ui.dataset.id);
     else if (what === "screen-access") window.PatchAndroid?.openScreenSettings?.();
     else if (what === "app-info") window.PatchAndroid?.openAppInfo?.();
     else if (what === "todo-more") {
@@ -1211,7 +1267,11 @@ document.addEventListener("submit", async (e) => {
     form.reset();
     return;
   }
-  if (value) doAction(id, kind, String(value));
+  if (!value) return;
+  // Let go of the box (and the phone's keyboard): the card isn't redrawn while someone is typing in it,
+  // and what this does (a page's list of things to choose, say) shows in the card.
+  if (form.contains(document.activeElement)) document.activeElement.blur();
+  doAction(id, kind, String(value));
 });
 
 document.addEventListener(

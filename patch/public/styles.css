@@ -3223,6 +3223,70 @@ details summary {
   font-size: 12.5px;
 }
 
+.screen-title {
+  margin: 12px 0 0;
+  font-weight: 650;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.screen-line {
+  margin: 2px 2px;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.screen-line--head {
+  margin-top: 6px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.screen-line--note {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* A picture of the TV's screen: tap it to tap the TV. */
+.tvshot {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.tvshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #000;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tvshot.is-loading img {
+  opacity: 0.6;
+}
+
+.tvshot__wait {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+.tvshot small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .app-list {
   display: flex;
   flex-wrap: wrap;

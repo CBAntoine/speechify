@@ -210,13 +210,11 @@ export class WebSocketConnection extends EventEmitter {
 }
 
 /**
- * Connect to ws:// or wss:// (certificates aren't checked: TVs use self-signed ones).
- * Resolves with a WebSocketConnection once the server has accepted the upgrade.
+ * The client's side of the WebSocket handshake on a connected stream (a TCP or TLS socket, or a
+ * stream to a program on a TV over ADB). Resolves with a WebSocketConnection once the other side
+ * has accepted the upgrade. On failure the stream is destroyed.
  */
-export function wsConnect(url, { timeout = 5000, headers = {} } = {}) {
-  const u = new URL(url);
-  const secure = u.protocol === "wss:";
-  const port = Number(u.port) || (secure ? 443 : 80);
+export function wsUpgrade(socket, { path = "/", host = "localhost", headers = {}, timeout = 5000 } = {}) {
   return new Promise((resolve, reject) => {
     const key = crypto.randomBytes(16).toString("base64");
     let settled = false;
@@ -227,24 +225,10 @@ export function wsConnect(url, { timeout = 5000, headers = {} } = {}) {
       socket.destroy();
       reject(err);
     };
-    const opts = { host: u.hostname, port, servername: net.isIP(u.hostname) ? undefined : u.hostname, rejectUnauthorized: false };
-    const socket = secure ? tls.connect(opts) : net.connect(opts);
     const timer = setTimeout(() => fail(Object.assign(new Error("The TV didn't answer."), { code: "ETIMEDOUT" })), timeout);
+    const onClose = () => fail(Object.assign(new Error("The TV closed the connection."), { code: "ECONNRESET" }));
     socket.once("error", fail);
-    socket.once(secure ? "secureConnect" : "connect", () => {
-      const lines = [
-        `GET ${u.pathname || "/"}${u.search} HTTP/1.1`,
-        `Host: ${u.host}`,
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Key: ${key}`,
-        "Sec-WebSocket-Version: 13",
-        ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`),
-        "",
-        "",
-      ];
-      socket.write(lines.join("\r\n"));
-    });
+    socket.once("close", onClose);
     let buf = Buffer.alloc(0);
     const onData = (d) => {
       buf = Buffer.concat([buf, d]);
@@ -266,9 +250,38 @@ export function wsConnect(url, { timeout = 5000, headers = {} } = {}) {
       settled = true;
       clearTimeout(timer);
       socket.off("error", fail);
+      socket.off("close", onClose);
       resolve(new WebSocketConnection(socket, { masking: true, head: buf.subarray(end + 4) }));
     };
     socket.on("data", onData);
+    socket.write(["GET " + path + " HTTP/1.1", `Host: ${host}`, "Upgrade: websocket", "Connection: Upgrade", `Sec-WebSocket-Key: ${key}`, "Sec-WebSocket-Version: 13", ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), "", ""].join("\r\n"));
+  });
+}
+
+/**
+ * Connect to ws:// or wss:// (certificates aren't checked: TVs use self-signed ones).
+ * Resolves with a WebSocketConnection once the server has accepted the upgrade.
+ */
+export function wsConnect(url, { timeout = 5000, headers = {} } = {}) {
+  const u = new URL(url);
+  const secure = u.protocol === "wss:";
+  const port = Number(u.port) || (secure ? 443 : 80);
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const opts = { host: u.hostname, port, servername: net.isIP(u.hostname) ? undefined : u.hostname, rejectUnauthorized: false };
+    const socket = secure ? tls.connect(opts) : net.connect(opts);
+    const fail = (err) => {
+      clearTimeout(timer);
+      socket.destroy();
+      reject(err);
+    };
+    const timer = setTimeout(() => fail(Object.assign(new Error("The TV didn't answer."), { code: "ETIMEDOUT" })), timeout);
+    socket.once("error", fail);
+    socket.once(secure ? "secureConnect" : "connect", () => {
+      clearTimeout(timer);
+      socket.off("error", fail);
+      wsUpgrade(socket, { path: `${u.pathname || "/"}${u.search}`, host: u.host, headers, timeout: Math.max(500, timeout - (Date.now() - started)) }).then(resolve, reject);
+    });
   });
 }
 

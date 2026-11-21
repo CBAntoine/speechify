@@ -12,12 +12,27 @@ export const TEMPLATE = {
   versionName: "0.0.0-template",
   icon: { width: 512, height: 512 },
   banner: { width: 320, height: 180 },
+  // What the template can do, written in its assets/patch-template.json. Level 2 added the web
+  // browser Patch can see into (pages open to Patch's DevTools connection over ADB).
+  level: 2,
+  levelFile: "assets/patch-template.json",
 };
 
 /** Width and height of a PNG, or null. */
 export function pngSize(buf) {
   if (!buf || buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47 || buf.toString("latin1", 12, 16) !== "IHDR") return null;
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+/** The level of a TV app template, or of an app made from one (1 for those from before levels). */
+export function templateLevel(apk) {
+  try {
+    const entry = readZip(apk).entries.find((e) => e.name === TEMPLATE.levelFile);
+    const level = entry ? Number(JSON.parse(entryData(entry).toString("utf8")).level) : 1;
+    return Number.isInteger(level) && level > 0 ? level : 1;
+  } catch {
+    return 1;
+  }
 }
 
 /** { package, label, versionCode, versionName, minSdk, tv } of an APK. Throws if it isn't one. */

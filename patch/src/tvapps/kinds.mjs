@@ -14,6 +14,7 @@ export const KINDS = {
   shortcuts: { label: "App shortcuts", emoji: "🧩", about: "Big buttons for the TV apps you use most (Android TV and Fire TV).", androidOnly: true },
   quiz: { label: "Quiz", emoji: "❓", about: "A quiz to play with the remote." },
   website: { label: "Website", emoji: "🌐", about: "Any website as an app, full screen." },
+  browser: { label: "Web browser", emoji: "🧭", about: "A web browser for the TV that Patch can see and use for you (Android TV and Fire TV).", androidOnly: true },
   custom: { label: "Your own code", emoji: "💻", about: "An app written in HTML, by you or by Patch.", androidOnly: false },
 };
 
@@ -265,6 +266,14 @@ function website(input, ctx, prev) {
   return { settings: { url }, notes: [] };
 }
 
+/** Patch's browser for the TV: optionally a page to start on. */
+function browser(input, ctx, prev) {
+  const given = input.settings?.url ?? input.content;
+  const url = given ? websiteUrl(given) : (prev?.settings?.url ?? null);
+  if (given && !url) throw new ContentError("That doesn't look like a web address. Tell me the page it should start on, like bbc.co.uk, or leave it out.");
+  return { settings: { url: url || null }, notes: [] };
+}
+
 const MAX_HTML = 400 * 1024;
 
 function custom(input, ctx, prev) {
@@ -276,7 +285,7 @@ function custom(input, ctx, prev) {
   return { settings: {}, notes: [], html: /<html[\s>]/i.test(text) ? text : `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${text}</body></html>` };
 }
 
-const MAKERS = { videos, photos, clock, notes, countdown, radio, shortcuts, quiz, website, custom };
+const MAKERS = { videos, photos, clock, notes, countdown, radio, shortcuts, quiz, website, browser, custom };
 
 /** The settings for a kind of app from { content, settings } (plus what the app had before, when changing it). */
 export async function makeSettings(kind, input, ctx, prev = null) {
@@ -299,6 +308,7 @@ export function summary(app) {
     case "shortcuts": return (s.apps || []).length ? (s.apps || []).map((a) => a.name).join(", ") : "All the TV's apps";
     case "quiz": return n((s.questions || []).length, "question", "questions");
     case "website": return s.url || "";
+    case "browser": return s.url ? `Starts on ${s.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}` : "Patch can read and use pages in it";
     default: return "Your own HTML";
   }
 }

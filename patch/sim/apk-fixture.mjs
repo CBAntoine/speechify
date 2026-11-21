@@ -122,8 +122,9 @@ const solid = (w, h, rgb) => {
 };
 
 /** A template-shaped APK (unsigned except for an old signature that building must drop). */
-export function fakeTemplate({ utf8 = false } = {}) {
+export function fakeTemplate({ utf8 = false, level = TEMPLATE.level } = {}) {
   return writeZip([
+    ...(level > 1 ? [{ name: TEMPLATE.levelFile, data: Buffer.from(JSON.stringify({ level })) }] : []),
     { name: "AndroidManifest.xml", data: fakeManifest({ utf8 }) },
     { name: "classes.dex", data: Buffer.from("dex\n035\0 pretend code") },
     { name: "resources.arsc", data: fakeArsc("unused"), store: true },

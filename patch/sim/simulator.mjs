@@ -12,6 +12,7 @@ import { parseSsdpMessage } from "../src/net/ssdp.mjs";
 import * as H from "./http-devices.mjs";
 import * as S from "./socket-devices.mjs";
 import * as T from "./tv-devices.mjs";
+import { startPretendBrowser } from "./pretend-browser.mjs";
 
 export async function startSimulator({ prefix = "127.0.10", multicast = false } = {}) {
   const ip = (n) => `${prefix}.${n}`;
@@ -64,6 +65,11 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
   // TVs and other devices that say exactly what they are.
   add(await T.samsungTv(ip(15), state.samsung));
   add(await T.lgTv(ip(16), state.lg));
+  // Patch's own browser on the Fire TV shows pretend pages, unless a test puts a real Chrome
+  // behind it (state.firetv.browser = { open }, see sim/chrome.mjs).
+  const pretend = await startPretendBrowser();
+  state.firetv.browser = pretend;
+  add({ close: () => pretend.close() });
   add(await T.fireTv(ip(17), state.firetv));
   add(await T.playStation(ip(18)));
   add(await S.openPorts(ip(19), [7000, 49152]));

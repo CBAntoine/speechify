@@ -8,6 +8,7 @@ import net from "node:net";
 import crypto from "node:crypto";
 import os from "node:os";
 import { EventEmitter } from "node:events";
+import { Duplex } from "node:stream";
 
 export const CMD = { CNXN: 0x4e584e43, AUTH: 0x48545541, OPEN: 0x4e45504f, OKAY: 0x59414b4f, CLSE: 0x45534c43, WRTE: 0x45545257, STLS: 0x534c5453 };
 export const AUTH = { TOKEN: 1, SIGNATURE: 2, RSAPUBLICKEY: 3 };
@@ -146,6 +147,8 @@ export class AdbClient extends EventEmitter {
     this.maxData = 4096;
     this.banner = null;
     this.parser = new MessageParser((m) => this.emit("message", m));
+    // A shell command, a file transfer and a few open streams each listen for their own messages.
+    this.setMaxListeners(40);
     socket.on("data", (d) => {
       try {
         this.parser.push(d);
@@ -222,6 +225,18 @@ export class AdbClient extends EventEmitter {
 
   /** Run a shell command; resolves with its output. Commands run one at a time. */
   shell(command, { timeout = 8000 } = {}) {
+    return this.#run(`shell:${command}`, timeout).then((out) => out.toString("utf8"));
+  }
+
+  /**
+   * Run a command and resolve with exactly the bytes it wrote (ADB's "exec" service: no terminal in
+   * between to change line endings), which is what a picture of the screen needs.
+   */
+  exec(command, { timeout = 20_000 } = {}) {
+    return this.#run(`exec:${command}`, timeout);
+  }
+
+  #run(service, timeout) {
     const run = () =>
       new Promise((resolve, reject) => {
         if (!this.open) return reject(err("The connection to the device closed.", "ECONNRESET"));
@@ -234,7 +249,7 @@ export class AdbClient extends EventEmitter {
           this.off("close", onClose);
           e ? reject(e) : resolve(v);
         };
-        const onClose = () => finish(null, Buffer.concat(out).toString("utf8"));
+        const onClose = () => finish(null, Buffer.concat(out));
         const timer = setTimeout(() => {
           this.send(CMD.CLSE, local, remote);
           finish(err("The device took too long to answer.", "ETIMEDOUT"));
@@ -248,16 +263,48 @@ export class AdbClient extends EventEmitter {
             this.send(CMD.OKAY, local, remote);
           } else if (m.command === CMD.CLSE) {
             if (remote) this.send(CMD.CLSE, local, remote);
-            finish(null, Buffer.concat(out).toString("utf8"));
+            finish(null, Buffer.concat(out));
           }
         };
         this.on("message", onMsg);
         this.on("close", onClose);
-        this.send(CMD.OPEN, local, 0, `shell:${command}\0`);
+        this.send(CMD.OPEN, local, 0, `${service}\0`);
       });
     const p = this.queue.then(run, run);
     this.queue = p.catch(() => {});
     return p;
+  }
+
+  /**
+   * Opens a two-way stream to something on the device and resolves with it once the device accepts:
+   * "localabstract:<name>" is a program's own socket (a browser's debugging socket, say) and
+   * "tcp:<port>" a port on the device itself. Streams stay open alongside shell commands. If nothing
+   * is listening there, it rejects with code EREFUSED.
+   */
+  openStream(service, { timeout = 8000 } = {}) {
+    return new Promise((resolve, reject) => {
+      if (!this.open) return reject(err("The connection to the device closed.", "ECONNRESET"));
+      const local = this.nextId++;
+      const stream = new AdbStream(this, local);
+      let settled = false;
+      const settle = (e) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stream.off("ready", onReady);
+        stream.off("close", onRefused);
+        e ? reject(e) : resolve(stream);
+      };
+      const onReady = () => settle(null);
+      const onRefused = () => settle(err("Nothing on the device answered there.", "EREFUSED"));
+      const timer = setTimeout(() => {
+        stream.destroy();
+        settle(err("The device took too long to answer.", "ETIMEDOUT"));
+      }, timeout);
+      stream.once("ready", onReady);
+      stream.once("close", onRefused);
+      this.send(CMD.OPEN, local, 0, `${service}\0`);
+    });
   }
 
   /**
@@ -326,6 +373,77 @@ export class AdbClient extends EventEmitter {
     this.open = false;
     this.socket.end();
     setTimeout(() => this.socket.destroy(), 200).unref?.();
+  }
+}
+
+/**
+ * One open ADB stream, as a Node stream. ADB lets each side send one piece at a time: the next
+ * goes out when the other side has said OKAY to the last.
+ */
+export class AdbStream extends Duplex {
+  constructor(client, local) {
+    super();
+    this.client = client;
+    this.local = local;
+    this.remote = 0;
+    this.waiting = null; // called when the device takes the piece just sent
+    this.onMessage = (m) => {
+      if (m.arg1 !== this.local) return;
+      if (m.command === CMD.OKAY) {
+        const first = !this.remote;
+        this.remote = m.arg0;
+        if (first) return this.emit("ready");
+        const next = this.waiting;
+        this.waiting = null;
+        next?.();
+      } else if (m.command === CMD.WRTE) {
+        this.remote = m.arg0;
+        client.send(CMD.OKAY, this.local, this.remote);
+        this.push(m.data);
+      } else if (m.command === CMD.CLSE) {
+        // The device closed it (or never opened it): nothing more to say to it.
+        this.remote = 0;
+        this.destroy();
+      }
+    };
+    this.onClientClose = () => {
+      this.remote = 0;
+      this.destroy();
+    };
+    client.on("message", this.onMessage);
+    client.on("close", this.onClientClose);
+  }
+
+  _read() {}
+
+  _write(chunk, encoding, callback) {
+    const size = Math.max(1024, this.client.maxData);
+    let offset = 0;
+    const next = () => {
+      if (this.destroyed || !this.remote) return callback(err("The connection to the device closed.", "ECONNRESET"));
+      if (offset >= chunk.length) return callback();
+      const piece = chunk.subarray(offset, offset + size);
+      offset += piece.length;
+      this.waiting = next;
+      this.client.send(CMD.WRTE, this.local, this.remote, piece);
+    };
+    next();
+  }
+
+  _final(callback) {
+    callback();
+    this.destroy();
+  }
+
+  _destroy(error, callback) {
+    this.client.off("message", this.onMessage);
+    this.client.off("close", this.onClientClose);
+    if (this.remote) this.client.send(CMD.CLSE, this.local, this.remote);
+    this.remote = 0;
+    const stuck = this.waiting;
+    this.waiting = null;
+    stuck?.();
+    callback(error);
   }
 }
 

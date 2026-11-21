@@ -10,7 +10,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { TEMPLATE, apkInfo, buildApp, pngSize } from "../apk/index.mjs";
+import { TEMPLATE, apkInfo, buildApp, pngSize, templateLevel } from "../apk/index.mjs";
 import { letterImage } from "../apk/png.mjs";
 import { newSigningKey } from "../apk/sign.mjs";
 import { customAppNames } from "../drivers/tv.mjs";
@@ -328,6 +328,9 @@ export class TvApps {
     const app = { id: a.id, name: a.name, kind: a.kind, emoji: a.emoji, color: a.color, version: a.version, settings: a.settings, photos: (a.photos || []).map((p) => ({ src: `photos/${p.name}`, caption: p.caption || null })) };
     if (a.kind === "custom") {
       files.set("index.html", await fsp.readFile(path.join(this.appDir(a.id), "custom.html")));
+    } else if (a.kind === "browser") {
+      // The page Patch's browser starts on (a search box, and what to ask Patch).
+      files.set("index.html", await fsp.readFile(path.join(RUNTIME, "browser.html")));
     } else {
       const json = JSON.stringify(app).replace(/[<\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -338,8 +341,9 @@ export class TvApps {
       files.set("tvkit.js", await fsp.readFile(path.join(RUNTIME, "tvkit.js")));
       files.set("tvkit.css", await fsp.readFile(path.join(RUNTIME, "tvkit.css")));
     }
-    // For Patch's Android TV app: what kind of app it is (a website opens the site itself).
-    files.set("app.json", Buffer.from(JSON.stringify({ name: a.name, kind: a.kind, url: a.kind === "website" ? a.settings.url : null, version: a.version })));
+    // For Patch's Android TV app: what kind of app it is (a website opens the site itself, and the
+    // browser opens any site, starting on its own page unless it was given another).
+    files.set("app.json", Buffer.from(JSON.stringify({ name: a.name, kind: a.kind, url: a.kind === "website" || a.kind === "browser" ? a.settings.url || null : null, version: a.version })));
     for (const p of a.photos || []) files.set(`photos/${p.name}`, await fsp.readFile(path.join(this.appDir(a.id), "photos", p.name)));
     this.bundles.set(a.id, { version: a.version, files });
     return files;
@@ -360,13 +364,22 @@ export class TvApps {
 
   // ── The Android TV app ────────────────────────────────────────────────────
 
+  /**
+   * The Android TV app template: the one that came with this copy of Patch (the phone app carries
+   * its own), or the one the Android build publishes, kept in Patch's data folder. A kept one from
+   * before the web browser (an older level) is replaced when a newer one can be fetched.
+   */
   async template() {
     if (this.overrides.tvappTemplate) return this.overrides.tvappTemplate;
     if (this.templateApk) return this.templateApk;
-    for (const p of [path.join(ROOT, "tvapp", "template.apk"), path.join(this.dir, "template.apk")]) {
-      if (fs.existsSync(p)) return (this.templateApk = await fsp.readFile(p));
+    const bundled = path.join(ROOT, "tvapp", "template.apk");
+    if (fs.existsSync(bundled)) return (this.templateApk = await fsp.readFile(bundled));
+    const kept = path.join(this.dir, "template.apk");
+    let old = null;
+    if (fs.existsSync(kept)) {
+      old = await fsp.readFile(kept);
+      if (templateLevel(old) >= TEMPLATE.level) return (this.templateApk = old);
     }
-    // A copy of Patch running from its source code fetches the template the Android build publishes.
     let buf = null;
     try {
       const res = await fetch(process.env.PATCH_TVAPP_TEMPLATE_URL || TEMPLATE_URL, { redirect: "follow", signal: AbortSignal.timeout(90_000) });
@@ -374,9 +387,33 @@ export class TvApps {
     } catch {
       /* below */
     }
-    if (!buf || apkInfo(buf).package !== TEMPLATE.package) throw new TvAppError("Patch couldn't get its Android TV app template. Check the internet connection and try again.", 502);
-    await fsp.writeFile(path.join(this.dir, "template.apk"), buf);
+    let ok = false;
+    try {
+      ok = !!buf && apkInfo(buf).package === TEMPLATE.package;
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      // No newer one to be had right now: the older one still makes every app but the browser.
+      if (old) return old;
+      throw new TvAppError("Patch couldn't get its Android TV app template. Check the internet connection and try again.", 502);
+    }
+    await fsp.writeFile(kept, buf);
     return (this.templateApk = buf);
+  }
+
+  /** Whether apps made now can be seen into by Patch (the web browser needs that). */
+  async canSeePages() {
+    return templateLevel(await this.template()) >= TEMPLATE.level;
+  }
+
+  /** Patch's own web browser for TVs, made the first time it's needed. */
+  async browser() {
+    const have = Object.values(this.data.apps).find((x) => x.kind === "browser");
+    if (have) return have;
+    const r = await this.create({ kind: "browser", name: "Patch Browser", color: "#5b6cff" });
+    this.onChange();
+    return this.data.apps[r.app.id];
   }
 
   async signingKey() {
@@ -423,7 +460,7 @@ export class TvApps {
       if (!r.device) throw new TvAppError(`I couldn't find a TV called “${query}”.`, 404);
       return r.device;
     }
-    const tvs = this.inventory.all().filter((d) => able(d) && d.online !== false && !(a.kind === "shortcuts" && d.driver !== "androidtv"));
+    const tvs = this.inventory.all().filter((d) => able(d) && d.online !== false && !(KINDS[a.kind].androidOnly && d.driver !== "androidtv"));
     if (tvs.length === 1) return tvs[0];
     if (!tvs.length) throw new TvAppError("I haven't found a TV that can take apps yet: Android TV, Google TV and Fire TV can install them, and Samsung and LG TVs can open them. Scan for devices, or tell me which TV.", 404);
     throw new TvAppError(`Which TV: ${tvs.map((d) => this.inventory.displayName(d)).join(", ")}?`);
@@ -443,7 +480,7 @@ export class TvApps {
       }
       return { ...r, app: this.publicApp(a) };
     }
-    if (a.kind === "shortcuts") throw new TvAppError(`App shortcuts only work on Android TV, Google TV and Fire TV, and ${name} isn't one.`);
+    if (KINDS[a.kind].androidOnly) throw new TvAppError(`${a.kind === "browser" ? "Patch's browser only works" : "App shortcuts only work"} on Android TV, Google TV and Fire TV, and ${name} isn't one.`);
     if (d.driver === "samsung" || d.driver === "lgwebos" || d.actions?.includes("open_website")) {
       const url = a.kind === "website" ? a.settings.url : `${await this.lanBase()}/${a.id}/`;
       const r = await this.controller.act(d.id, "open_website", url);
@@ -457,6 +494,14 @@ export class TvApps {
       };
     }
     throw new TvAppError(`${name} can't take apps from Patch. Android TV, Google TV and Fire TV can install them, and Samsung and LG TVs can open them in their browser.`);
+  }
+
+  /** Note that an app was put on a TV some other way than putOnTv (Patch's browser, on first use). */
+  async installedOn(id, deviceId, name) {
+    const a = this.need(id);
+    a.installs[deviceId] = { version: a.version, at: Date.now(), how: "app", name };
+    await this.save();
+    this.onChange();
   }
 
   /** Open an app that's already on a TV (installing it first if needed). */

@@ -52,7 +52,12 @@ import java.util.Set;
  * A TV app made with Patch: its pages are in assets/app/ (index.html and Patch's small runtime),
  * shown full screen. The remote's arrows and OK go to the page, Back goes back (then leaves).
  * A "website" app shows that site instead, with a pointer moved by the arrows (OK clicks; Menu
- * switches the pointer off for sites that work with the arrows).
+ * switches the pointer off for sites that work with the arrows). A "browser" app is the same for
+ * any site: it starts on its own page (a search box), or on the link it was opened with.
+ *
+ * The page is open to DevTools, which on Android only ADB can reach (and ADB is what the TV's
+ * owner allowed Patch to use). That is how Patch reads a page for the person and clicks, types
+ * and scrolls in it: see patch/src/tvweb.
  */
 public final class AppActivity extends Activity {
     private static final String TAG = "PatchTV";
@@ -67,6 +72,7 @@ public final class AppActivity extends Activity {
     private View fullscreen;
     private WebChromeClient.CustomViewCallback fullscreenDone;
     private boolean website;
+    private boolean browser;
     private String siteUrl;
 
     @Override
@@ -74,9 +80,13 @@ public final class AppActivity extends Activity {
         super.onCreate(saved);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         JSONObject app = readConfig();
-        website = "website".equals(app.optString("kind")) && app.optString("url", "").matches("^https?://.+");
-        siteUrl = website ? app.optString("url") : null;
+        boolean hasUrl = app.optString("url", "").matches("^https?://.+");
+        browser = "browser".equals(app.optString("kind"));
+        website = browser || ("website".equals(app.optString("kind")) && hasUrl);
+        siteUrl = website && hasUrl ? app.optString("url") : null;
         Log.i(TAG, "Showing " + app.optString("name", "app") + " (" + app.optString("kind", "?") + ")");
+        // Lets Patch see into the page over ADB (see the note at the top).
+        WebView.setWebContentsDebuggingEnabled(true);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -102,13 +112,29 @@ public final class AppActivity extends Activity {
             s.setLoadWithOverviewMode(true);
             pointer = new Pointer(this);
             root.addView(pointer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            web.loadUrl(siteUrl);
+            String asked = browser ? linkIn(getIntent()) : null;
+            web.loadUrl(asked != null ? asked : siteUrl != null ? siteUrl : BASE + "index.html");
         } else {
             // Only the app's own pages can use the bridge (never a website it opens).
             web.addJavascriptInterface(new Bridge(), "PatchTV");
             web.loadUrl(BASE + "index.html");
         }
         web.requestFocus();
+    }
+
+    /** The web address the app was opened with (the browser can be started on a page), or null. */
+    private static String linkIn(Intent intent) {
+        Uri u = intent == null ? null : intent.getData();
+        if (u == null || u.getHost() == null) return null;
+        return "https".equals(u.getScheme()) || "http".equals(u.getScheme()) ? u.toString() : null;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String asked = browser ? linkIn(intent) : null;
+        if (asked != null) web.loadUrl(asked);
     }
 
     private JSONObject readConfig() {

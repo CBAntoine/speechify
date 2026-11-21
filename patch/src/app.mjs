@@ -315,6 +315,8 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     }],
     ["POST", /^\/api\/devices\/([^/]+)\/credentials$/, async (b, [id]) => controller.setCredentials(id, b)],
     ["POST", /^\/api\/devices\/([^/]+)\/diagnose$/, async (_, [id]) => controller.diagnose(id)],
+    // A tap on the picture of a TV's screen (the picture itself is served below, as an image).
+    ["POST", /^\/api\/devices\/([^/]+)\/screen\/tap$/, async (b, [id]) => controller.tapAt(id, Number(b.x), Number(b.y))],
     ["POST", /^\/api\/control$/, async (b) => control(b)],
     ["POST", /^\/api\/resolve$/, async (b) => {
       const r = inventory.resolve(b.query, { kind: b.kind });
@@ -462,6 +464,16 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     if (given !== token) return send(res, 403, { ok: false, message: "Missing or wrong app token. Reload the page." });
     const origin = req.headers.origin;
     if (origin && origin !== `http://${req.headers.host}`) return send(res, 403, { ok: false, message: "Cross-site request refused." });
+
+    const picture = url.pathname.match(/^\/api\/devices\/([^/]+)\/screen\.png$/);
+    if (picture && req.method === "GET") {
+      // A picture of a TV's screen: an image, not JSON.
+      try {
+        return send(res, 200, await controller.picture(decodeURIComponent(picture[1])), { "content-type": "image/png" });
+      } catch (err) {
+        return send(res, err.status || 502, { ok: false, message: err.message || "The TV didn't give a picture of its screen." });
+      }
+    }
 
     if (url.pathname === "/api/uploads" && req.method === "POST") {
       // Raw bytes (an app file, a photo), not JSON.

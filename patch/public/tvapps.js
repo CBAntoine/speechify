@@ -360,7 +360,7 @@ export function createTvApps(ui) {
   }
 
   function tvButtons(a) {
-    const list = (a.madeBy === "claude" ? targets() : tvs()).filter((d) => !(a.kind === "shortcuts" && d.driver !== "androidtv"));
+    const list = (a.madeBy === "claude" ? targets() : tvs()).filter((d) => !((a.kind === "shortcuts" || a.kind === "browser") && d.driver !== "androidtv"));
     if (!list.length) return `<p class="tvmaker__fine">${icon("info", 14)} I haven't found a TV that can take apps yet. Android TV, Google TV and Fire TV install them; Samsung and LG TVs open them. Scan for devices, then come back.</p>`;
     return `<div class="btns">${list
       .map((d) => {

@@ -5,7 +5,8 @@ plugins {
 // Patch's TV app template. Patch (on the phone or a computer) turns it into each TV app the person
 // makes: it rewrites the app id, name and version in the manifest, swaps in the app's icon, banner
 // and pages (assets/app/), and signs the result with its own key. See patch/src/apk/index.mjs:
-// the placeholders below must match TEMPLATE there.
+// the placeholders below must match TEMPLATE there, and assets/patch-template.json says which
+// level of template this is (what Patch can count on it doing).
 android {
     namespace "app.patch.tvapp"
     compileSdk 34

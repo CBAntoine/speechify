@@ -149,11 +149,16 @@ test("Fire TV over ADB: the allow prompt, then apps, YouTube, browser and typing
   assert.deepEqual(sim.state.firetv.lastIntent, { action: "android.intent.action.SEARCH", data: null, query: "paw patrol", pkg: "com.amazon.firetv.youtube" });
   r = await control({ device: "Kids Room Fire TV", action: "play_youtube", value: "dQw4w9WgXcQ" });
   assert.equal(sim.state.firetv.lastIntent.data, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-  r = await control({ device: "Kids Room Fire TV", action: "web_search", value: "how tall is everest" });
-  assert.equal(sim.state.firetv.lastIntent.pkg, "com.amazon.cloud9", "web pages open in the Fire TV's browser");
   r = await control({ device: "Kids Room Fire TV", action: "type_text", value: "it's bluey" });
   assert.equal(sim.state.firetv.lastText, "it's bluey");
-  assert.ok(sim.state.firetv.commands.every((c) => !/;|&&|\|\|/.test(c.replace(/'[^']*'/g, "")) || c.startsWith("echo") || c.startsWith("monkey") || c.startsWith("dumpsys")), "spoken text never becomes shell syntax");
+  // The web: the first time, Patch puts its own browser on the TV (the one it can see into) and opens the page in it.
+  r = await control({ device: "Kids Room Fire TV", action: "web_search", value: "how tall is everest" });
+  assert.ok(r.ok, r.message);
+  assert.equal(Object.values(sim.state.firetv.installed).find((a) => a.kind === "browser")?.label, "Patch Browser");
+  assert.match(sim.state.firetv.focus, /^app\.patch\.tvapp\./, "Patch's browser is in front");
+  assert.equal(sim.state.firetv.browser.state.url, "https://www.google.com/search?q=how%20tall%20is%20everest");
+  assert.match(r.screen, /Heading: Results for “how tall is everest”/, "and Patch says what the page shows");
+  assert.ok(sim.state.firetv.commands.every((c) => !/;|&&|\|\|/.test(c.replace(/'[^']*'/g, "")) || /^(echo|monkey|dumpsys|pidof) /.test(c)), "spoken text never becomes shell syntax");
   r = await control({ device: "Kids Room Fire TV", action: "turn_off" });
   assert.equal(sim.state.firetv.awake, false);
   // A new connection uses the remembered key: no second prompt.

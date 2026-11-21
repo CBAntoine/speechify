@@ -8,6 +8,7 @@ import { fireTvModel } from "../net/models.mjs";
 import { describeScreen, riskyButton } from "../net/phone.mjs";
 import { readUiTree } from "../net/uitree.mjs";
 import { watchUrl, youtubeSearchUrl } from "../net/youtube.mjs";
+import { WebSession, describePage, hostOf } from "../tvweb/session.mjs";
 import { apkInfo } from "../apk/index.mjs";
 import { fuzzyPick, normalizeText, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
@@ -51,14 +52,20 @@ const appName = (pkg) => customAppNames.get(pkg) || PKG_NAMES[pkg] || knownLabel
 const isFireTv = (d) => d.brand === "Amazon" || /fire/i.test(`${d.info?.os || ""} ${d.model || ""}`);
 const LAUNCHERS = /launcher|tvlauncher|leanbacklauncher|launcherx|com\.google\.android\.apps\.tv\.launcherx|amazon\.tv\.launcher/i;
 
-// Live connections, closed after a minute of quiet.
+// Live connections, closed after a minute of quiet. They're kept by the TV and its address: a TV
+// that comes back at another address gets a new connection.
 const clients = new Map();
+// Patch's connection into the web page one of its own apps is showing, per TV.
+const webs = new Map();
+const keyOf = (device) => `${device.id}|${device.ref.ip}:${device.ref.adbPort || 5555}`;
 
 function closeLater(id) {
   const c = clients.get(id);
   if (!c) return;
   clearTimeout(c.timer);
   c.timer = setTimeout(() => {
+    webs.get(id)?.session.close();
+    webs.delete(id);
     c.client.close();
     clients.delete(id);
   }, 60_000);
@@ -80,9 +87,10 @@ function setupMessage(device) {
 }
 
 async function connect(device, ctx, { pairing = false } = {}) {
-  const live = clients.get(device.id);
+  const id = keyOf(device);
+  const live = clients.get(id);
   if (live?.client.open) {
-    closeLater(device.id);
+    closeLater(id);
     return live.client;
   }
   const key = await adbKey(ctx);
@@ -98,9 +106,9 @@ async function connect(device, ctx, { pairing = false } = {}) {
     throw err;
   }
   if (!ctx.secrets.pairings?.[device.id]?.adb) await ctx.saveSecret(["pairings", device.id], { adb: true, paired: true });
-  clients.set(device.id, { client, timer: null });
-  client.on("close", () => clients.get(device.id)?.client === client && clients.delete(device.id));
-  closeLater(device.id);
+  clients.set(id, { client, timer: null });
+  client.on("close", () => clients.get(id)?.client === client && clients.delete(id));
+  closeLater(id);
   return client;
 }
 
@@ -346,6 +354,120 @@ async function selectOnScreen(client, device, value, ctx) {
   return done(`Selected “${item.text}” on ${device.name}.`);
 }
 
+// ── Web pages on the TV ─────────────────────────────────────────────────────
+// Patch's own browser (one of its TV apps) shows the page, and Patch sees into it through the
+// browser's debugging socket, which Android only opens to ADB: so Patch can list what's on a
+// page, choose things by name, type and scroll, the way it does on the phone's screen.
+
+async function focusedPkg(client) {
+  const out = await sh(client, "dumpsys window | grep -m 2 -E 'mCurrentFocus|mFocusedApp'").catch(() => "");
+  return out.match(/\s([A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+/)?.[1] || null;
+}
+
+/** The name of an app's debugging socket, if its pages are open to Patch. */
+async function devtoolsSocket(client, pkg) {
+  const out = (await sh(client, `pidof ${pkg} 2>/dev/null; echo; cat /proc/net/unix 2>/dev/null`, 8000).catch(() => "")).replace(/\r/g, "");
+  const pids = new Set(out.slice(0, Math.max(0, out.indexOf("\n"))).split(/\s+/).filter((x) => /^\d+$/.test(x)));
+  const sockets = [...out.matchAll(/webview_devtools_remote_(\d+)/g)].map((m) => ({ name: m[0], pid: m[1] }));
+  let hit = sockets.find((x) => pids.has(x.pid));
+  if (!hit && !pids.size) {
+    // An older TV with no "pidof": ask each socket's process which app it is.
+    for (const x of sockets) {
+      const who = await sh(client, `cat /proc/${x.pid}/cmdline 2>/dev/null`).catch(() => "");
+      if (who.split("\0")[0].trim() === pkg) {
+        hit = x;
+        break;
+      }
+    }
+  }
+  return hit?.name || null;
+}
+
+/** Patch's connection into the page an app is showing, or null if the app's pages aren't open to Patch. */
+async function webSession(client, device, pkg, { wait = 0 } = {}) {
+  const id = keyOf(device);
+  const live = webs.get(id);
+  if (live?.session.alive && live.pkg === pkg && live.client === client) return live.session;
+  live?.session.close();
+  webs.delete(id);
+  let name = null;
+  for (const end = Date.now() + wait; ; ) {
+    name = await devtoolsSocket(client, pkg);
+    if (name || Date.now() >= end) break;
+    await sleep(400);
+  }
+  if (!name) return null;
+  const session = await WebSession.connect(() => client.openStream(`localabstract:${name}`));
+  webs.set(id, { session, pkg, client });
+  session.cdp.once("close", () => webs.get(id)?.session === session && webs.delete(id));
+  return session;
+}
+
+/** The page in front, if one of Patch's own apps is showing it and Patch can see into it. */
+async function webInFront(client, device) {
+  const pkg = await focusedPkg(client);
+  if (!pkg || !customAppNames.has(pkg)) return null;
+  const session = await webSession(client, device, pkg).catch(() => null);
+  return session ? { session, pkg } : null;
+}
+
+/** Open Patch's browser on the TV, putting it there the first time, and connect into its page. */
+async function openBrowser(client, device, ctx) {
+  const tv = ctx.tvapps;
+  if (!tv) throw new DeviceError("This copy of Patch can't put its browser on a TV.", { code: "EUNSUPPORTED" });
+  if (!(await tv.canSeePages())) throw new DeviceError("Using web pages on a TV needs Patch's newer TV app template, which it fetches from the internet. Check this computer's connection and try again.", { code: "ETEMPLATE" });
+  const app = await tv.browser();
+  const list = device.ref.packages?.length ? device.ref.packages : await packages(client, device);
+  let fresh = false;
+  if (!list.includes(app.package) || app.installs?.[device.id]?.version !== app.version) {
+    const made = await tv.apk(app.id);
+    await sideload(client, device, made.apk, { label: made.name, ours: true });
+    await tv.installedOn(app.id, device.id, device.name);
+    fresh = true;
+  }
+  if (fresh || (await focusedPkg(client)) !== app.package) await launchPkg(client, app.package);
+  // The app needs a moment to start and draw its first page before there's anything to connect to.
+  let session = null;
+  for (let i = 0; i < (ctx.webTries ?? 7) && !session; i++) {
+    session = await webSession(client, device, app.package, { wait: 1000 }).catch(() => null);
+    if (!session) await sleep(400);
+  }
+  return { session, app, fresh };
+}
+
+/** The result of a step on a web page: what happened, and what the page shows now. */
+function pageDone(device, pkg, r, lead) {
+  const d = describePage(r.page, { where: appName(pkg) === pkg ? "Patch's browser" : appName(pkg) });
+  const said = r.dialog ? (r.dialog.type === "alert" ? ` The page said: “${r.dialog.message}”.` : r.dialog.accepted ? ` The page asked “${r.dialog.message}” and I answered OK.` : ` The page asked “${r.dialog.message}”; I answered Cancel.`) : "";
+  return done(`${lead}${said}`, { screen: d.text, state: { ...device.state, on: true, app: appName(pkg) } });
+}
+const showing = (page) => `“${page.title || hostOf(page.url) || "a page"}”${hostOf(page.url) ? ` (${hostOf(page.url)})` : ""}`;
+
+/** A numbered thing ("3", "the second one") or its words. */
+function webTarget(value) {
+  const v = String(value).trim();
+  if (/^\d{1,3}$/.test(v)) return Number(v);
+  const n = pickIndex(v);
+  return n != null && n >= 0 ? n + 1 : v;
+}
+
+async function webTap(device, web, value, ctx) {
+  const v = String(need(value, "thing to choose")).trim();
+  // "3 in How many", "Large from the size menu": a choice in a drop-down list.
+  const pick = v.match(/^(.+?)\s+(?:in|from)\s+(?:the\s+)?(.+?)(?:\s+(?:menu|list|drop.?down))?$/i);
+  if (pick) {
+    const r = await web.session.choose(webTarget(pick[2]), pick[1]);
+    if (r) return pageDone(device, web.pkg, r, `Chose “${r.chosen.chosen}” in “${r.chosen.text}” on ${device.name}.`);
+  }
+  const r = await web.session.click(webTarget(v), { confirmed: !!ctx.confirmed });
+  const it = r.chose;
+  if (r.menu) return pageDone(device, web.pkg, r, `“${it.text}” is a menu with these choices: ${r.menu.join(", ")}. To pick one, tap with “<choice> in ${it.text}”.`);
+  if (r.secretBox) return pageDone(device, web.pkg, r, `“${it.text}” is for a password or card details. I don't type those: ask the person to type it with the TV's remote.`);
+  if (r.ready) return pageDone(device, web.pkg, r, `“${it.text}” is ready for typing on ${device.name}. Use type_text with the words, then press_button “enter” if it needs sending.`);
+  const moved = r.page.url && it.href && hostOf(r.page.url) !== "" ? ` It's showing ${showing(r.page)} now.` : "";
+  return pageDone(device, web.pkg, r, `Chose “${it.text}” on ${device.name}.${moved}`);
+}
+
 /** Facts about the device from ADB (exact model, manufacturer, Android version). */
 async function deviceFacts(client) {
   const props = client.banner?.props || {};
@@ -436,6 +558,30 @@ export default {
     return { state: await liveState(client, device) };
   },
 
+  /** A picture of the TV's screen as it is now (a PNG), for the person to look at in Patch. */
+  async picture(device, ctx) {
+    try {
+      const client = await connect(device, ctx);
+      const png = await client.exec("screencap -p", { timeout: 30_000 });
+      if (png.length < 100 || png.readUInt32BE(0) !== 0x89504e47) throw new DeviceError(`${device.name} didn't give a picture of its screen.`, { code: "ESCREEN" });
+      return png;
+    } catch (err) {
+      throw explainError(err, device.name);
+    }
+  },
+
+  /** A tap at a spot on the screen (in the picture's own pixels): the person's own finger, from the dashboard. */
+  async tapAt(device, x, y, ctx) {
+    try {
+      const client = await connect(device, ctx);
+      await sh(client, `input tap ${Math.round(x)} ${Math.round(y)}`);
+      ctx.memory?.delete(`tv-screen:${device.id}`);
+      return done(`Tapped ${device.name}'s screen.`);
+    } catch (err) {
+      throw explainError(err, device.name);
+    }
+  },
+
   async act(device, action, value, ctx) {
     for (const [p, n] of Object.entries(ctx.secrets.appLabels || {})) knownLabels.set(p, n);
     try {
@@ -497,6 +643,16 @@ export default {
         }
         case "press_button": {
           const k = normalizeText(need(value, "button")).replace(/\b\d+ times?\b/g, "").trim();
+          if (k === "enter" || k === "back") {
+            // On a web page Patch can see into: send the search or form, or go back a page, and say what shows now.
+            const web = await webInFront(client, device);
+            if (web && k === "enter") {
+              const r = await web.session.enter({ confirmed: !!ctx.confirmed });
+              return pageDone(device, web.pkg, r, `Pressed Enter on ${device.name}. It's showing ${showing(r.page)} now.`);
+            }
+            const r = web ? await web.session.back() : null;
+            if (r) return pageDone(device, web.pkg, r, `Went back on ${device.name}. It's showing ${showing(r.page)} now.`);
+          }
           const code = /^\d$/.test(k) ? `KEYCODE_${k}` : Object.hasOwn(KEYS, k) ? KEYS[k] : null;
           if (!code) throw new DeviceError(`I don't know the button "${value}". Try home, back, up, down, left, right, ok, play, pause or search.`, { code: "EVALUE" });
           const times = Math.min(Math.max(parseInt(String(value).match(/\b(\d+) times?\b/)?.[1] || "1", 10), 1), 10);
@@ -517,15 +673,40 @@ export default {
         case "uninstall_app":
           return await uninstallApp(client, device, value);
         case "read_screen": {
+          const web = await webInFront(client, device);
+          if (web) {
+            const want = String(value || "").trim();
+            const find = want.match(/^(?:find|look for|where is|search for)\s+(.+)$/i);
+            if (find) {
+              const r = await web.session.find(find[1]);
+              return pageDone(device, web.pkg, r, r.found.count ? `“${find[1]}” is on the page ${r.found.count === 1 ? "once" : `${r.found.count} times`}. The first place says: “${r.found.text}”.` : `I can't find “${find[1]}” on this page.`);
+            }
+            if (/^(text|words|read|article|story|all|everything)\b/i.test(want)) {
+              const text = await web.session.read();
+              const page = await web.session.snapshot();
+              return done(text ? `Here are the words of ${showing(page)} from where the screen is.` : `There are no words to read on ${showing(page)}.`, { screen: text || describePage(page).text });
+            }
+            const page = await web.session.snapshot();
+            const d = describePage(page, { where: appName(web.pkg) === web.pkg ? "Patch's browser" : appName(web.pkg) });
+            return done(d.summary, { screen: d.text });
+          }
           const screen = await readScreen(client, device, ctx);
           const d = describeScreen(screen);
           const thin = screen.items.length < 3 ? ` ${screen.app} draws its own picture, so I can only read a little of it; I can still press the remote's buttons.` : "";
           return done(`${d.summary}${thin}`, { screen: d.text });
         }
-        case "tap":
+        case "tap": {
+          const web = await webInFront(client, device);
+          if (web) return await webTap(device, web, value, ctx);
           return await selectOnScreen(client, device, value, ctx);
+        }
         case "scroll": {
           const dir = normalizeText(value || "down");
+          const web = await webInFront(client, device);
+          if (web) {
+            const r = await web.session.scroll(dir);
+            return pageDone(device, web.pkg, r, r.moved ? `Moved ${r.dir === "top" ? "to the top of" : r.dir === "bottom" ? "to the bottom of" : `${r.dir} on`} the page on ${device.name}.` : `The page on ${device.name} doesn't go any further ${r.dir === "up" || r.dir === "top" ? "up" : "that way"}.`);
+          }
           const code = /up/.test(dir) ? "KEYCODE_DPAD_UP" : /left/.test(dir) ? "KEYCODE_DPAD_LEFT" : /right/.test(dir) ? "KEYCODE_DPAD_RIGHT" : "KEYCODE_DPAD_DOWN";
           await key(client, code, code, code);
           ctx.memory?.delete(`tv-screen:${device.id}`);
@@ -535,6 +716,15 @@ export default {
           const q = String(need(value, "search")).trim();
           const inApp = q.match(/^(.+?)\s+(?:in|on|using)\s+(?:the\s+)?(.+?)(?:\s+app)?$/i);
           const pkg = inApp ? await findPackage(client, device, inApp[2]).catch(() => null) : null;
+          if (!pkg) {
+            // On a web page with a search box of its own: search that site.
+            const web = await webInFront(client, device);
+            const typed = web ? await web.session.type(q).catch((e) => (e.code === "ENOFIELD" ? null : Promise.reject(e))) : null;
+            if (typed) {
+              const r = await web.session.enter({ confirmed: !!ctx.confirmed });
+              return pageDone(device, web.pkg, r, `Searched for “${q}” in “${typed.box.text}” on ${device.name}. It's showing ${showing(r.page)} now.`);
+            }
+          }
           if (pkg) {
             const out = await sh(client, `am start -a android.intent.action.SEARCH --es query ${shellQuote(inApp[1])} ${pkg}`);
             if (!failed(out)) return done(`Searching ${appName(pkg)} for “${inApp[1]}” on ${device.name}.`, { state: { ...device.state, on: true, app: appName(pkg) } });
@@ -546,6 +736,14 @@ export default {
           throw new DeviceError(`${device.name} doesn't take searches from Patch. Tell me which app to search in, like “${q} in YouTube”.`, { code: "EUNSUPPORTED" });
         }
         case "type_text": {
+          const web = await webInFront(client, device);
+          if (web) {
+            // "pizza into the search box" names the box; otherwise the one in use, or the page's search box.
+            const raw = String(need(value, "text"));
+            const into = raw.match(/^(.+?)\s+(?:into|in)\s+(?:the\s+)?(.+?)\s+(?:box|field)$/i);
+            const r = await web.session.type(into ? into[1] : raw, into ? webTarget(into[2]) : null);
+            return pageDone(device, web.pkg, r, `Typed “${r.typed}” in “${r.box.text}” on ${device.name}. If it needs sending, use press_button with “enter”.`);
+          }
           const text = String(need(value, "text")).replace(/[^\x20-\x7e]/g, "");
           if (!text) throw new DeviceError("I can only type plain letters, numbers and punctuation on this TV.", { code: "EVALUE" });
           await sh(client, `input text ${shellQuote(text.replace(/ /g, "%s"))}`);
@@ -554,8 +752,25 @@ export default {
         case "web_search":
         case "open_website": {
           const url = action === "web_search" ? webSearchUrl(need(value, "search")) : websiteOrSearch(value);
-          if (!(await view(client, url))) throw new DeviceError(`${device.name} doesn't have a web browser. Install one from its app store (Silk on Fire TV, or a TV browser such as TV Bro) and try again.`, { code: "ENOBROWSER" });
-          return done(action === "web_search" ? `Searching the web for “${value}” on ${device.name}.` : `Opening ${url.replace(/^https:\/\//, "").replace(/\/$/, "")} on ${device.name}.`, { state: { ...device.state, on: true, app: "Web browser" } });
+          let b = null;
+          try {
+            b = await openBrowser(client, device, ctx);
+          } catch (err) {
+            // No way to put Patch's browser on this TV right now: hand the page to whatever browser it has.
+            if (!["EUNSUPPORTED", "ETEMPLATE", "EINSTALL"].includes(err.code)) throw err;
+            if (!(await view(client, url))) throw new DeviceError(`${device.name} doesn't have a web browser, and Patch couldn't put its own on it (${err.message})`, { code: "ENOBROWSER" });
+            return done(`${action === "web_search" ? `Searching the web for “${value}”` : `Opening ${url.replace(/^https:\/\//, "").replace(/\/$/, "")}`} on ${device.name}, in its own browser, which Patch can't see into.`, { state: { ...device.state, on: true, app: "Web browser" } });
+          }
+          const what = action === "web_search" ? `Searching the web for “${value}”` : `Opening ${url.replace(/^https:\/\//, "").replace(/\/$/, "")}`;
+          if (!b.session) {
+            // Patch's browser is open but Patch can't see into it on this TV: the page still opens in it.
+            const out = await sh(client, `am start -n ${b.app.package}/app.patch.tvapp.AppActivity -a android.intent.action.VIEW -d ${shellQuote(url)}`);
+            if (failed(out) && !(await view(client, url))) throw new DeviceError(`${device.name} couldn't open that page.`, { code: "ENOBROWSER" });
+            return done(`${what} on ${device.name}, in Patch's browser. I can't see into the page on this TV, so use the remote to choose things: the arrows move the pointer and OK clicks.`, { state: { ...device.state, on: true, app: b.app.name } });
+          }
+          const r = await b.session.goto(url);
+          const lead = action === "web_search" ? `Searched the web for “${value}” on ${device.name}.` : `${hostOf(url) || "The page"} is open on ${device.name}: ${showing(r.page)}.`;
+          return pageDone(device, b.app.package, r, `${lead}${b.fresh ? ` (I put Patch's browser on ${device.name} for this: it's the one I can see and click in.)` : ""}`);
         }
         case "search_youtube": {
           const yt = await youtubePkg(client, device);

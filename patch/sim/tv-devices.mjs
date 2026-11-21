@@ -9,8 +9,10 @@ import dgram from "node:dgram";
 import crypto from "node:crypto";
 import { acceptUpgrade } from "../src/net/websocket.mjs";
 import { AUTH, CMD, MessageParser, SHA1_PREFIX, encodeMessage, parseAndroidPublicKey } from "../src/net/adb.mjs";
-import { apkInfo } from "../src/apk/index.mjs";
+import { apkInfo, templateLevel } from "../src/apk/index.mjs";
+import { encodePng } from "../src/apk/png.mjs";
 import { verifyV2 } from "../src/apk/sign.mjs";
+import { entryData, readZip } from "../src/apk/zip.mjs";
 import { selfSigned } from "./selfsigned.mjs";
 import { httpServer } from "./http-devices.mjs";
 
@@ -278,7 +280,36 @@ export function fireTvState() {
     installed: {}, // app id → { label, versionCode, cert }
     store: null, // the Appstore page that's open
     taps: [],
+    running: [], // apps that have been opened (each has a process)
+    // A real browser for Patch's own browser app to show its pages in: { open() } gives a new
+    // connection to its debugging port (sim/chrome.mjs). Without one, Patch can't see into pages here.
+    browser: null,
+    playing: null, // what a streaming app is playing: { app, title, state }
   };
+}
+
+/** The process id an app would have on this pretend TV. */
+const firePid = (s, pkg) => 4000 + s.packages.indexOf(pkg);
+/** One of Patch's own apps, from a template whose pages are open to Patch. */
+const fireWebApp = (s, pkg) => (s.installed[pkg]?.level || 1) >= 2 && s.running.includes(pkg);
+
+/** A picture of the screen (what `screencap -p` gives): the app's colour, with a lighter panel. */
+function firePicture(s) {
+  const pkg = s.focus.split("/")[0];
+  if (s.pictures?.[pkg]) return s.pictures[pkg];
+  const w = 1920;
+  const h = 1080;
+  const hash = [...pkg].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const rgb = [40 + (hash % 90), 40 + ((hash >> 8) % 90), 60 + ((hash >> 16) % 120)];
+  const px = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const panel = x > 160 && x < 1760 && y > 540 && y < 780;
+      px.set([rgb[0] + (panel ? 60 : 0), rgb[1] + (panel ? 60 : 0), rgb[2] + (panel ? 60 : 0), 255], (y * w + x) * 4);
+    }
+  }
+  (s.pictures ??= {})[pkg] = encodePng(w, h, px);
+  return s.pictures[pkg];
 }
 
 const STORE_NAMES = { "com.plexapp.android": "Plex", "org.videolan.vlc": "VLC for Fire" };
@@ -296,7 +327,8 @@ function fireScreen(s) {
     body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: STORE_NAMES[s.store.pkg] || s.store.pkg, b: "[120,100][900,180]" }) + node({ text: "Free", b: "[120,200][300,240]" }) + node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: true, b: "[120,300][420,380]" }, node({ cls: "android.widget.Button", text: installed ? "Open" : "Get", b: "[140,310][400,370]" })) + node({ desc: "More like this", b: "[120,500][1800,1000]", scroll: true }));
   } else if (pkg === "com.amazon.tv.launcher") {
     const apps = s.packages.filter((p) => !["com.amazon.tv.launcher", "com.amazon.venezia", "com.android.settings"].includes(p));
-    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: "Home", b: "[100,40][300,90]" }) + apps.map((p, i) => node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: i === 0, b: `[${100 + i * 220},600][${300 + i * 220},720]` }, node({ desc: s.installed[p]?.label || HOME_NAMES[p] || p.split(".").at(-1), cls: "android.widget.ImageView", b: `[${110 + i * 220},610][${290 + i * 220},710]` }))).join(""));
+    const at = (i) => ({ x: 100 + (i % 8) * 220, y: 500 + Math.floor(i / 8) * 140 }); // rows of eight
+    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: "Home", b: "[100,40][300,90]" }) + apps.map((p, i) => node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: i === 0, b: `[${at(i).x},${at(i).y}][${at(i).x + 200},${at(i).y + 120}]` }, node({ desc: s.installed[p]?.label || HOME_NAMES[p] || p.split(".").at(-1), cls: "android.widget.ImageView", b: `[${at(i).x + 10},${at(i).y + 10}][${at(i).x + 190},${at(i).y + 110}]` }))).join(""));
   } else {
     body = node({ cls: "android.view.SurfaceView", b: "[0,0][1920,1080]" });
   }
@@ -336,13 +368,21 @@ function fireShell(s, cmd) {
     const prev = s.installed[info.package];
     if (prev && prev.cert !== cert) return "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package signatures do not match]\n";
     if (prev && prev.versionCode > info.versionCode) return "Failure [INSTALL_FAILED_VERSION_DOWNGRADE]\n";
-    s.installed[info.package] = { label: info.label, versionCode: info.versionCode, cert, size: file.length };
+    let kind = null;
+    try {
+      const entry = readZip(file).entries.find((e) => e.name === "assets/app/app.json");
+      kind = entry ? JSON.parse(entryData(entry).toString("utf8")).kind || null : null;
+    } catch {
+      kind = null;
+    }
+    s.installed[info.package] = { label: info.label, versionCode: info.versionCode, cert, size: file.length, kind, level: templateLevel(file) };
     if (!s.packages.includes(info.package)) s.packages.push(info.package);
     return "Success\n";
   }
   m = cmd.match(/^pm uninstall (\S+)$/);
   if (m) {
     if (!s.packages.includes(m[1]) || s.system.includes(m[1])) return "Failure [DELETE_FAILED_INTERNAL_ERROR]\n";
+    s.running = s.running.filter((p) => p !== m[1]);
     s.packages = s.packages.filter((p) => p !== m[1]);
     delete s.installed[m[1]];
     return "Success\n";
@@ -377,7 +417,17 @@ function fireShell(s, cmd) {
   if (m) {
     if (!s.packages.includes(m[1])) return "** No activities found to run, monkey aborted.\n";
     s.focus = `${m[1]}/.MainActivity`;
+    if (!s.running.includes(m[1])) s.running.push(m[1]);
     return "Events injected: 1\n## Network stats: elapsed time=12ms\n";
+  }
+  // One of Patch's own apps, opened on a page (its browser takes a link).
+  m = cmd.match(/^am start -n (\S+)\/app\.patch\.tvapp\.AppActivity -a android\.intent\.action\.VIEW -d '([^']*)'$/);
+  if (m) {
+    if (!s.packages.includes(m[1])) return `Error type 3\nError: Activity class {${m[1]}/app.patch.tvapp.AppActivity} does not exist.\n`;
+    s.focus = `${m[1]}/.MainActivity`;
+    if (!s.running.includes(m[1])) s.running.push(m[1]);
+    s.lastIntent = { action: "android.intent.action.VIEW", data: m[2], query: null, pkg: m[1] };
+    return `Starting: Intent { act=android.intent.action.VIEW dat=${m[2]} cmp=${m[1]}/app.patch.tvapp.AppActivity }\n`;
   }
   m = cmd.match(/^am start -a (\S+)(?: -d '([^']*)')?(?: --es query '([^']*)')?(?: (\S+))?$/);
   if (m) {
@@ -386,8 +436,23 @@ function fireShell(s, cmd) {
     if (action === "android.intent.action.SEARCH" && pkg !== "com.amazon.firetv.youtube") return "Error: Activity not started, unable to resolve Intent\n";
     const target = pkg || (/^https?:\/\/(www\.)?youtube\.com/.test(data || "") ? "com.amazon.firetv.youtube" : "com.amazon.cloud9");
     s.focus = `${target}/.MainActivity`;
+    if (!s.running.includes(target)) s.running.push(target);
     s.lastIntent = { action, data: data || null, query: query || null, pkg: target };
     return `Starting: Intent { act=${action}${data ? ` dat=${data}` : ""} pkg=${target} }\n`;
+  }
+  // Which process an app is, and the sockets programs on the TV have open (a browser's debugging socket is one).
+  m = cmd.match(/^pidof (\S+) 2>\/dev\/null; echo; cat \/proc\/net\/unix 2>\/dev\/null$/);
+  if (m) {
+    const pid = !s.noPidof && s.running.includes(m[1]) ? `${firePid(s, m[1])}\n` : "";
+    const sockets = s.running.filter((p) => s.browser && fireWebApp(s, p)).map((p) => `0000000000000000: 00000002 00000000 00010000 0001 01 ${20000 + firePid(s, p)} @webview_devtools_remote_${firePid(s, p)}`);
+    return `${pid}\nNum       RefCount Protocol Flags    Type St Inode Path\n0000000000000000: 00000002 00000000 00010000 0001 01 11872 /dev/socket/logdw\n${sockets.join("\n")}${sockets.length ? "\n" : ""}`;
+  }
+  m = cmd.match(/^cat \/proc\/(\d+)\/cmdline 2>\/dev\/null$/);
+  if (m) return `${s.running.find((p) => firePid(s, p) === Number(m[1])) || ""}\0`;
+  if (/^dumpsys media_session/.test(cmd)) {
+    const p = s.playing;
+    if (!p) return "MEDIA SESSION SERVICE (dumpsys media_session)\n\n0 sessions listeners.\nGlobal priority session is null\n";
+    return `MEDIA SESSION SERVICE (dumpsys media_session)\n\n1 sessions listeners.\nSessions Stack - have 1 sessions:\n  NetflixMediaSession ${p.app}/NetflixMediaSession (userId=0)\n    ownerPid=5120, ownerUid=10089, userId=0\n    package=${p.app}\n    active=true\n    state=PlaybackState {state=${p.state === "paused" ? 2 : 3}, position=754000, buffered position=0, speed=1.0, updated=9871234, actions=823, error=null}\n    metadata: size=4, description=${p.title}, null, null\n`;
   }
   m = cmd.match(/^input text '(.*)'$/);
   if (m) {
@@ -402,10 +467,13 @@ export async function fireTv(ip, s) {
   const open = new Set();
   const server = net.createServer((sock) => {
     open.add(sock);
-    sock.on("close", () => open.delete(sock));
+    const streams = new Map();
+    sock.on("close", () => {
+      open.delete(sock);
+      for (const st of streams.values()) st.tcp?.destroy();
+    });
     let token = null;
     let authed = false;
-    const streams = new Map();
     const send = (c, a0, a1, d) => sock.writable && sock.write(encodeMessage(c, a0, a1, d));
     const banner = "device::ro.product.name=kara;ro.product.model=AFTKA;ro.product.device=kara;features=shell_v2,cmd\0";
     const challenge = () => {
@@ -440,9 +508,16 @@ export async function fireTv(ip, s) {
         return;
       }
       if (!authed) return;
+      if (m.command === CMD.WRTE && streams.get(m.arg1)?.tcp) {
+        const st = streams.get(m.arg1);
+        st.tcp.write(m.data);
+        send(CMD.OKAY, m.arg1, st.remote);
+        return;
+      }
       if (m.command === CMD.WRTE && streams.has(m.arg1)) {
         // ADB "sync": SEND path,mode → DATA… → DONE (answered OKAY) → QUIT.
         const st = streams.get(m.arg1);
+        if (st.pump) return;
         send(CMD.OKAY, m.arg1, st.remote);
         st.buf = Buffer.concat([st.buf, m.data]);
         while (st.buf.length >= 8) {
@@ -470,16 +545,74 @@ export async function fireTv(ip, s) {
         return;
       }
       if (m.command === CMD.CLSE) {
+        streams.get(m.arg1)?.tcp?.destroy();
         streams.delete(m.arg1);
+        return;
+      }
+      if (m.command === CMD.OKAY) {
+        // Patch took the last piece of a stream: send the next (ADB sends one piece at a time).
+        const st = streams.get(m.arg1);
+        if (st?.pump) {
+          st.waiting = false;
+          st.pump();
+        }
         return;
       }
       if (m.command === CMD.OPEN) {
         const remote = m.arg0;
         const local = crypto.randomInt(1, 1 << 30);
         const service = m.data.toString("utf8").replace(/\0$/, "");
+        // Sends bytes a piece at a time, each after Patch has taken the one before; then closes if asked.
+        const outbound = (st) => {
+          st.out = [];
+          st.waiting = false;
+          st.pump = () => {
+            if (st.waiting) return;
+            if (!st.out.length) {
+              if (st.closeAfter && streams.delete(local)) send(CMD.CLSE, local, remote);
+              return;
+            }
+            st.waiting = true;
+            send(CMD.WRTE, local, remote, st.out.shift());
+          };
+          st.push = (data) => {
+            for (let o = 0; o < data.length; o += 64 * 1024) st.out.push(data.subarray(o, o + 64 * 1024));
+            st.pump();
+          };
+          return st;
+        };
+        const devtools = service.match(/^localabstract:webview_devtools_remote_(\d+)$/);
+        if (devtools) {
+          // One of Patch's own apps showing a web page: its debugging socket, handed through to the real browser.
+          const pkg = s.running.find((p) => firePid(s, p) === Number(devtools[1]));
+          if (!s.browser || !pkg || !fireWebApp(s, pkg)) return send(CMD.CLSE, 0, remote);
+          s.browser.open().then(
+            (tcp) => {
+              const st = outbound({ remote, tcp });
+              streams.set(local, st);
+              send(CMD.OKAY, local, remote);
+              tcp.on("data", (d) => st.push(d));
+              tcp.on("error", () => {});
+              tcp.on("close", () => {
+                st.closeAfter = true;
+                st.pump();
+              });
+            },
+            () => send(CMD.CLSE, 0, remote),
+          );
+          return;
+        }
+        if (/^(localabstract|localreserved|localfilesystem|tcp|dev|jdwp):/.test(service)) return send(CMD.CLSE, 0, remote);
         send(CMD.OKAY, local, remote);
         if (service === "sync:") {
           streams.set(local, { remote, buf: Buffer.alloc(0), path: null, parts: [] });
+          return;
+        }
+        if (service === "exec:screencap -p") {
+          s.commands.push("screencap -p");
+          const st = outbound({ remote, closeAfter: true });
+          streams.set(local, st);
+          st.push(firePicture(s));
           return;
         }
         const out = service.startsWith("shell:") ? fireShell(s, service.slice(6)) : "";

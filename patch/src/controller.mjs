@@ -39,6 +39,7 @@ export class Controller {
         return apiKey ? { apiKey, base: o.youtubeBase } : null;
       },
       openUrl: o.openUrl,
+      webTries: o.webTries, // how long to wait for a TV's browser to start (tests shorten it)
       // Set by the app: files the person sent from the dashboard, and the TV apps made with Patch.
       uploads: this.uploads || null,
       tvapps: this.tvapps || null,
@@ -172,7 +173,7 @@ export class Controller {
         return { ok: false, needsConfirmation: true, confirmToken: this.#issueConfirmation(id, action, value), message: `${e.message} Ask the person to confirm before doing it.`, risk: e.message, device: this.publicDevice(id) };
       }
       if (e.code === "EOFFLINE") this.inventory.patch(id, { online: false });
-      return { ok: false, error: e.code || "EDEVICE", message: e.message, hint: e.hint || null, device: this.publicDevice(id) };
+      return { ok: false, error: e.code || "EDEVICE", message: e.message, hint: e.hint || null, device: this.publicDevice(id), ...(err.screen ? { screen: err.screen } : {}) };
     }
   }
 
@@ -202,6 +203,27 @@ export class Controller {
       message: `${ok.length} of ${results.length} done.${bad.length ? ` Didn't work: ${bad.map((b) => `${b.name} (${b.message})`).join("; ")}` : ""}`,
       results,
     };
+  }
+
+  /** A picture of a device's screen (a PNG), where the device can give one: Android TV, Google TV and Fire TV. */
+  async picture(id) {
+    const d = this.inventory.get(id);
+    const driver = d && driverById[d.driver];
+    if (!driver?.picture || !d.actions?.includes("read_screen")) throw Object.assign(new Error(d ? `${this.inventory.displayName(d)} can't show its screen in Patch.` : "Unknown device."), { status: d ? 400 : 404 });
+    return driver.picture({ ...d, name: this.inventory.displayName(d) }, this.ctx());
+  }
+
+  /** A tap at a spot on that picture. Only the dashboard does this (the person's own finger), never the voice agent. */
+  async tapAt(id, x, y) {
+    const d = this.inventory.get(id);
+    const driver = d && driverById[d.driver];
+    if (!driver?.tapAt || !d.actions?.includes("tap")) return { ok: false, message: d ? `${this.inventory.displayName(d)} can't be tapped from Patch.` : "Unknown device." };
+    if (!(Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && x < 10000 && y < 10000)) return { ok: false, message: "That isn't a spot on the screen." };
+    try {
+      return await driver.tapAt({ ...d, name: this.inventory.displayName(d) }, x, y, this.ctx());
+    } catch (err) {
+      return { ok: false, error: err.code || "EDEVICE", message: err.message };
+    }
   }
 
   async setCredentials(id, { username, password }) {

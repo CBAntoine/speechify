@@ -159,6 +159,9 @@ node "$HERE/file-picker-check.mjs" "$OUT" "$(dirname "$OUT")/tvapp-notes.apk" ||
 echo "TV apps made by Patch, installed over ADB the way Patch does on a TV…"
 node "$HERE/tvapp-check.mjs" "$(dirname "$OUT")" "$OUT" || fail "the TV app check failed"
 
+echo "Patch's own browser on a TV: Patch puts it there, then reads and uses web pages in it…"
+node "$HERE/tvweb-check.mjs" "$HERE/../../tvapp/template.apk" "$OUT" || fail "the TV browser check failed"
+
 echo "Claude: Anthropic's SDK, loaded only when it's needed, loads on the phone's Node.js…"
 api "$BASE/api/claude/sdk" > "$OUT/claude-sdk.json" || fail "/api/claude/sdk didn't answer"
 grep -q '"ok":true' "$OUT/claude-sdk.json" || fail "Anthropic's SDK didn't load on the phone, so Claude can't build apps: $(cat "$OUT/claude-sdk.json")"
