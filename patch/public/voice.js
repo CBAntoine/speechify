@@ -21,9 +21,14 @@ function loadSdk() {
   });
 }
 
-function friendlyError(msg) {
+// Every copy of Patch shares one voice assistant (on ElevenLabs), so an older copy can be asked for
+// something only newer ones can do. The voice library then reports this.
+const MISSING_TOOL = /Client tool with name \S+ is not defined on client/i;
+
+export function friendlyError(msg, phone = !!globalThis.window?.PatchAndroid) {
   const m = String(msg || "");
-  if (/permission|NotAllowed|denied/i.test(m)) return window.PatchAndroid ? "Patch isn't allowed to use the microphone. Allow it when your phone asks (or in Settings → Apps → Patch → Permissions), or type instead." : "Microphone access was blocked. Allow the microphone for this page in your browser, or type instead.";
+  if (MISSING_TOOL.test(m)) return phone ? "This Patch is older than the voice assistant, so it can't do that yet. To update it, uninstall this Patch, then install the newest Patch.apk." : "This copy of Patch is older than the voice assistant, so it can't do that yet. Get the newest Patch, then start it again.";
+  if (/permission|NotAllowed|denied/i.test(m)) return phone ? "Patch isn't allowed to use the microphone. Allow it when your phone asks (or in Settings → Apps → Patch → Permissions), or type instead." : "Microphone access was blocked. Allow the microphone for this page in your browser, or type instead.";
   if (/NotFound|no.*device|Requested device not found/i.test(m)) return "No microphone found. You can still type to Patch.";
   if (/secure context|getUserMedia/i.test(m)) return "Your browser only allows the microphone on this computer (localhost). On other devices, type instead.";
   if (/401|403|auth/i.test(m)) return "ElevenLabs didn't accept the session. Check your API key in Settings.";
@@ -68,13 +73,14 @@ export function createVoice(ui) {
     els.log.innerHTML = `<div class="voice__intro"><h3>Hi, I'm Patch</h3><p>Talk or type to me. I can tell you exactly what's on your WiFi, run your TVs, lights and plugs, and keep your network safe.</p><p class="hint">Try saying</p><div class="prompts">${(ui.phone ? QUICK_PHONE : QUICK).map((q) => `<button class="prompt" type="button" data-prompt="${ui.esc(q)}">${ui.esc(q)}</button>`).join("")}</div></div>`;
   }
 
-  function notice(text, { settings = false } = {}) {
+  // settings adds a button that opens Settings: true at the ElevenLabs key, or the name of a part of it.
+  function notice(text, { settings = false, button = "Open settings" } = {}) {
     if (!text) {
       els.notice.hidden = true;
       return;
     }
     els.notice.hidden = false;
-    els.notice.innerHTML = `${ui.esc(text)}${settings ? `<br><button class="btn btn--sm btn--voice" data-ui="settings" data-focus="el">Open settings</button>` : ""}`;
+    els.notice.innerHTML = `${ui.esc(text)}${settings ? `<br><button class="btn btn--sm btn--voice" data-ui="settings" data-focus="${ui.esc(settings === true ? "el" : settings)}">${ui.esc(button)}</button>` : ""}`;
   }
 
   // ── controls & status ──
@@ -519,7 +525,7 @@ export function createVoice(ui) {
         },
         onError: (msg) => {
           console.warn("[patch voice]", msg);
-          notice(friendlyError(msg));
+          notice(friendlyError(msg), MISSING_TOOL.test(String(msg)) ? { settings: "about", button: "How to update Patch" } : {});
         },
       });
     } catch (err) {

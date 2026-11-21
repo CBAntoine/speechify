@@ -151,6 +151,8 @@ Claude takes two to four minutes. You can keep using Patch meanwhile: the app sh
 
 Patch also runs on an Android phone by itself, with no computer needed. The app carries Patch's own server, so the phone finds what's on your WiFi, runs your TVs, lights and plugs, and you can talk or type to it.
 
+**Already have Patch?** Uninstall it first (press and hold its icon, then **Uninstall**). Each new Patch.apk is signed afresh, so Android won't install it over the old one, and you'd keep using the old Patch.
+
 1. On the phone, open the [Patch for Android release](https://github.com/CBAntoine/speechify/releases/tag/patch-android) and tap **Patch.apk**.
 2. Open the download. The first time, Android asks you to allow installs from your browser (or Files app): allow it, then tap **Install**. If Google Play Protect says it doesn't recognise the app, choose **More details → Install anyway**.
 3. Open **Patch** from your apps while you're on your home WiFi. It scans straight away.
@@ -160,7 +162,8 @@ Good to know:
 - "Search the web on my phone" or "play it here" opens the browser or the YouTube app.
 - Patch works while it's open, and while you're talking to it. When you switch to another app mid-conversation, a "Patch is listening" notification keeps it going; tap **Stop** there to end. Otherwise Android pauses it in the background, so it doesn't use your battery.
 - It needs Android 7 or newer, and it only scans WiFi (never the mobile-data network).
-- Each new version is signed afresh, so to update, uninstall Patch and install the new one. You'll add your ElevenLabs key and connect your TVs again.
+- Each new version is signed afresh, so to update, uninstall Patch and install the new one. You'll add your ElevenLabs key and connect your TVs again. **Settings → About Patch** shows which version you have; the release page says which version it has.
+- If Patch says it's older than the voice assistant (or the assistant says your Patch needs updating), the phone still has an old Patch: install the new one as above. Every copy of Patch shares one voice assistant, which knows what the newest Patch can do.
 
 ### Let Patch see and use your phone's screen
 

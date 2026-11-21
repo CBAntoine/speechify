@@ -74,6 +74,7 @@ final class PatchServer {
             setenv("PATCH_DEVICE_BRAND", Build.MANUFACTURER);
             setenv("PATCH_DEVICE_MODEL", Build.MODEL);
             setenv("PATCH_ANDROID_VERSION", Build.VERSION.RELEASE);
+            setenv("PATCH_APP_VERSION", appVersion(app));
             setenv("HOME", app.getFilesDir().getAbsolutePath());
             setenv("TMPDIR", app.getCacheDir().getAbsolutePath());
 
@@ -91,6 +92,15 @@ final class PatchServer {
 
     private static void setenv(String name, String value) throws Exception {
         Os.setenv(name, value == null ? "" : value, true);
+    }
+
+    /** This app's version ("1.0." and the build number), which Patch shows in its Settings. */
+    private static String appVersion(Context app) {
+        try {
+            return app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** The phone's name as its owner set it (Settings → About phone), if Android shares it. */

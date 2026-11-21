@@ -7,7 +7,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { networkFromEnv, phoneIdentity } from "../src/platform.mjs";
+import { appVersion, networkFromEnv, phoneIdentity } from "../src/platform.mjs";
+import { VERSION } from "../src/defaults.mjs";
+import { friendlyError } from "../public/voice.js";
 import { homeNetwork } from "../src/net/interfaces.mjs";
 import { selfDevice } from "../src/scanner.mjs";
 import { Inventory } from "../src/inventory.mjs";
@@ -20,6 +22,7 @@ const PHONE_ENV = {
   PATCH_DEVICE_BRAND: "samsung",
   PATCH_DEVICE_MODEL: "SM-S928B",
   PATCH_ANDROID_VERSION: "15",
+  PATCH_APP_VERSION: "1.0.42",
 };
 
 let sim;
@@ -91,6 +94,20 @@ test("the code the phone runs avoids what the phone's Node.js lacks (it has no U
   assert.deepEqual(bad, []);
 });
 
+test("an older Patch says plainly when the voice assistant asks for something only a newer Patch has", () => {
+  // Every copy of Patch shares one voice assistant, so it can ask an old copy for a newer tool.
+  const fromSdk = "Client tool with name tv_apps is not defined on client";
+  assert.match(friendlyError(fromSdk, true), /older than the voice assistant.*uninstall this Patch, then install the newest Patch\.apk/);
+  assert.match(friendlyError(fromSdk, false), /older than the voice assistant.*Get the newest Patch/);
+  assert.doesNotMatch(friendlyError(fromSdk, true), /tv_apps|client/);
+  assert.equal(friendlyError("The voice service hung up.", true), "The voice service hung up.");
+
+  // The phone app passes in its own version, which Settings shows (anything odd is ignored).
+  assert.equal(appVersion({ PATCH_APP_VERSION: "1.0.42" }), "1.0.42");
+  assert.equal(appVersion({}), VERSION);
+  assert.equal(appVersion({ PATCH_APP_VERSION: "<b>1</b>" }), VERSION);
+});
+
 test("reads the Wi-Fi, router and DNS servers the Android app passes in, and ignores anything odd", () => {
   assert.deepEqual(networkFromEnv({ PATCH_WIFI: "192.168.1.23/24", PATCH_GATEWAY: "192.168.1.1", PATCH_DNS: "192.168.1.1, 8.8.8.8 ,fe80::1" }), {
     wifi: { address: "192.168.1.23", prefix: 24, cidr: "192.168.1.0/24" },
@@ -159,7 +176,10 @@ after(async () => {
 test("inside the phone app, Patch knows it's on a phone and opens pages through the Patch screen", async () => {
   const html = await (await fetch(`${base}/`)).text();
   assert.match(html, /"phone":true/, "the dashboard is told it's on a phone");
-  assert.equal((await api("GET", "/api/state")).app.platform, "android");
+  assert.match(html, /"version":"1\.0\.42"/, "the dashboard shows the app's own version in Settings");
+  const state = await api("GET", "/api/state");
+  assert.equal(state.app.platform, "android");
+  assert.equal(state.app.version, "1.0.42");
   const me = (await api("GET", "/api/devices")).devices.find((d) => d.self);
   assert.equal(me.name, "Galaxy S24 Ultra");
   assert.equal(me.kind, "phone");

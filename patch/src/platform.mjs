@@ -2,6 +2,7 @@
 // The Android app runs this same server and shows the dashboard; it passes in what only Android can
 // see (the Wi-Fi network, the router, DNS servers, the phone's name) as PATCH_* environment variables.
 import fs from "node:fs";
+import { VERSION } from "./defaults.mjs";
 import { isPrivateIPv4, parseCidr } from "./util.mjs";
 
 /** True inside the Android app (Node reports "android"; PATCH_PLATFORM lets tests act like a phone). */
@@ -34,6 +35,12 @@ export function networkFromEnv(env = process.env) {
   const gateway = isIpv4(clean(env.PATCH_GATEWAY)) ? clean(env.PATCH_GATEWAY) : null;
   const dns = clean(env.PATCH_DNS, 200).split(/[,\s]+/).filter(isIpv4).slice(0, 4);
   return { wifi, gateway, dns };
+}
+
+/** Patch's version: the Android app passes in its own ("1.0." and the build number); elsewhere, VERSION. */
+export function appVersion(env = process.env) {
+  const v = clean(env.PATCH_APP_VERSION, 40);
+  return /^[\w.+-]+$/.test(v) ? v : VERSION;
 }
 
 /** The phone's own name and model, from the Android app (e.g. "Galaxy S24 Ultra", "samsung", "SM-S928B"). */

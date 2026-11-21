@@ -4,6 +4,8 @@ import { createVoice } from "./voice.js";
 import { createTvApps } from "./tvapps.js";
 
 const BOOT = JSON.parse(document.getElementById("boot").textContent || "{}");
+// Where new versions of the phone app are published (by the build on GitHub).
+const PATCH_DOWNLOADS = "https://github.com/CBAntoine/speechify/releases/tag/patch-android";
 // Inside the Patch app on an Android phone, Patch (and everything it keeps) lives on the phone.
 const HERE = BOOT.phone ? "this phone" : "this computer";
 const $ = (s, el = document) => el.querySelector(s);
@@ -929,10 +931,15 @@ ${BOOT.phone ? "" : `<label class="field" style="grid-template-columns:auto 1fr;
       <label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="vendorLookup" ${s.features.vendorLookup ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Look up who made each device (downloads the public IEEE manufacturer list once; nothing about your network is sent).</span></label>
       <button class="btn">Save</button><div class="check" id="netCheck"></div>
       <p style="color:var(--muted);font-size:12.5px;margin:12px 0 0">Settings and saved passwords live in <code>${esc(s.dataDir)}</code>.</p>
-    </form>`,
+    </form>
+    <div class="panel" id="aboutPatch">
+      <h3>About Patch</h3>
+      <p style="margin:0;color:var(--text-2);font-size:13.5px">This is Patch ${esc(BOOT.version || "")}${BOOT.phone ? ` for Android. New versions are on the <a href="${PATCH_DOWNLOADS}" target="_blank" rel="noopener noreferrer">Patch for Android page</a>. To update, uninstall this Patch first (press and hold its icon, then Uninstall), then install the new Patch.apk: it won't install over this one. You'll add your keys and connect your TVs again.` : "."}</p>
+    </div>`,
   );
   const target = focus === "ha" ? 'input[name="haUrl"]' : focus === "el" ? 'input[name="elevenlabsApiKey"]' : focus === "claude" ? 'input[name="anthropicApiKey"]' : null;
   if (target) $(target, $("#modal"))?.focus();
+  if (focus === "about") $("#aboutPatch")?.scrollIntoView({ block: "center" });
 }
 
 async function saveSettings(form) {

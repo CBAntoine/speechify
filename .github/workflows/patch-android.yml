@@ -188,12 +188,24 @@ jobs:
       - name: Replace the "Patch for Android" release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: 1.0.${{ github.run_number }}
+          # With the repository's own signing key, a new Patch installs over the old one.
+          OWN_KEY: ${{ secrets.PATCH_KEYSTORE_B64 != '' }}
         run: |
+          if [ "$OWN_KEY" = "true" ]; then
+            UPDATE="Already have Patch? Install this one over it: your settings stay."
+          else
+            UPDATE="Already have Patch? Uninstall it first (press and hold its icon, then Uninstall), then install this one. Each new Patch.apk is signed afresh, so Android won't install it over the old one. You'll add your keys in Settings and connect your TVs again."
+          fi
           gh release delete patch-android --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create patch-android out/Patch.apk out/PatchTVApp.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Patch for Android" \
             --notes "Patch running on your Android phone: it finds everything on your Wi-Fi and runs your TVs, lights and plugs, by voice or by typing.
 
-          To install: on your phone, tap Patch.apk below to download it, open it, and allow installing if Android asks. Needs Android 7 or newer. Built from ${GITHUB_SHA::7}.
+          To install: on your phone, tap Patch.apk below to download it, open it, and allow installing if Android asks. Needs Android 7 or newer.
+
+          $UPDATE
+
+          This is Patch $VERSION, built from ${GITHUB_SHA::7}. Patch shows which version you have in Settings, under About Patch.
 
           PatchTVApp.apk is the template Patch makes your own TV apps from. You don't need to install it: Patch on a computer downloads it when you make a TV app."
