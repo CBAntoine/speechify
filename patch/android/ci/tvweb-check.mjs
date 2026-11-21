@@ -84,11 +84,18 @@ app = await startApp({ port: 0, dataDir, autoScan: false, overrides: { tvappTemp
 const id = "androidtv:emulator";
 app.inventory.upsert({ id, driver: "androidtv", kind: "tv", brand: "Google", model: "Android emulator", name: "Test TV", ip: "127.0.0.1", ref: { ip: "127.0.0.1", adbPort: 5555, cast: null }, state: {}, info: {}, online: true, actions: actionsFor({ kind: "tv", paired: false }), setup: { kind: "tv-prompt", message: "Press Connect, then choose Allow." } });
 
+/** How a step reached the page: as a real click, key press or typing, or told to the page from inside it. */
+const how = (was) => {
+  const d = (k) => stats[k] - was[k];
+  const said = [d("clicks") && "a real click", d("clicksInside") && "a click told to the page", d("strays") && "it landed on something else", d("typed") && "real typing", d("typedInside") && "typing told to the page", d("enters") && "a real Enter", d("entersInside") && "Enter told to the page"].filter(Boolean);
+  return said.length ? ` [${said.join(", ")}]` : "";
+};
 let step = 0;
 const act = async (action, value, { confirmToken, quiet = false } = {}) => {
   const t = Date.now();
+  const was = { ...stats };
   const r = await app.controller.act(id, action, value, { confirmToken });
-  if (!quiet) console.log(`${String(++step).padStart(2)}. ${action}${value ? ` “${value}”` : ""} (${Date.now() - t} ms): ${r.ok ? "" : r.needsConfirmation ? "[asks first] " : `[${r.error}] `}${r.message}`);
+  if (!quiet) console.log(`${String(++step).padStart(2)}. ${action}${value ? ` “${value}”` : ""} (${Date.now() - t} ms): ${r.ok ? "" : r.needsConfirmation ? "[asks first] " : `[${r.error}] `}${r.message}${how(was)}`);
   return r;
 };
 
@@ -107,7 +114,7 @@ fs.writeFileSync(path.join(outDir, "tvweb-shop.png"), await adb("exec-out", "scr
 r = await act("tap", "Only what's needed");
 await check(r.ok && /Text box: Search the shop \(empty\)/.test(r.screen), `the cookie box should be gone: ${r.message}`);
 r = await act("search", "hdmi");
-await check(r.ok && site.state.searches.includes("hdmi"), `the shop's server didn't get the search: ${r.message}`);
+await check(r.ok && site.state.searches.join() === "hdmi", `the shop's server should have got the search, once (it got ${JSON.stringify(site.state.searches)}): ${r.message}`);
 await check(/Link: HDMI cable, 2 metres/.test(r.screen), "the results should list the HDMI cable");
 r = await act("tap", "HDMI cable");
 await check(r.ok && /Menu: How many \(now: 1, 3 choices\)/.test(r.screen), `the product page should show its menu: ${r.message}`);
@@ -150,7 +157,18 @@ r = await act("scroll", "top");
 r = await act("tap", "See the HDMI cable");
 await check(r.ok && /It's showing “HDMI cable, 2 metres”/.test(r.message), `a link far below the screen should be found by its words: ${r.message}`);
 
+// Enter sends the form it's in, once: the page that follows has a form of its own, which is left alone.
+r = await act("open_website", `${site.url}/delivery`);
+r = await act("type_text", "AB1 2CD");
+await check(r.ok, `typing into the box that's ready didn't work: ${r.message}`);
+r = await act("press_button", "enter");
+await check(r.ok && /^On screen: One more thing/.test(r.screen || ""), `Enter should have sent the first form and stopped at the next page: ${r.message}\n${r.screen}`);
+await sleep(1000);
+await check(site.state.steps.join() === "delivery:AB1 2CD", `only the first form should have been sent, got ${JSON.stringify(site.state.steps)}`);
+
 // The picture of the screen, for the dashboard: the size Android says its screen is, whichever way up.
+r = await act("open_website", `${site.url}/product/hdmi-cable`);
+await check(r.ok && /Button: Add to basket/.test(r.screen || ""), `the product page should be showing: ${r.message}`);
 const png = await app.controller.picture(id);
 const size = pngSize(png);
 const real = ((await adb("shell", "wm", "size")).toString().match(/(\d+)x(\d+)\s*$/) || []).slice(1).map(Number);
@@ -160,23 +178,23 @@ fs.writeFileSync(path.join(outDir, "tvweb-picture.png"), png);
 console.log(`A picture of the screen: ${size.width} by ${size.height}, ${Math.round(png.length / 1024)} KB.`);
 
 // A tap on that picture (as in the dashboard) lands on the TV: on the product page's "Add to basket".
-// Where that button is on the screen comes from Android's own list of what's showing.
+// Where that button is on the screen comes from Android's own list of what's showing, read the
+// way Patch reads a TV's screen.
+const listed = async () => (await adb("shell", "uiautomator dump /data/local/tmp/patch-tvweb.xml >/dev/null 2>&1; cat /data/local/tmp/patch-tvweb.xml; rm -f /data/local/tmp/patch-tvweb.xml").catch(() => Buffer.alloc(0))).toString("utf8");
 const before = site.state.basket.length;
 let spot = null;
-for (let i = 0; i < 4 && !spot; i++) {
-  const xml = (await adb("exec-out", "uiautomator", "dump", "/dev/tty").catch(() => Buffer.alloc(0))).toString("utf8");
+let xml = "";
+for (let i = 0; i < 10 && !spot; i++) {
+  xml = await listed();
   const m = xml.match(/<node[^>]*(?:text|content-desc)="Add to basket"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
   if (m) spot = { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round((Number(m[2]) + Number(m[4])) / 2) };
   else await sleep(1000);
 }
-if (spot) {
-  const tapped = await app.controller.tapAt(id, spot.x, spot.y);
-  for (let i = 0; i < 20 && site.state.basket.length === before; i++) await sleep(250);
-  await check(tapped.ok && site.state.basket.length === before + 1, `a tap at ${spot.x}, ${spot.y} on the picture should have pressed “Add to basket”: ${tapped.message}`);
-  console.log(`A tap on the picture at ${spot.x}, ${spot.y} pressed “Add to basket” on the TV.`);
-} else {
-  console.log("(Android didn't list the page's buttons this time, so the tap on the picture wasn't tried here.)");
-}
+await check(spot, `Android should list the page's “Add to basket” button, to know where to tap. It listed ${(xml.match(/<node /g) || []).length} things: ${[...xml.matchAll(/(?:text|content-desc)="([^"]{1,40})"/g)].map((m) => m[1]).slice(0, 30).join(" | ") || "(nothing with words)"}`);
+const tapped = await app.controller.tapAt(id, spot.x, spot.y);
+for (let i = 0; i < 24 && site.state.basket.length === before; i++) await sleep(250);
+await check(tapped.ok && site.state.basket.length === before + 1, `a tap at ${spot.x}, ${spot.y} on the picture should have pressed “Add to basket”: ${tapped.message}`);
+console.log(`A tap on the picture at ${spot.x}, ${spot.y} pressed “Add to basket” on the TV.`);
 
 // With another app in front, Patch reads the screen the usual way again.
 await act("press_button", "home", { quiet: true });
@@ -188,7 +206,8 @@ for (let i = 0; i < 4; i++) {
 await check(r.ok && !/in Patch Browser/.test(r.screen || ""), `with the home screen in front, Patch should read the home screen: ${r.message}`);
 console.log("With the home screen in front, Patch reads the home screen again.");
 
-console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page; typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told.`);
+console.log(`How the steps went in: ${stats.clicks} clicks as real ones and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told.`);
+await check(stats.clicks >= 8 && stats.clicksInside === 0 && stats.strays === 0 && stats.typed >= 3 && stats.typedInside === 0 && stats.enters >= 2 && stats.entersInside === 0, `in Android's own WebView every step should go in as a real click, key press or typing: ${JSON.stringify(stats)}`);
 const browser = app.tvapps.list().find((a) => a.kind === "browser");
 if (browser) await adb("shell", "pm", "uninstall", browser.package).catch(() => {});
 await tidy();

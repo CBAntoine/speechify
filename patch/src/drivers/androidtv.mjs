@@ -464,6 +464,7 @@ async function webTap(device, web, value, ctx) {
   if (r.menu) return pageDone(device, web.pkg, r, `“${it.text}” is a menu with these choices: ${r.menu.join(", ")}. To pick one, tap with “<choice> in ${it.text}”.`);
   if (r.secretBox) return pageDone(device, web.pkg, r, `“${it.text}” is for a password or card details. I don't type those: ask the person to type it with the TV's remote.`);
   if (r.ready) return pageDone(device, web.pkg, r, `“${it.text}” is ready for typing on ${device.name}. Use type_text with the words, then press_button “enter” if it needs sending.`);
+  if (r.stray) return pageDone(device, web.pkg, r, `I pressed where “${it.text}” was on ${device.name}, but the page moved just then, and something else may have been pressed instead. Look at what it shows now before going on.`);
   const moved = r.page.url && it.href && hostOf(r.page.url) !== "" ? ` It's showing ${showing(r.page)} now.` : "";
   return pageDone(device, web.pkg, r, `Chose “${it.text}” on ${device.name}.${moved}`);
 }

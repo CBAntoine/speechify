@@ -26,7 +26,7 @@ const risky = (info) => (info.kind === "Link" ? RISKY_LINK.test(info.text || "")
  * or told to the page directly when those didn't arrive. The Android build prints these after
  * using a real WebView, to show which way a real TV takes them.
  */
-export const stats = { clicks: 0, clicksInside: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0 };
+export const stats = { clicks: 0, clicksInside: 0, strays: 0, typed: 0, typedInside: 0, enters: 0, entersInside: 0 };
 
 export const hostOf = (url) => {
   try {
@@ -37,6 +37,11 @@ export const hostOf = (url) => {
   }
 };
 
+/** A page's own id, from a script that gives one (the pretend browser in old tests didn't). */
+const pageId = (v) => (typeof v === "string" && v ? v : null);
+
+const more = (n) => (n === 1 ? "1 more link or button" : `${n} more links and buttons`);
+
 /** The page as words: a title line, then what's on screen from the top, numbered where it can be chosen. */
 export function describePage(m, { where = "Patch's browser" } = {}) {
   const host = hostOf(m.url);
@@ -46,9 +51,9 @@ export function describePage(m, { where = "Patch's browser" } = {}) {
   const atTop = m.scroll.y < 8;
   const atEnd = m.scroll.y >= m.scroll.max - 8;
   if (m.scroll.max < 8) tail.push("That's the whole page.");
-  else if (atTop) tail.push(`This is the top of the page; it goes on below${m.below ? ` (${m.below} more links and buttons)` : ""}.`);
+  else if (atTop) tail.push(`This is the top of the page; it goes on below${m.below ? ` (${more(m.below)})` : ""}.`);
   else if (atEnd) tail.push("This is the bottom of the page.");
-  else tail.push(`This is part of the way down the page${m.below ? `; ${m.below} more links and buttons below` : ""}.`);
+  else tail.push(`This is part of the way down the page${m.below ? `; ${more(m.below)} below` : ""}.`);
   if (m.extra) tail.push(`Only the first ${m.shown} things on screen are listed; ${m.extra} more are there. Say the words of the one you want.`);
   if (m.frames?.length) tail.push(`Part of it comes from ${m.frames.join(", ")}, which I can't read.`);
   if (m.ready !== "complete") tail.push("It's still loading.");
@@ -223,32 +228,53 @@ export class WebSession {
     throw Object.assign(new DeviceError(`I can't find “${String(target).slice(0, 60)}” on the page.${info.close?.length ? ` The closest are: ${info.close.join(", ")}.` : ""}`, { code: "ENOTFOUND" }), { screen });
   }
 
-  /** A real click at a spot on the page, checked from inside the page. Resolves false if it didn't arrive. */
-  async #clickAt(x, y) {
+  /**
+   * What the page saw of the step just sent to it. `id` is the page the step was sent to: if
+   * another page has loaded in its place (the step opened it), the answer is { changed: true },
+   * and that page is left alone.
+   */
+  async #seen(method, id) {
+    try {
+      return await this.call(method, id);
+    } catch (e) {
+      if (!gone(e)) throw e;
+      return { changed: true };
+    }
+  }
+
+  /**
+   * A real click at a spot on the page, checked from inside the page. Resolves "sent"; "missed"
+   * when a click can't be sent this way here; or "changed" when another page loaded before the press.
+   */
+  async #clickAt(x, y, id) {
     try {
       // Move the pointer there first and see where the page says it arrived: if the browser
       // counts positions differently (a zoomed-out page), aim again before pressing.
       await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }, { timeout: 4000 });
       await sleep(40);
-      const { move } = await this.call("seenSoFar");
-      if (!move) return false;
+      const first = await this.#seen("seenSoFar", id);
+      if (first.changed) return "changed";
+      const move = first.move;
+      if (!move) return "missed";
       let cx = x;
       let cy = y;
       if (Math.abs(move.x - x) > 3 || Math.abs(move.y - y) > 3) {
-        if (move.x < 1 || move.y < 1) return false;
+        if (move.x < 1 || move.y < 1) return "missed";
         cx = Math.round((x * x) / move.x);
         cy = Math.round((y * y) / move.y);
         await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: cx, y: cy }, { timeout: 4000 });
         await sleep(40);
-        const again = (await this.call("seenSoFar")).move;
-        if (!again || Math.abs(again.x - x) > 4 || Math.abs(again.y - y) > 4) return false;
+        const second = await this.#seen("seenSoFar", id);
+        if (second.changed) return "changed";
+        const again = second.move;
+        if (!again || Math.abs(again.x - x) > 4 || Math.abs(again.y - y) > 4) return "missed";
       }
       await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", buttons: 1, clickCount: 1 }, { timeout: 4000 });
       await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", buttons: 0, clickCount: 1 }, { timeout: 4000 });
-      return true;
+      return "sent";
     } catch (e) {
-      if (gone(e)) return true; // the page is already on its way somewhere else
-      return false;
+      if (gone(e)) return "sent"; // the page is already on its way somewhere else
+      return "missed";
     }
   }
 
@@ -270,23 +296,34 @@ export class WebSession {
     }
     this.dialog = null;
     this.sayYes = confirmed;
-    await this.call("watch");
-    const sent = await this.#clickAt(info.x, info.y);
-    let seen = null;
-    if (sent) {
-      await sleep(120);
-      try {
-        seen = await this.call("watched");
-      } catch (e) {
-        if (!gone(e)) throw e;
-        seen = { clicked: true, hit: true }; // it went to another page: the click did its job
-      }
+    const id = pageId(await this.call("watch"));
+    const sent = await this.#clickAt(info.x, info.y, id);
+    if (sent === "changed") {
+      // Another page loaded by itself before the press: nothing was chosen, and the numbers are old.
+      this.sayYes = false;
+      const page = await this.snapshot().catch(() => null);
+      throw Object.assign(new DeviceError(`The page changed just as I went to choose “${info.text}”. Here's what it shows now.`, { code: "ESTALE" }), { screen: page ? describePage(page).text : undefined });
     }
-    if (seen?.clicked) stats.clicks++;
-    else {
-      // The real click didn't arrive (an old browser, or the page was covered at the last moment): click it from inside.
+    let seen = null;
+    if (sent === "sent") {
+      await sleep(120);
+      seen = await this.#seen("watched", id);
+    }
+    // It arrived if this page saw it, or if another page has loaded in its place (the click opened it).
+    let stray = false;
+    if (seen?.clicked || seen?.changed) {
+      stats.clicks++;
+      // The page moved under the click and something else got it. Clicking again could do a second
+      // thing, so say so and show the page instead.
+      if (!seen.changed && !seen.hit) {
+        stray = true;
+        stats.strays++;
+      }
+    } else {
+      // The real click didn't arrive (an old browser, or the page was covered at the last moment):
+      // click it from inside. Only ever on the page it was meant for.
       stats.clicksInside++;
-      await this.call("clickNow").catch((e) => {
+      await this.call("clickNow", id).catch((e) => {
         if (!gone(e)) throw e;
       });
     }
@@ -295,7 +332,7 @@ export class WebSession {
     });
     // The page asked a question and got Cancel: the person decides, then the same step says yes.
     if (after.dialog?.type === "confirm" && !after.dialog.accepted) throw new DeviceError(`After “${info.text}”, the page asks: “${after.dialog.message}”`, { code: "ECONFIRM" });
-    return { ...after, chose: info };
+    return { ...after, chose: info, ...(stray ? { stray: true } : {}) };
   }
 
   /** Type into the box given (number or words), or the one in use, or the page's search box. Replaces what's there. */
@@ -305,12 +342,13 @@ export class WebSession {
     if (f.error === "nofield") throw new DeviceError("There's no box to type in on this page. Tell me which one, by its name or number.", { code: "ENOFIELD" });
     if (f.error === "nottext") throw new DeviceError(`“${f.text}” is a ${String(f.kind || "thing").toLowerCase()}, not a box to type in.`, { code: "ENOFIELD" });
     if (f.error) throw new DeviceError(`I can't find a box called “${String(target).slice(0, 60)}” on the page.`, { code: "ENOTFOUND" });
+    const id = pageId(f.pid);
     let arrived = false;
     if (f.focused) {
       try {
         await this.cdp.send("Input.insertText", { text }, { timeout: 4000 });
         await sleep(60);
-        const now = await this.call("fieldValue");
+        const now = await this.call("fieldValue", id);
         arrived = now != null && String(now).replace(/\s+/g, " ").includes(text.replace(/\s+/g, " ").trim());
       } catch (e) {
         if (gone(e)) throw e;
@@ -319,7 +357,7 @@ export class WebSession {
     if (arrived) stats.typed++;
     else {
       stats.typedInside++;
-      await this.call("setValue", text);
+      await this.call("setValue", text, id);
     }
     return { ...(await this.#after({}, { min: 150 })), typed: text, box: f };
   }
@@ -329,21 +367,25 @@ export class WebSession {
     const t = await this.call("enterTarget");
     if (t.button && riskyButton(t.button) && !confirmed) throw new DeviceError(`Pressing Enter here chooses “${t.button}”, which could buy, send or delete something.`, { code: "ECONFIRM" });
     this.dialog = null;
-    await this.call("watch");
+    const id = pageId(await this.call("watch"));
     const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
     let seen = null;
     try {
       await this.cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key, text: "\r", unmodifiedText: "\r" }, { timeout: 4000 });
       await this.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...key }, { timeout: 4000 });
       await sleep(120);
-      seen = await this.call("watched");
+      seen = await this.#seen("watched", id);
     } catch (e) {
-      if (gone(e)) seen = { key: true };
+      if (gone(e)) seen = { changed: true };
     }
-    if (seen?.key) stats.enters++;
+    // The key did its job if another page loaded in this one's place, or the form went, or the page
+    // took the key for itself. If the key arrived and the page left it for the browser, but the form
+    // it should have sent stayed where it was, this browser doesn't send forms on a key from Patch.
+    const unsent = seen?.key && seen.keyLeft && t.sends && !seen.sent;
+    if (seen?.changed || (seen?.key && !unsent)) stats.enters++;
     else {
       stats.entersInside++;
-      await this.call("submitNow").catch((e) => {
+      await this.call("submitNow", id).catch((e) => {
         if (!gone(e)) throw e;
       });
     }

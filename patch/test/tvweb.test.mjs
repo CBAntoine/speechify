@@ -16,9 +16,10 @@ import { TEMPLATE, templateLevel } from "../src/apk/index.mjs";
 import { pngSize } from "../src/apk/index.mjs";
 import { AdbClient, newAdbKey } from "../src/net/adb.mjs";
 import { connectPage, httpJson } from "../src/net/cdp.mjs";
-import { PAGE_VERSION, describePage } from "../src/tvweb/session.mjs";
+import { PAGE_VERSION, describePage, stats } from "../src/tvweb/session.mjs";
 
 const TV = "Kids Room Fire TV";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const rigs = [];
 
@@ -365,6 +366,33 @@ test("a whole task in a real browser: past the cookie box, search the shop, open
   assert.match(r.screen, /Heading: Thank you for your order/);
 });
 
+test("in a real browser: a step that opens another page is done once, even when that page has a form waiting", needsChrome, async () => {
+  const { rig, site } = await realRig();
+  // Enter sends this page's form. The next page has a form of its own, with its box ready for
+  // typing and a button: it must be left alone (it isn't the page the person was talking about).
+  let r = await rig.act("open_website", `${site.url}/delivery`);
+  assert.match(r.screen, /Text box: Postcode \(empty, typing goes here\)/);
+  r = await rig.act("type_text", "AB1 2CD");
+  assert.ok(r.ok, r.message);
+  const was = { ...stats };
+  r = await rig.act("press_button", "enter");
+  assert.ok(r.ok, r.message);
+  assert.match(r.screen, /^On screen: One more thing/);
+  await sleep(600);
+  assert.deepEqual(site.state.steps, ["delivery:AB1 2CD"], "only the first form was sent");
+  assert.match((await rig.act("read_screen")).screen, /^On screen: One more thing/, "and Patch is still on the page that followed");
+  assert.equal(stats.enters - was.enters, 1, "Enter went in as a real key press");
+  assert.equal(stats.entersInside - was.entersInside, 0, "and wasn't done a second way");
+
+  // The same for a click: a link that opens another page was a real click, not one that had to be redone.
+  r = await rig.act("open_website", `${site.url}/article`);
+  const clicks = { ...stats };
+  r = await rig.act("tap", "Offers");
+  assert.match(r.message, /It's showing “Offers”/);
+  assert.equal(stats.clicks - clicks.clicks, 1);
+  assert.equal(stats.clicksInside - clicks.clicksInside, 0);
+});
+
 test("in a real browser: no passwords or card numbers, pages that redraw themselves, message boxes, long pages and parts from other sites", needsChrome, async () => {
   const { rig, site } = await realRig();
   // Passwords and card details are the person's to type.
@@ -401,7 +429,7 @@ test("in a real browser: no passwords or card numbers, pages that redraw themsel
 
   // A long page: scrolling, finding words further down, and something to choose that's off screen.
   r = await rig.act("open_website", `${site.url}/article`);
-  assert.match(r.screen, /\(This is the top of the page; it goes on below \(1 more links and buttons\)\.\)$/);
+  assert.match(r.screen, /\(This is the top of the page; it goes on below \(1 more link or button\)\.\)$/);
   r = await rig.act("scroll", "down");
   assert.match(r.message, /^Moved down on the page/);
   assert.match(r.screen, /\(This is part of the way down the page/);
@@ -420,4 +448,14 @@ test("in a real browser: no passwords or card numbers, pages that redraw themsel
   r = await rig.act("open_website", `${site.url}/apps`);
   assert.match(r.screen, /Part of it comes from 127\.0\.0\.1, which I can't read\.\)$/);
   assert.doesNotMatch(r.screen, /Directions/);
+  // In all of these, every click landed on the thing it was meant for.
+  assert.equal(stats.strays, 0);
+  // When a page moves under the click, Patch doesn't claim it chose the thing, and doesn't press again.
+  r = await rig.act("open_website", `${site.url}/tricky`);
+  assert.match(r.screen, /\d+\. Button: Catch me\n/);
+  r = await rig.act("tap", "Catch me");
+  assert.ok(r.ok, r.message);
+  assert.match(r.message, /^I pressed where “Catch me” was on Kids Room Fire TV, but the page moved just then, and something else may have been pressed instead\./);
+  assert.match(r.screen, /^On screen: A page that moves/, "the button wasn't pressed a second way behind the person's back");
+  assert.equal(stats.strays, 1);
 });

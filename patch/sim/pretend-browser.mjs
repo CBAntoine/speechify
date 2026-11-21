@@ -103,7 +103,10 @@ export async function startPretendBrowser() {
       const box = now().items.find((it) => it.search);
       if (box && page.value) setTimeout(() => go(box.search + encodeURIComponent(page.value)), 10);
     };
-    // The functions of src/tvweb/page.js that Patch calls, answered for this pretend page.
+    // The functions of src/tvweb/page.js that Patch calls, answered for this pretend page. As there,
+    // a check that names another page's id is told only that the page has changed.
+    const same = (id) => !id || id === page.id;
+    const nothing = () => ({ clicked: false, hit: false, key: false, keyLeft: false, sent: false, move: null });
     const script = {
       status: () => ({ id: page.id, url: state.url, title: now().title, ready: "complete", quiet: 999 }),
       snapshot: () => {
@@ -119,33 +122,37 @@ export async function startPretendBrowser() {
         return info(f.item, f.i);
       },
       watch: () => {
-        page.watching = { clicked: false, hit: false, key: false, move: null };
-        return true;
+        page.watching = nothing();
+        return page.id;
       },
-      seenSoFar: () => page.watching || { clicked: false, hit: false, key: false, move: null },
-      watched: () => {
-        const seen = page.watching || { clicked: false, hit: false, key: false, move: null };
+      seenSoFar: (id) => (same(id) ? page.watching || nothing() : { changed: true }),
+      watched: (id) => {
+        if (!same(id)) return { changed: true };
+        const seen = page.watching || nothing();
         page.watching = null;
         return seen;
       },
-      clickNow: () => {
-        if (page.target) press(page.target.item);
-        return !!page.target;
+      clickNow: (id) => {
+        if (!same(id) || !page.target) return false;
+        press(page.target.item);
+        return true;
       },
       field: (target) => {
         const f = target == null ? find(now().items.find((it) => it.kind === "Text box")?.text ?? "\u0000") : find(target);
         if (f.error) return target == null ? { error: "nofield" } : f;
         if (f.item.kind !== "Text box") return { error: "nottext", kind: f.item.kind, text: f.item.text };
         page.focused = true;
-        return { ...info(f.item, f.i), focused: true };
+        return { ...info(f.item, f.i), focused: true, pid: page.id };
       },
-      fieldValue: () => (page.focused ? page.value : null),
-      setValue: (text) => {
+      fieldValue: (id) => (same(id) && page.focused ? page.value : null),
+      setValue: (text, id) => {
+        if (!same(id)) return false;
         page.value = String(text);
         return true;
       },
-      enterTarget: () => ({ inField: page.focused, inForm: page.focused, button: page.focused ? "Search" : "", secret: false, text: "" }),
-      submitNow: () => {
+      enterTarget: () => ({ inField: page.focused, inForm: page.focused, button: page.focused ? "Search" : "", secret: false, sends: page.focused, text: "" }),
+      submitNow: (id) => {
+        if (!same(id)) return false;
         submit();
         return true;
       },
@@ -199,7 +206,7 @@ export async function startPretendBrowser() {
       },
       "Input.dispatchKeyEvent": ({ type, key }) => {
         if (type === "keyDown" && key === "Enter") {
-          if (page.watching) page.watching.key = true;
+          if (page.watching) Object.assign(page.watching, { key: true, keyLeft: true, sent: page.focused && !!page.value });
           submit();
         }
         return {};

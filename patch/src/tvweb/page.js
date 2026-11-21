@@ -6,7 +6,7 @@
 // Written for old TV browsers (Chrome 55 and later): no async/await, no "?.", no "??", no spread.
 (function () {
   "use strict";
-  var VERSION = 4;
+  var VERSION = 5;
   var MAX_ITEMS = 45;
   var MAX_TEXT = 1500;
   var doc = document;
@@ -492,9 +492,13 @@
     return info;
   }
 
-  /** Watch for the click arriving, to check that the right thing got it. */
+  /**
+   * Watch for a click or a key press arriving, to check that it got here and what became of it.
+   * Answers with this page's own id. The checks that follow say that id back: a page loaded since
+   * then (the click opened it) answers only that things have changed, and is never acted on.
+   */
   function watch() {
-    var seen = { clicked: false, hit: false, key: false, move: null };
+    var seen = { clicked: false, hit: false, key: false, keyLeft: false, sent: false, move: null };
     var target = state.target;
     var onMove = function (e) {
       seen.move = { x: e.clientX, y: e.clientY };
@@ -504,35 +508,54 @@
       var t = e.composedPath ? e.composedPath()[0] : e.target;
       if (target && t && (inside(t, target) || inside(target, t) || labelFor(t) === target)) seen.hit = true;
     };
+    var enter = function (e) {
+      return e.key === "Enter" || e.keyCode === 13;
+    };
     var onKey = function (e) {
-      if (e.key === "Enter" || e.keyCode === 13) seen.key = true;
+      if (enter(e)) seen.key = true;
+    };
+    // After the page's own listeners: did it leave Enter for the browser to act on (send the form)?
+    var onKeyEnd = function (e) {
+      if (enter(e) && !e.defaultPrevented) seen.keyLeft = true;
+    };
+    var onSubmit = function () {
+      seen.sent = true;
     };
     if (state.unwatch) state.unwatch();
-    doc.addEventListener("click", onClick, true);
-    doc.addEventListener("keydown", onKey, true);
-    doc.addEventListener("mousemove", onMove, true);
+    win.addEventListener("click", onClick, true);
+    win.addEventListener("keydown", onKey, true);
+    win.addEventListener("keydown", onKeyEnd, false);
+    win.addEventListener("submit", onSubmit, true);
+    win.addEventListener("mousemove", onMove, true);
     state.unwatch = function () {
-      doc.removeEventListener("click", onClick, true);
-      doc.removeEventListener("keydown", onKey, true);
-      doc.removeEventListener("mousemove", onMove, true);
+      win.removeEventListener("click", onClick, true);
+      win.removeEventListener("keydown", onKey, true);
+      win.removeEventListener("keydown", onKeyEnd, false);
+      win.removeEventListener("submit", onSubmit, true);
+      win.removeEventListener("mousemove", onMove, true);
       state.unwatch = null;
     };
     state.watch = seen;
-    return true;
+    return state.id;
+  }
+  /** Is this still the page the watching began on? (No id given: an older Patch, which didn't ask.) */
+  function same(id) {
+    return !id || id === state.id;
   }
   /** What has arrived so far (the watching goes on). */
-  function seenSoFar() {
-    return state.watch || { clicked: false, hit: false, key: false, move: null };
+  function seenSoFar(id) {
+    if (!same(id)) return { changed: true };
+    return state.watch || { clicked: false, hit: false, key: false, keyLeft: false, sent: false, move: null };
   }
-  function watched() {
-    var seen = seenSoFar();
-    if (state.unwatch) state.unwatch();
+  function watched(id) {
+    var seen = seenSoFar(id);
+    if (!seen.changed && state.unwatch) state.unwatch();
     return seen;
   }
   /** Click it from here (when a click sent to the screen didn't land on it). */
-  function clickNow() {
+  function clickNow(id) {
     var el = state.target;
-    if (!el || !el.isConnected) return false;
+    if (!same(id) || !el || !el.isConnected) return false;
     if (typeof el.click === "function") el.click();
     else el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: win }));
     return true;
@@ -597,17 +620,18 @@
     state.field = el;
     state.target = el;
     info.focused = deepActive() === el;
+    info.pid = state.id;
     return info;
   }
-  function fieldValue() {
+  function fieldValue(id) {
     var el = state.field;
-    if (!el) return null;
+    if (!same(id) || !el) return null;
     return el.tagName === "INPUT" || el.tagName === "TEXTAREA" ? String(el.value) : clean(el.textContent);
   }
   /** Put the words in directly (when typing sent to the screen didn't arrive), telling the page as typing would. */
-  function setValue(text) {
+  function setValue(text, id) {
     var el = state.field;
-    if (!el || !el.isConnected) return false;
+    if (!same(id) || !el || !el.isConnected) return false;
     el.focus();
     if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
       var proto = el.tagName === "INPUT" ? win.HTMLInputElement.prototype : win.HTMLTextAreaElement.prototype;
@@ -619,26 +643,51 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
   }
+  /** A button or a link: Enter chooses it, as a click would. */
+  function pressable(el) {
+    var tag = el.tagName;
+    return tag === "BUTTON" || tag === "A" || tag === "SUMMARY" || (tag === "INPUT" && /^(submit|button|reset|image)$/i.test(el.type)) || /^(button|link|menuitem|tab)$/.test(role(el));
+  }
+  function sendButton(form) {
+    return form.querySelector("button[type=submit],input[type=submit],button:not([type])");
+  }
+  /** Where Enter goes: the box in use, a button or link that has the selection, or the last box typed in. */
+  function enterOn() {
+    var el = deepActive();
+    if (!el || el === doc.body || el === doc.documentElement) el = state.field && state.field.isConnected ? state.field : null;
+    return el;
+  }
   /** Where Enter would go, and what it would do: the form's own button says. */
   function enterTarget() {
-    var el = deepActive();
-    var form = el && (el.form || (el.closest ? el.closest("form") : null));
-    var button = form ? form.querySelector("button[type=submit],input[type=submit],button:not([type])") : null;
-    state.field = editable(el) ? el : state.field;
-    return { inField: editable(el), inForm: !!form, button: button ? clean(nameOf(button, "Button"), 60) : "", secret: !!el && isSecret(el), text: el && el !== doc.body ? (describe(el) || {}).text || "" : "" };
+    var el = enterOn();
+    var press = el && pressable(el) ? el : null;
+    var form = el && !press ? el.form || (el.closest ? el.closest("form") : null) : null;
+    var button = press || (form ? sendButton(form) : null);
+    state.field = el && editable(el) ? el : state.field;
+    return {
+      inField: !!el && editable(el), inForm: !!form, button: button ? clean(nameOf(button, "Button"), 60) : "", secret: !!el && isSecret(el),
+      // In a one-line box whose form has a button to send it, the browser sends the form on Enter.
+      sends: !!form && !!el && el.tagName === "INPUT" && editable(el) && !!button && !button.disabled,
+      text: el ? (describe(el) || {}).text || "" : ""
+    };
   }
-  /** Send the form the box is in (when the Enter key sent to the screen didn't arrive). */
-  function submitNow() {
-    var el = state.field || deepActive();
-    var form = el && (el.form || (el.closest ? el.closest("form") : null));
+  /** Do what Enter does (when the Enter key sent to the screen didn't arrive, or didn't send the form). */
+  function submitNow(id) {
+    var el = enterOn();
+    if (!same(id) || !el) return false;
+    if (pressable(el)) {
+      if (typeof el.click === "function") el.click();
+      else el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: win }));
+      return true;
+    }
+    var form = el.form || (el.closest ? el.closest("form") : null);
     if (!form) {
-      if (!el) return false;
       var init = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
       el.dispatchEvent(new KeyboardEvent("keydown", init));
       el.dispatchEvent(new KeyboardEvent("keyup", init));
       return true;
     }
-    var button = form.querySelector("button[type=submit],input[type=submit],button:not([type])");
+    var button = sendButton(form);
     if (button && typeof button.click === "function") button.click();
     else if (typeof form.requestSubmit === "function") form.requestSubmit();
     else form.submit();

@@ -101,6 +101,18 @@ function route(url, cookie, state) {
   if (p === "/apps") {
     return page("Opening times", `<h1>Opening times</h1><p>Monday to Saturday, 9 to 6.</p><iframe src="http://127.0.0.1:${state.otherPort}/map" width="500" height="200" title="Map"></iframe>`);
   }
+  // Two steps, each a form with its box ready for typing: sending the first must not also send the second.
+  if (p === "/delivery") {
+    return page("Delivery", `<h1>Where should it go?</h1><form action="/delivery" method="post"><label>Postcode <input name="postcode" autofocus></label> <button>Continue</button></form>`);
+  }
+  if (p === "/newsletter") {
+    return page("One more thing", `<h1>One more thing</h1><p>Your order is going to ${esc(state.steps.filter((x) => x.startsWith("delivery:")).pop()?.slice(9) || "you")}.</p><form action="/newsletter" method="post"><label>Email for offers <input name="email" value="someone@example.com" autofocus></label> <button>Sign me up</button></form>`);
+  }
+  // A button that jumps away as the pointer reaches it: the click lands on what was underneath.
+  if (p === "/tricky") {
+    return page("A page that moves", `<h1>A page that moves</h1><div style="position:relative;height:420px"><p id="under" style="position:absolute;left:0;top:10px;margin:0;width:400px;height:60px">Nothing to press here</p><button id="dodge" style="position:absolute;left:0;top:0;width:260px;height:60px" onclick="document.title='Caught'">Catch me</button></div>
+      <script>document.getElementById("dodge").addEventListener("mouseover", function () { this.style.top = "330px"; });</script>`);
+  }
   if (p === "/cleared") return page("Basket cleared", "<h1>Your basket is empty now</h1>");
   if (p === "/bought") return page("Thank you", "<h1>Thank you for your order</h1>");
   return null;
@@ -112,9 +124,9 @@ async function readBody(req) {
   return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
 }
 
-/** Start the shop. Resolves with { url, state: { searches, basket, bought }, close }. */
+/** Start the shop. Resolves with { url, state: { searches, basket, bought, steps }, close }. */
 export async function startWebsite({ host = "127.0.0.1" } = {}) {
-  const state = { searches: [], basket: [], bought: [], otherPort: 0 };
+  const state = { searches: [], basket: [], bought: [], steps: [], otherPort: 0 };
   // "Another site", for the part of a page that comes from somewhere else.
   const other = http.createServer((req, res) => res.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><title>Map</title><p>Map from another site</p><a href='/directions'>Directions</a>"));
   await new Promise((r) => other.listen(0, "127.0.0.1", r));
@@ -130,6 +142,14 @@ export async function startWebsite({ host = "127.0.0.1" } = {}) {
       if (url.pathname === "/buy") {
         state.bought.push(body.get("id"));
         return res.writeHead(303, { location: "/bought" }).end();
+      }
+      if (url.pathname === "/delivery") {
+        state.steps.push(`delivery:${body.get("postcode")}`);
+        return res.writeHead(303, { location: "/newsletter" }).end();
+      }
+      if (url.pathname === "/newsletter") {
+        state.steps.push(`newsletter:${body.get("email")}`);
+        return res.writeHead(303, { location: "/" }).end();
       }
       return res.writeHead(303, { location: "/" }).end();
     }
