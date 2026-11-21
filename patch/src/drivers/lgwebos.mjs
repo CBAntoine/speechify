@@ -7,7 +7,7 @@ import { wakeOnLan } from "../net/probe.mjs";
 import { youtubeSearchUrl, watchUrl } from "../net/youtube.mjs";
 import { clamp, fuzzyPick, normalizeMac, normalizeText, parsePercent, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { knownApp, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const PAIRING = JSON.parse(readFileSync(new URL("./lg-pairing.json", import.meta.url), "utf8"));
 delete PAIRING._source;
@@ -21,11 +21,12 @@ function unsignedPairing() {
   return p;
 }
 
+// The remote's buttons (named as in tv.mjs) as LG's.
 const BUTTONS = {
-  home: "HOME", back: "BACK", exit: "EXIT", menu: "MENU", settings: "MENU", up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT",
-  ok: "ENTER", select: "ENTER", enter: "ENTER", play: "PLAY", pause: "PAUSE", stop: "STOP", rewind: "REWIND", "fast forward": "FASTFORWARD",
-  forward: "FASTFORWARD", "volume up": "VOLUMEUP", "volume down": "VOLUMEDOWN", mute: "MUTE", "channel up": "CHANNELUP", "channel down": "CHANNELDOWN",
-  info: "INFO", dash: "DASH", red: "RED", green: "GREEN", yellow: "YELLOW", blue: "BLUE", guide: "GUIDE", captions: "CC", subtitles: "CC",
+  up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT", ok: "ENTER", back: "BACK", home: "HOME", menu: "MENU", settings: "MENU", exit: "EXIT",
+  info: "INFO", guide: "GUIDE", play: "PLAY", pause: "PAUSE", "play pause": "PLAY", stop: "STOP", rewind: "REWIND", "fast forward": "FASTFORWARD",
+  "volume up": "VOLUMEUP", "volume down": "VOLUMEDOWN", mute: "MUTE", "channel up": "CHANNELUP", "channel down": "CHANNELDOWN",
+  captions: "CC", dash: "DASH", red: "RED", green: "GREEN", yellow: "YELLOW", blue: "BLUE",
 };
 
 /** "[LG] webOS TV OLED55C1PUB" → { model: "OLED55C1PUB", size: 55, series: "C1", oled: true }; also "50NANO75UPA", "43UQ7570PUD". */
@@ -285,15 +286,16 @@ export default {
           return done(`Switched ${device.name} to ${hit.label || hit.id}.`);
         }
         case "press_button": {
-          const k = normalizeText(need(value, "button")).replace(/\b\d+ times?\b/g, "").trim();
-          const name = /^\d$/.test(k) ? k : Object.hasOwn(BUTTONS, k) ? BUTTONS[k] : null;
-          if (!name) throw new DeviceError(`I don't know the button "${value}". Try home, back, up, down, left, right, ok, play or pause.`, { code: "EVALUE" });
-          const times = Math.min(Math.max(parseInt(String(value).match(/\b(\d+) times?\b/)?.[1] || "1", 10), 1), 10);
-          for (let i = 0; i < times; i++) {
-            await s.button(name);
-            await sleep(200);
+          // Any of the remote's buttons, or several in a row. (LG's TVs take presses, not a held button.)
+          const steps = buttonCodes(parseButtons(value), BUTTONS, { digit: (d) => d, device: device.name });
+          for (const st of steps) {
+            for (let i = 0; i < st.times; i++) {
+              await s.button(st.code);
+              await sleep(200);
+            }
           }
-          return done(`Pressed ${value}.`);
+          const held = steps.some((st) => st.hold);
+          return done(`${describeButtons(steps.map((st) => ({ ...st, hold: false })))} on ${device.name}.${held ? " (This TV doesn't take a held button from Patch, so I pressed it once.)" : ""}`);
         }
         case "launch_app": {
           const list = await launchPoints(s);

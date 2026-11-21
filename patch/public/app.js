@@ -48,7 +48,11 @@ const state = {
   room: "",
   todoOpen: false,
   drawerTab: null,
+  remoteMore: null, // the TV whose "numbers and more buttons" are open
 };
+
+// The on-screen remote: presses waiting to go to the TV, and the button being held down (if any).
+const remote = { queue: [], running: false, held: null, timer: null, fired: false, redraw: null, stale: false, count: 0 };
 
 function safeStorage(op, key, value) {
   try {
@@ -470,6 +474,99 @@ export function mergeDevice(d) {
   else state.devices.push(d);
 }
 
+// ── The remote's buttons ─────────────────────────────────────────────────────
+// A tap presses a button. Holding an arrow, or the volume, keeps it going; holding OK, Back, Home
+// or Menu sends one long press, as on the remote itself. Presses go to the TV one after another
+// and never pile up behind a slow one, and nothing is redrawn under the finger while it's down.
+/** Line up a press for the TV: { value } for a button, or { action } for the volume and channel rockers. */
+function pressRemote(id, press, { keep = 6 } = {}) {
+  if (remote.queue.length >= keep) return;
+  remote.queue.push({ id, ...press });
+  if (!remote.running) runRemote();
+}
+
+async function runRemote() {
+  remote.running = true;
+  while (remote.queue.length) {
+    const { id, value, action = "press_button" } = remote.queue.shift();
+    let r;
+    try {
+      r = await api("POST", `/api/devices/${encodeURIComponent(id)}/action`, { action, value });
+    } catch (err) {
+      r = { ok: false, message: err.message };
+    }
+    if (r.device) mergeDevice(r.device);
+    if (!r.ok) {
+      remote.queue.length = 0;
+      toast(r.message || "That didn't work.", "bad");
+    } else if (state.tvScreen?.id === id) state.tvScreen = null; // the list of what's on screen is out of date now
+    // Once the finger's up and the presses are done: show how things stand, and a new picture if one was showing.
+    clearTimeout(remote.redraw);
+    remote.redraw = setTimeout(() => {
+      if (remote.held || remote.running) return;
+      renderAll();
+      if (r.ok && state.tvShot?.id === id) showTvScreen(id, { quiet: true });
+    }, 700);
+  }
+  remote.running = false;
+}
+
+const remotePress = (b) => (b.dataset.remote ? { value: b.dataset.remote } : { action: b.dataset.remoteAct });
+
+document.addEventListener("pointerdown", (e) => {
+  const b = e.target.closest?.("[data-remote], [data-remote-act]");
+  if (!b || e.button > 0) return;
+  remote.fired = false;
+  remote.held = b;
+  clearTimeout(remote.timer);
+  const repeats = !!b.dataset.remoteAct || REMOTE_REPEATS.has(b.dataset.remote);
+  remote.count = 0;
+  const again = () => {
+    if (remote.held !== b) return;
+    remote.fired = true;
+    if (!repeats) return pressRemote(b.dataset.id, { value: `hold ${b.dataset.remote}` });
+    // Keep going, but only as fast as the TV takes them, and not for ever if the finger's lifting is missed.
+    if (!b.isConnected || ++remote.count > 60) return letGo();
+    pressRemote(b.dataset.id, remotePress(b), { keep: 1 });
+    remote.timer = setTimeout(again, 160);
+  };
+  remote.timer = setTimeout(again, 480);
+});
+function letGo() {
+  const was = remote.held;
+  remote.held = null;
+  clearTimeout(remote.timer);
+  if (was && remote.stale) {
+    remote.stale = false;
+    renderAll();
+  }
+}
+for (const up of ["pointerup", "pointercancel", "touchend", "touchcancel", "mouseup"]) document.addEventListener(up, letGo, true);
+window.addEventListener("blur", letGo);
+document.addEventListener("visibilitychange", () => document.hidden && letGo());
+// A long press on a phone mustn't bring up the phone's own menu over the remote.
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest?.("[data-remote], [data-remote-act]")) e.preventDefault();
+});
+// The "numbers and more buttons" part stays open while the card is redrawn.
+document.addEventListener(
+  "toggle",
+  (e) => {
+    const more = e.target.closest?.("[data-remote-more]");
+    if (more) state.remoteMore = more.open ? more.dataset.remoteMore : null;
+  },
+  true,
+);
+// On a computer, the keyboard works the remote while a TV's card is open (and nothing's being typed).
+document.addEventListener("keydown", (e) => {
+  if (!state.openId || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+  if (e.target.closest?.("input, textarea, select, [contenteditable], button, a, summary") || !$("#drawer [data-remote]") || $("#confirm")) return;
+  const value = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", Enter: "ok", Backspace: "back", " ": "play pause" }[e.key];
+  if (!value) return;
+  e.preventDefault();
+  pressRemote(state.openId, { value });
+});
+
 async function doAction(id, action, value, { confirmToken } = {}) {
   const d = state.devices.find((x) => x.id === id);
   state.busy.add(id);
@@ -560,11 +657,25 @@ function closeOverlays() {
 
 const btn = (id, act, label, extra = "", value) => `<button class="btn btn--sm ${extra}" data-act="${act}" data-id="${id}"${value != null ? ` data-value="${esc(value)}"` : ""}>${label}</button>`;
 
+/** The buttons each kind of TV's remote has beyond the ones they all have (Patch says so if one isn't there after all). */
+const REMOTE_MORE = {
+  androidtv: ["settings", "search", "info", "guide", "apps", "captions"],
+  samsung: ["info", "guide", "exit", "input", "captions", "previous channel"],
+  lgwebos: ["info", "guide", "exit", "captions"],
+  roku: ["search", "info", "replay", "backspace"],
+};
+const REMOTE_LABEL = { "previous channel": "Last channel", backspace: "Delete", captions: "Subtitles", apps: "All apps" };
+// Held down, these keep going; the rest send one long press (as holding Home does on the remote itself).
+const REMOTE_REPEATS = new Set(["up", "down", "left", "right", "rewind", "fast forward"]);
+
 /** A TV or streaming box as a remote control: power, d-pad, volume and channel rockers, apps, YouTube, the web. */
 function remoteHtml(d) {
   const s = d.state || {};
   const id = esc(d.id);
-  const key = (v, ic, cls = "", label = v) => `<button class="${cls}" type="button" data-act="press_button" data-value="${v}" data-id="${id}" aria-label="${label}">${ic}</button>`;
+  // data-remote marks a button of the remote: a tap presses it, holding it repeats or long-presses it.
+  const key = (v, ic, cls = "", label = v) => `<button class="${cls}" type="button" data-remote="${v}" data-id="${id}" aria-label="${label}">${ic}</button>`;
+  const more = REMOTE_MORE[d.driver] || [];
+  const word = (v) => key(v, esc(REMOTE_LABEL[v] || cap(v)), "btn btn--sm", REMOTE_LABEL[v] || cap(v));
   const hasPower = has(d, "turn_on") || has(d, "turn_off");
   const isOff = s.on === false;
   const out = [];
@@ -574,11 +685,17 @@ function remoteHtml(d) {
       <span class="pill">${esc(stateLine(d) || (isOff ? "Off" : "On"))}</span>
     </div>
     <div class="remote">
-      ${has(d, "volume_up") ? `<div class="rocker"><button type="button" data-act="volume_up" data-id="${id}" aria-label="Volume up">+</button><span>Vol</span><button type="button" data-act="volume_down" data-id="${id}" aria-label="Volume down">−</button></div>` : "<span></span>"}
+      ${has(d, "volume_up") ? `<div class="rocker"><button type="button" data-remote-act="volume_up" data-id="${id}" aria-label="Volume up">+</button><span>Vol</span><button type="button" data-remote-act="volume_down" data-id="${id}" aria-label="Volume down">−</button></div>` : "<span></span>"}
       ${has(d, "press_button") ? `<div class="dpad">${key("up", icon("up", 22), "up", "Up")}${key("left", icon("left", 22), "left", "Left")}${key("ok", "OK", "ok", "OK")}${key("right", icon("right", 22), "right", "Right")}${key("down", icon("down", 22), "down", "Down")}</div>` : "<span></span>"}
-      ${has(d, "channel_up") ? `<div class="rocker"><button type="button" data-act="channel_up" data-id="${id}" aria-label="Channel up">+</button><span>Ch</span><button type="button" data-act="channel_down" data-id="${id}" aria-label="Channel down">−</button></div>` : "<span></span>"}
+      ${has(d, "channel_up") ? `<div class="rocker"><button type="button" data-remote-act="channel_up" data-id="${id}" aria-label="Channel up">+</button><span>Ch</span><button type="button" data-remote-act="channel_down" data-id="${id}" aria-label="Channel down">−</button></div>` : "<span></span>"}
     </div>
-    ${has(d, "press_button") || has(d, "mute") ? `<div class="remote-keys">${has(d, "press_button") ? `${key("back", icon("back", 18), "btn", "Back")}${key("home", icon("home", 18), "btn", "Home")}${key("play pause", icon(s.playback === "playing" ? "pause" : "play", 18), "btn", "Play or pause")}` : ""}${has(d, "mute") ? `<button class="btn" type="button" data-act="${s.muted && has(d, "unmute") ? "unmute" : "mute"}" data-id="${id}" aria-label="Mute">${icon(s.muted ? "volume" : "mute", 18)}</button>` : ""}</div>` : ""}
+    ${has(d, "press_button") ? `<div class="remote-keys">${key("back", icon("back", 18), "btn", "Back")}${key("home", icon("home", 18), "btn", "Home")}${key("menu", icon("menu", 18), "btn", "Menu")}</div>` : ""}
+    ${has(d, "press_button") || has(d, "mute") ? `<div class="remote-keys">${has(d, "press_button") ? `${key("rewind", icon("rewind", 18), "btn", "Rewind")}${key("play pause", icon(s.playback === "playing" ? "pause" : "play", 18), "btn", "Play or pause")}${key("fast forward", icon("forward", 18), "btn", "Fast forward")}` : ""}${has(d, "mute") ? `<button class="btn" type="button" data-act="${s.muted && has(d, "unmute") ? "unmute" : "mute"}" data-id="${id}" aria-label="Mute">${icon(s.muted ? "volume" : "mute", 18)}</button>` : ""}</div>` : ""}
+    ${has(d, "press_button") ? `<details class="remote-more"${state.remoteMore === d.id ? " open" : ""} data-remote-more="${id}"><summary>${icon("numbers", 16)} Numbers and more buttons</summary>
+      <div class="numpad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => key(String(n), String(n), "", String(n))).join("")}<span></span>${key("0", "0", "", "0")}<span></span></div>
+      ${more.length ? `<div class="remote-words">${more.map(word).join("")}</div>` : ""}
+    </details>
+    <p class="remote-hint">Hold an arrow to keep moving. Hold OK, Back or Home for a long press.${window.matchMedia?.("(hover: hover) and (pointer: fine)").matches ? " On a keyboard: the arrows, Enter for OK, Backspace for Back, Space to play or pause." : ""}</p>` : ""}
   </div>`);
   if (has(d, "launch_app")) {
     out.push(`<div class="panel"><h3>Apps</h3><div class="app-tiles">${APP_TILES.map(([name, color]) => `<button class="app-tile ${String(s.app || "").toLowerCase().startsWith(name.toLowerCase().split(" ")[0]) ? "is-current" : ""}" style="--app:${color}" type="button" data-act="launch_app" data-value="${esc(name)}" data-id="${id}">${esc(name === "Disney Plus" ? "Disney+" : name)}</button>`).join("")}</div>
@@ -817,6 +934,10 @@ function renderDrawer(fresh = false) {
   }
   const active = document.activeElement;
   if (!fresh && el.contains(active) && (active.tagName === "INPUT" || active.type === "range")) return; // don't yank a control out from under the person
+  if (!fresh && remote.held && el.contains(remote.held)) {
+    remote.stale = true; // a button of the remote is being held: draw when it's let go
+    return;
+  }
   const controls = controlsHtml(d);
   const tab = controls && state.drawerTab !== "details" ? "controls" : "details";
   const status = d.online === false ? "Offline" : d.setup ? "Needs connecting" : stateLine(d) || "Online";
@@ -1096,6 +1217,14 @@ document.addEventListener("click", async (e) => {
     safeStorage("set", "patch.dismissed", JSON.stringify([...state.dismissed]));
     renderSetup();
     renderHero();
+    return;
+  }
+  const rk = e.target.closest("[data-remote], [data-remote-act]");
+  if (rk) {
+    e.preventDefault();
+    rk.blur(); // so the keyboard's arrows and Enter go to the remote next, not to this button again
+    if (remote.fired) remote.fired = false; // it was held: that's been dealt with
+    else pressRemote(rk.dataset.id, remotePress(rk));
     return;
   }
   const act = e.target.closest("[data-act]");

@@ -1892,6 +1892,85 @@ input.range-ct::-moz-range-progress {
   border-radius: 50%;
 }
 
+/* The remote's buttons are pressed and held, not selected or long-pressed for the phone's own menu. */
+[data-remote],
+[data-remote-act] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+[data-remote]:active,
+[data-remote-act]:active {
+  transform: scale(0.94);
+  background: var(--surface-3);
+}
+
+.dpad .ok:active {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+
+.remote-more {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.remote-more summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 6px 0;
+}
+
+.remote-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.remote-more[open] summary {
+  color: var(--text);
+}
+
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 58px);
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.numpad button {
+  height: 46px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.remote-words {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.remote-hint {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .app-tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

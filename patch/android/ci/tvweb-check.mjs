@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const PATCH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { startApp } = await import(path.join(PATCH, "src/app.mjs"));
 const { startWebsite } = await import(path.join(PATCH, "sim/website.mjs"));
-const { actionsFor, lastWeb } = await import(path.join(PATCH, "src/drivers/androidtv.mjs"));
+const { actionsFor, lastWeb, refusedKey } = await import(path.join(PATCH, "src/drivers/androidtv.mjs"));
 const { readUiTree } = await import(path.join(PATCH, "src/net/uitree.mjs"));
 const { pngSize } = await import(path.join(PATCH, "src/apk/index.mjs"));
 const { stats } = await import(path.join(PATCH, "src/tvweb/session.mjs"));
@@ -214,6 +214,52 @@ for (let i = 0; i < 4; i++) {
 }
 await check(r.ok && !/in Patch Browser/.test(r.screen || ""), `with the home screen in front, Patch should read the home screen: ${r.message}`);
 console.log("With the home screen in front, Patch reads the home screen again.");
+
+// The remote, on a real Android: a run of buttons goes as one command and arrives in the order
+// asked, a held button arrives as a long press, and whoever asked by voice is told what's on
+// screen afterwards. What arrived is read from Android's own record of the keys it dealt with.
+const keysSeen = async () => {
+  // "RecentQueue: length=10", then lines like "KeyEvent(… action=DOWN, … keyCode=DPAD_DOWN(20), … repeatCount=0), policyFlags=…".
+  const lines = (await adb("shell", "dumpsys", "input")).toString().split("\n");
+  const at = lines.findIndex((l) => /^\s*RecentQueue:/.test(l));
+  if (at < 0) return null;
+  const indent = (l) => l.match(/^\s*/)[0].length;
+  const seen = [];
+  for (const l of lines.slice(at + 1)) {
+    // Its entries are the lines set further in than its heading.
+    if (!l.trim() || indent(l) <= indent(lines[at])) break;
+    const m = l.match(/KeyEvent\(.*action=(\w+).*keyCode=(?:\w+\()?(\d+)\)?.*repeatCount=(\d+)/);
+    if (m) seen.push({ action: m[1], code: Number(m[2]), repeat: Number(m[3]) });
+  }
+  return seen;
+};
+const NAMES = { 3: "Home", 19: "up", 20: "down", 21: "left", 22: "right", 23: "OK", 4: "Back" };
+const told = (q) => q.map((k) => `${NAMES[k.code] || k.code} ${k.action === "UP" ? "up" : k.repeat ? "held" : "down"}`).join(", ");
+const press = (value) => app.controller.act(id, "press_button", value, { look: true });
+r = await press("home, down 2, up");
+console.log(`The remote, “home, down 2, up”: ${r.message}`);
+await check(r.ok && /^Pressed Home, then down twice, then up on Test TV\./.test(r.message), `the remote's buttons should have gone to the TV: ${r.message}`);
+if (r.screen) console.log(r.screen.split("\n").slice(0, 8).map((l) => `      ${l}`).join("\n"));
+let keys = await keysSeen();
+if (!keys?.length) console.log("(This Android doesn't show the keys it was sent, so their order isn't checked here.)");
+else {
+  console.log(`      Android dealt with: ${told(keys)}`);
+  const downs = keys.filter((k) => k.action === "DOWN" && !k.repeat).map((k) => k.code);
+  await check(downs.slice(-3).join(" ") === "20 20 19", `Android should have been sent down, down, up, in that order. It dealt with: ${told(keys)}`);
+  console.log("The run of buttons arrived on the TV in the order asked.");
+}
+r = await press("hold down");
+console.log(`The remote, “hold down”: ${r.message}`);
+await check(r.ok && /^Held down on Test TV\./.test(r.message), `a held button should have gone to the TV: ${r.message}`);
+keys = await keysSeen();
+if (keys?.length) {
+  console.log(`      Android dealt with: ${told(keys.slice(-3))}`);
+  await check(keys.slice(-3).some((k) => k.code === 20 && k.action === "DOWN" && k.repeat > 0), `a held button should arrive as a long press. Android dealt with: ${told(keys)}`);
+  console.log("The held button arrived as a long press.");
+}
+// What this Android says to a key it doesn't know (for the record: Patch treats anything it says as a refusal).
+const odd = await run("adb", ["shell", "input", "keyevent", "KEYCODE_NOT_A_BUTTON"], { encoding: "utf8" }).then((o) => o.stdout + o.stderr, (e) => `${e.stdout || ""}${e.stderr || ""}` || String(e.message));
+console.log(`A key Android doesn't know: it says ${JSON.stringify(odd.trim().slice(0, 200))}${refusedKey(odd) ? ", which Patch takes as a no." : " (nothing to go on, so Patch can't tell)."}`);
 
 console.log(`How the steps went in: ${stats.clicks} clicks as real ones (aimed ${stats.aims} times) and ${stats.clicksInside} told to the page (${stats.strays} landed on something else); typing ${stats.typed} real, ${stats.typedInside} told; Enter ${stats.enters} real, ${stats.entersInside} told; ${stats.boxes} message boxes answered inside the page and ${stats.boxesOutside} from outside.${stats.misses.length ? ` Not real: ${stats.misses.join("; ")}.` : ""}`);
 await check(stats.clicks >= 10 && stats.clicksInside === 0 && stats.strays === 0 && stats.typed >= 3 && stats.typedInside === 0 && stats.enters >= 2 && stats.entersInside === 0, `in Android's own WebView every step should go in as a real click, key press or typing: ${JSON.stringify(stats)}`);

@@ -238,7 +238,13 @@ export function rokuHandler(s) {
       return send(200, `<?xml version="1.0" encoding="UTF-8" ?>\n<active-app>\n\t${a ? `<app id="${a.id}" type="appl" version="${a.version}">${esc(a.name)}</app>` : "<app>Roku</app>"}\n</active-app>`, "text/xml");
     }
     if (req.method !== "POST") return send(404, "");
-    let m = p.match(/^\/keypress\/(\w+)$/);
+    // A held button is a keydown, then a keyup.
+    let m = p.match(/^\/key(down|up)\/(\w+)$/);
+    if (m) {
+      s.keys.push(`${m[1]} ${m[2]}`);
+      return send(200, "");
+    }
+    m = p.match(/^\/keypress\/(\w+)$/);
     if (m) {
       s.keys.push(m[1]);
       if (m[1] === "PowerOff") s.power = "DisplayOff";

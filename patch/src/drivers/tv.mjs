@@ -91,6 +91,192 @@ export const APPS = [
 ];
 
 /** Names of the TV apps made with Patch, by their app id (kept up to date by Patch's app maker). */
+// ── The remote's buttons ─────────────────────────────────────────────────────
+// One way of naming buttons for every TV, and of saying several at once: "down three times",
+// "down, down, right, OK", "hold Home". Each driver turns the names into its own codes.
+
+/** What people call each button. The key is the name the drivers use. */
+const BUTTON_WORDS = {
+  up: ["up", "arrow up", "up arrow"],
+  down: ["down", "arrow down", "down arrow"],
+  left: ["left", "arrow left", "left arrow"],
+  right: ["right", "arrow right", "right arrow"],
+  ok: ["ok", "okay", "select", "enter", "center", "centre", "confirm", "choose", "click", "middle"],
+  back: ["back", "return", "go back"],
+  home: ["home", "home screen"],
+  menu: ["menu", "options", "option", "three lines", "star"],
+  settings: ["settings", "setup", "gear", "quick settings"],
+  exit: ["exit", "close"],
+  info: ["info", "information", "details", "display"],
+  guide: ["guide", "tv guide", "programme guide", "program guide"],
+  search: ["search", "find", "magnifying glass"],
+  play: ["play", "resume"],
+  pause: ["pause"],
+  "play pause": ["play pause", "playpause", "pause play", "play or pause"],
+  stop: ["stop"],
+  rewind: ["rewind", "rw", "reverse", "skip back", "go back ten seconds"],
+  "fast forward": ["fast forward", "fastforward", "ff", "forward", "fwd", "skip forward", "skip ahead"],
+  next: ["next", "skip", "next track", "next one"],
+  previous: ["previous", "prev", "previous track", "last track"],
+  replay: ["replay", "instant replay"],
+  "volume up": ["volume up", "vol up", "louder"],
+  "volume down": ["volume down", "vol down", "quieter"],
+  mute: ["mute", "unmute", "silence"],
+  "channel up": ["channel up", "ch up", "channel plus"],
+  "channel down": ["channel down", "ch down", "channel minus"],
+  "previous channel": ["previous channel", "last channel", "recall"],
+  power: ["power", "power button", "on off"],
+  input: ["input", "source", "inputs", "sources"],
+  recent: ["recent", "recents", "recent apps", "app switcher"],
+  apps: ["apps", "all apps", "app list"],
+  captions: ["captions", "subtitles", "closed captions", "cc"],
+  backspace: ["backspace", "delete", "erase"],
+  dash: ["dash", "hyphen"],
+  dot: ["dot", "point", "period"],
+  red: ["red", "red button"],
+  green: ["green", "green button"],
+  yellow: ["yellow", "yellow button"],
+  blue: ["blue", "blue button"],
+};
+const BUTTON_BY_WORDS = new Map();
+for (const [name, words] of Object.entries(BUTTON_WORDS)) for (const w of words) BUTTON_BY_WORDS.set(w, name);
+const COUNT_WORDS = { once: 1, twice: 2, thrice: 3, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+// Words that only join buttons together, or mean "press".
+const BUTTON_FILLER = new Set(["press", "push", "hit", "tap", "the", "a", "button", "buttons", "key", "keys", "then", "and", "arrow", "please", "go", "move", "on", "remote", "it", "to", "now", "after", "that", "followed", "by"]);
+// Buttons people press over and over, so "3 down" is down three times, not the 3 button and then down.
+const BUTTON_REPEATS = new Set(["up", "down", "left", "right", "back", "volume up", "volume down", "channel up", "channel down", "rewind", "fast forward", "next", "previous", "replay", "backspace"]);
+export const MAX_PRESSES = 40;
+
+/** How a button is said to a person: "OK", "Home", "volume up". */
+export const buttonLabel = (name) => (name === "ok" ? "OK" : name === "play pause" ? "Play/Pause" : / /.test(name) || /^(up|down|left|right|\d)$/.test(name) ? name : name[0].toUpperCase() + name.slice(1));
+
+/**
+ * What to press, from what was asked: [{ button, times, hold }], in order.
+ * "down 3", "down three times", "right x2 then ok", "down, down, ok", "hold home", "7 1" (digits).
+ * A number after a button is how many times, and so is one just before a button that's pressed
+ * over and over ("3 down"); a number by itself is that number's button.
+ */
+export function parseButtons(value) {
+  const said = need(value, "button");
+  const steps = [];
+  const unknown = [];
+  // Commas, "then" and "and" keep buttons apart: "OK, 7" is two buttons, "OK 7" is OK seven times.
+  for (const part of String(said).split(/[,;>\n\u2192]|\bthen\b|\band\b|\bfollowed by\b/i)) buttonsIn(part, steps, unknown);
+  if (unknown.length || !steps.length) {
+    throw new DeviceError(`I don't know the button “${unknown.join(" ") || said}”. The buttons I know are up, down, left, right, OK, back, home, menu, play, pause, rewind, fast forward, volume up and down, mute, channel up and down, info, guide, search, settings, power, input and the numbers. Say several with commas (“down, down, OK”) or a count (“right 3”).`, { code: "EVALUE" });
+  }
+  // "down, down, down" is "down three times".
+  for (let k = steps.length - 1; k > 0; k--) {
+    if (steps[k].button === steps[k - 1].button && steps[k].hold === steps[k - 1].hold && !steps[k].hold && !/^\d$/.test(steps[k].button)) {
+      steps[k - 1].times += steps[k].times;
+      steps.splice(k, 1);
+    }
+  }
+  const total = steps.reduce((n, st) => n + st.times, 0);
+  if (steps.some((st) => st.times > 20) || total > MAX_PRESSES) throw new DeviceError(`That's ${total} presses, more than I'll do in one go (${MAX_PRESSES}). Ask for fewer at a time.`, { code: "EVALUE" });
+  return steps;
+}
+
+/** The buttons in one part of what was said (between commas), added to `steps`. */
+function buttonsIn(part, steps, unknown) {
+  const words = normalizeText(String(part).replace(/(\d)\s*x\b/gi, "$1 times").replace(/\bx\s*(\d)/gi, " times $1")).split(" ").filter(Boolean);
+  let hold = false;
+  let ahead = 0; // "3 times down": a count said before its button
+  let i = 0;
+  const first = steps.length; // nothing from this part yet
+  const count = (w) => (/^\d{1,2}$/.test(w) ? Number(w) : Object.hasOwn(COUNT_WORDS, w) ? COUNT_WORDS[w] : null);
+  // The longest button name that starts at word `at`.
+  const nameAt = (at) => {
+    for (let len = Math.min(4, words.length - at); len >= 1; len--) {
+      const name = BUTTON_BY_WORDS.get(words.slice(at, at + len).join(" "));
+      if (name) return { name, len };
+    }
+    return null;
+  };
+  while (i < words.length) {
+    const w = words[i];
+    // "hold home", "long press ok", "press and hold select", "hold down the home button".
+    if (w === "hold" || w === "holding" || (w === "long" && /^(press|pressing|hold)$/.test(words[i + 1] || ""))) {
+      hold = true;
+      i += w === "long" ? 2 : 1;
+      // "hold down <button>": the "down" belongs to "hold", unless nothing else follows.
+      if (words[i] === "down" && words.slice(i + 1).some((x) => !BUTTON_FILLER.has(x))) i++;
+      continue;
+    }
+    if (w === "times" || w === "time") {
+      // "3 times" after a button was taken with the number; "times 3" (from "x3") counts the last button.
+      const n = count(words[i + 1] || "");
+      if (n != null && steps.length) {
+        steps[steps.length - 1].times = n;
+        i += 2;
+      } else i++;
+      continue;
+    }
+    const hit = nameAt(i);
+    if (hit) {
+      const said = ahead;
+      steps.push({ button: hit.name, times: ahead || 1, hold });
+      hold = false;
+      ahead = 0;
+      i += hit.len;
+      // How many: "down 3", "down three times", "down twice".
+      const n = count(words[i] || "");
+      const counted = n != null && !said && (/^(times?|x)$/.test(words[i + 1] || "") || !/^\d$/.test(words[i]) || !/^\d$/.test(words[i + 1] || ""));
+      if (n != null && counted && n >= 1) {
+        steps[steps.length - 1].times = n;
+        i += /^(times?)$/.test(words[i + 1] || "") ? 2 : 1;
+      }
+      continue;
+    }
+    // "3 times down", "twice right": the count comes first.
+    if (count(w) != null && /^(times?)$/.test(words[i + 1] || "") && words.slice(i + 2).some((x) => BUTTON_BY_WORDS.has(x))) {
+      ahead = count(w);
+      i += 2;
+      continue;
+    }
+    // "3 down", "two right": the same, said shorter. Only at the start of a part and only for buttons
+    // pressed over and over, so "7 1" and "1 2 3 ok" stay number buttons.
+    if (count(w) != null && count(w) >= 1 && steps.length === first && !ahead && BUTTON_REPEATS.has(nameAt(i + 1)?.name)) {
+      ahead = count(w);
+      i++;
+      continue;
+    }
+    if (/^\d+$/.test(w)) {
+      // A number by itself: its digits are buttons ("7 1", "206").
+      for (const d of w) steps.push({ button: d, times: 1, hold });
+      hold = false;
+      i++;
+      continue;
+    }
+    if (Object.hasOwn(COUNT_WORDS, w) && !/^(once|twice|thrice)$/.test(w)) {
+      // "seven" by itself is the 7 button; "ten" is 1 then 0.
+      for (const d of String(COUNT_WORDS[w])) steps.push({ button: d, times: 1, hold });
+      hold = false;
+      i++;
+      continue;
+    }
+    if (!BUTTON_FILLER.has(w) && !/^(once|twice|thrice)$/.test(w)) unknown.push(w);
+    else if (/^(twice|thrice)$/.test(w) && steps.length) steps[steps.length - 1].times = COUNT_WORDS[w];
+    i++;
+  }
+}
+
+/** "Pressed down three times, then OK" / "Held Home". */
+export function describeButtons(steps) {
+  const many = (n) => (n === 1 ? "" : n === 2 ? " twice" : ` ${["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][n] || n} times`);
+  const parts = steps.map((st, i) => `${st.hold ? (i ? "held " : "Held ") : i ? "" : "Pressed "}${buttonLabel(st.button)}${many(st.times)}`);
+  return parts.length > 4 && steps.every((st) => /^\d$/.test(st.button)) ? `Pressed ${steps.map((st) => st.button).join(" ")}` : parts.join(", then ");
+}
+
+/** Each step as a driver's own code: `codes` is { button name: code } and `digit` makes a code for 0-9. Throws for a button this TV's remote doesn't have. */
+export function buttonCodes(steps, codes, { digit = null, device = "This TV" } = {}) {
+  return steps.map((st) => {
+    const code = /^\d$/.test(st.button) ? (digit ? digit(st.button) : null) : Object.hasOwn(codes, st.button) ? codes[st.button] : null;
+    if (!code) throw new DeviceError(`${device} doesn't have ${/^\d$/.test(st.button) ? "number buttons" : `a ${buttonLabel(st.button)} button`} that I can press.`, { code: "EUNSUPPORTED" });
+    return { ...st, code };
+  });
+}
+
 export const customAppNames = new Map();
 
 /**

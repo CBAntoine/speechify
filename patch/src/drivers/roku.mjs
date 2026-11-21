@@ -1,19 +1,18 @@
 // Roku players and Roku TVs: External Control Protocol (ECP) on port 8060, no pairing needed.
 import { request } from "../net/lanhttp.mjs";
 import { childText, findAll, findFirst, parseXml } from "../net/xml.mjs";
-import { fuzzyPick, normalizeMac, normalizeText } from "../util.mjs";
+import { fuzzyPick, normalizeMac, normalizeText, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { knownApp, parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const YOUTUBE = "837"; // YouTube's channel id on every Roku
 
+// The remote's buttons (named as in tv.mjs) as Roku's.
 const KEYS = {
-  home: "Home", back: "Back", up: "Up", down: "Down", left: "Left", right: "Right", ok: "Select", select: "Select",
-  enter: "Select", play: "Play", pause: "Play", "play pause": "Play", rewind: "Rev", "fast forward": "Fwd", forward: "Fwd",
-  ff: "Fwd", replay: "InstantReplay", "instant replay": "InstantReplay", info: "Info", options: "Info", star: "Info",
-  search: "Search", backspace: "Backspace", "volume up": "VolumeUp", "volume down": "VolumeDown", mute: "VolumeMute",
-  "power off": "PowerOff", "power on": "PowerOn", power: "Power", "channel up": "ChannelUp", "channel down": "ChannelDown",
-  "find remote": "FindRemote",
+  up: "Up", down: "Down", left: "Left", right: "Right", ok: "Select", back: "Back", home: "Home", menu: "Info", info: "Info",
+  search: "Search", play: "Play", pause: "Play", "play pause": "Play", rewind: "Rev", "fast forward": "Fwd", replay: "InstantReplay",
+  backspace: "Backspace", "volume up": "VolumeUp", "volume down": "VolumeDown", mute: "VolumeMute", power: "Power",
+  "channel up": "ChannelUp", "channel down": "ChannelDown",
 };
 
 const INPUTS = { hdmi1: "InputHDMI1", hdmi2: "InputHDMI2", hdmi3: "InputHDMI3", hdmi4: "InputHDMI4", tuner: "InputTuner", antenna: "InputTuner", "live tv": "InputTuner", tv: "InputTuner", av: "InputAV1", composite: "InputAV1" };
@@ -133,12 +132,23 @@ export default {
           await post(ref, "/keypress/VolumeMute");
           return done("Toggled mute.");
         case "press_button": {
-          const k = normalizeText(need(value, "button")).replace(/\b\d+\b/g, "").replace(/\s+/g, " ").trim();
-          const key = (Object.hasOwn(KEYS, k) && KEYS[k]) || Object.values(KEYS).find((v) => v.toLowerCase() === k.replace(/ /g, ""));
-          if (!key) throw new DeviceError(`I don't know the Roku button "${value}". Try home, back, up, down, left, right, ok, play, rewind or fast forward.`);
-          const times = Math.min(Math.max(parseInt(String(value).match(/\b(\d+)\b/)?.[1] || "1", 10), 1), 10);
-          for (let i = 0; i < times; i++) await post(ref, `/keypress/${key}`);
-          return done(`Pressed ${key}.`);
+          // "Find my remote" makes the Roku remote beep; it isn't a button on it.
+          if (/^find (my |the )?remote$/.test(normalizeText(need(value, "button")))) {
+            await post(ref, "/keypress/FindRemote");
+            return done(`Asked ${device.name}'s remote to make its sound.`);
+          }
+          // Any of the remote's buttons, several in a row, or one held down.
+          const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `Lit_${d}`, device: device.name });
+          for (const st of steps) {
+            for (let i = 0; i < st.times; i++) {
+              if (st.hold) {
+                await post(ref, `/keydown/${st.code}`);
+                await sleep(1200);
+                await post(ref, `/keyup/${st.code}`);
+              } else await post(ref, `/keypress/${st.code}`);
+            }
+          }
+          return done(`${describeButtons(steps)} on ${device.name}.`);
         }
         case "launch_app": {
           const list = await apps(ref.base);

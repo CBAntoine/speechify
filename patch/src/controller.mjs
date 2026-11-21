@@ -97,7 +97,7 @@ export class Controller {
    * Do one action. Risky actions come back first as { needsConfirmation, confirmToken, message };
    * repeat the call with that confirmToken once the person has said yes.
    */
-  async act(id, action, value, { confirmToken } = {}) {
+  async act(id, action, value, { confirmToken, look = false } = {}) {
     const d = this.inventory.get(id);
     if (!d) return { ok: false, error: "ENOTFOUND", message: "I can't find that device any more. Try a new scan." };
     const name = this.inventory.displayName(d);
@@ -156,7 +156,7 @@ export class Controller {
       } else {
         const driver = driverById[d.driver];
         if (!driver?.act) throw new DeviceError(`${name} can't be controlled from here.`);
-        r = await driver.act(view, action, value, { ...this.ctx(), confirmed });
+        r = await driver.act(view, action, value, { ...this.ctx(), confirmed, look });
       }
       const patch = { online: true };
       if (r.state) patch.state = r.state;

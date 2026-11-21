@@ -196,14 +196,15 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       if (!list.length) {
         return { ok: false, error: "ENOTFOUND", message: `I couldn't find any ${kind || "devices"}${room ? ` in the ${room}` : ""} that can ${ACTIONS[action].label.toLowerCase()}${offline ? ` (${offline} are offline)` : ""}.${setupHint()}` };
       }
-      const r = list.length === 1 ? await controller.act(list[0].id, action, value, { confirmToken }) : await controller.actMany(list.map((d) => d.id), action, value, { confirmToken });
+      const r = list.length === 1 ? await controller.act(list[0].id, action, value, { confirmToken, look: true }) : await controller.actMany(list.map((d) => d.id), action, value, { confirmToken });
       if (offline && r.ok) r.message += ` (${offline} offline ${offline === 1 ? "device was" : "devices were"} skipped.)`;
       return r;
     }
     const r = inventory.resolve(room && device ? `${room} ${device}` : device, { kind, action });
     if (r.ambiguous) return { ok: false, error: "EAMBIGUOUS", message: `Which one do you mean: ${r.ambiguous.map((d) => inventory.displayName(d)).join(", ")}?`, candidates: r.ambiguous.map((d) => inventory.toPublic(d)) };
     if (r.none) return { ok: false, error: "ENOTFOUND", message: `I couldn't find "${device}".${r.suggestions.length ? ` Did you mean ${r.suggestions.join(" or ")}?` : " A new scan might find it."}${setupHint()}` };
-    return controller.act(r.device.id, action, value, { confirmToken });
+    // Asked for by voice or in the chat: the answer says what's on screen afterwards, where it can.
+    return controller.act(r.device.id, action, value, { confirmToken, look: true });
   }
 
   async function applyFix(fixId, confirmToken) {

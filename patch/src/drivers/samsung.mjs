@@ -7,17 +7,17 @@ import { wakeOnLan } from "../net/probe.mjs";
 import { youtubeSearchUrl } from "../net/youtube.mjs";
 import { fuzzyPick, normalizeMac, normalizeText, safeJson, sleep } from "../util.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { APPS, knownApp, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { APPS, buttonCodes, describeButtons, knownApp, parseButtons, parseChannel, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 const CLIENT_NAME = Buffer.from("Patch").toString("base64");
 
+// The remote's buttons (named as in tv.mjs) as Samsung's key names.
 const KEYS = {
-  power: "KEY_POWER", home: "KEY_HOME", back: "KEY_RETURN", return: "KEY_RETURN", exit: "KEY_EXIT", menu: "KEY_MENU", settings: "KEY_MENU",
-  up: "KEY_UP", down: "KEY_DOWN", left: "KEY_LEFT", right: "KEY_RIGHT", ok: "KEY_ENTER", select: "KEY_ENTER", enter: "KEY_ENTER",
-  play: "KEY_PLAY", pause: "KEY_PAUSE", "play pause": "KEY_PLAY", stop: "KEY_STOP", rewind: "KEY_REWIND", "fast forward": "KEY_FF", forward: "KEY_FF",
-  "volume up": "KEY_VOLUP", "volume down": "KEY_VOLDOWN", mute: "KEY_MUTE", "channel up": "KEY_CHUP", "channel down": "KEY_CHDOWN",
-  source: "KEY_SOURCE", input: "KEY_SOURCE", guide: "KEY_GUIDE", info: "KEY_INFO", options: "KEY_TOOLS", tools: "KEY_TOOLS",
-  "previous channel": "KEY_PRECH", "last channel": "KEY_PRECH", dash: "KEY_PLUS100", red: "KEY_RED", green: "KEY_GREEN", yellow: "KEY_YELLOW", blue: "KEY_CYAN",
+  up: "KEY_UP", down: "KEY_DOWN", left: "KEY_LEFT", right: "KEY_RIGHT", ok: "KEY_ENTER", back: "KEY_RETURN", home: "KEY_HOME",
+  menu: "KEY_MENU", settings: "KEY_MENU", exit: "KEY_EXIT", info: "KEY_INFO", guide: "KEY_GUIDE", play: "KEY_PLAY", pause: "KEY_PAUSE",
+  "play pause": "KEY_PLAY", stop: "KEY_STOP", rewind: "KEY_REWIND", "fast forward": "KEY_FF", "volume up": "KEY_VOLUP", "volume down": "KEY_VOLDOWN",
+  mute: "KEY_MUTE", "channel up": "KEY_CHUP", "channel down": "KEY_CHDOWN", "previous channel": "KEY_PRECH", power: "KEY_POWER",
+  input: "KEY_SOURCE", captions: "KEY_CAPTION", dash: "KEY_PLUS100", red: "KEY_RED", green: "KEY_GREEN", yellow: "KEY_YELLOW", blue: "KEY_CYAN",
 };
 const INPUT_KEYS = { "hdmi 1": "KEY_HDMI1", hdmi1: "KEY_HDMI1", "hdmi 2": "KEY_HDMI2", hdmi2: "KEY_HDMI2", "hdmi 3": "KEY_HDMI3", hdmi3: "KEY_HDMI3", "hdmi 4": "KEY_HDMI4", hdmi4: "KEY_HDMI4", hdmi: "KEY_HDMI", tv: "KEY_TV", antenna: "KEY_TV", "live tv": "KEY_TV", cable: "KEY_TV" };
 
@@ -93,7 +93,7 @@ async function connect(device, ctx, { pairing = false } = {}) {
   throw lastErr || new DeviceError(`Couldn't reach ${device.name}.`, { code: "EOFFLINE" });
 }
 
-const keyMsg = (key) => ({ method: "ms.remote.control", params: { Cmd: "Click", DataOfCmd: key, Option: "false", TypeOfRemote: "SendRemoteKey" } });
+const keyMsg = (key, cmd = "Click") => ({ method: "ms.remote.control", params: { Cmd: cmd, DataOfCmd: key, Option: "false", TypeOfRemote: "SendRemoteKey" } });
 
 async function keys(ws, list, gap = 350) {
   for (let i = 0; i < list.length; i++) {
@@ -243,13 +243,19 @@ export default {
           return done(`Switched ${device.name} to ${value}.`);
         }
         case "press_button": {
-          const k = normalizeText(need(value, "button")).replace(/\b\d+ times?\b/g, "").trim();
-          const digit = k.match(/^\d$/)?.[0];
-          const key = digit != null ? `KEY_${digit}` : Object.hasOwn(KEYS, k) ? KEYS[k] : null;
-          if (!key) throw new DeviceError(`I don't know the button "${value}". Try home, back, up, down, left, right, ok, play, pause, source or guide.`, { code: "EVALUE" });
-          const times = Math.min(Math.max(parseInt(String(value).match(/\b(\d+) times?\b/)?.[1] || "1", 10), 1), 10);
-          await keys(ws, Array(times).fill(key), 250);
-          return done(`Pressed ${value}.`);
+          // Any of the remote's buttons, several in a row, or one held down.
+          const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `KEY_${d}`, device: device.name });
+          for (const [i, st] of steps.entries()) {
+            if (i) await sleep(250);
+            if (!st.hold) {
+              await keys(ws, Array(st.times).fill(st.code), 250);
+              continue;
+            }
+            ws.send(keyMsg(st.code, "Press"));
+            await sleep(1200);
+            ws.send(keyMsg(st.code, "Release"));
+          }
+          return done(`${describeButtons(steps)} on ${device.name}.`);
         }
         case "launch_app": {
           const app = await findApp(ws, device, need(value, "app"));

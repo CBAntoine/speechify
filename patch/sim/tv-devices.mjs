@@ -88,7 +88,7 @@ export async function samsungTv(ip, s) {
       if (p.method === "ms.remote.control") {
         const x = p.params || {};
         if (x.TypeOfRemote === "SendRemoteKey") {
-          s.keys.push(x.DataOfCmd);
+          s.keys.push(x.Cmd && x.Cmd !== "Click" ? `${x.Cmd} ${x.DataOfCmd}` : x.DataOfCmd);
           if (x.DataOfCmd === "KEY_POWER") s.power = s.power === "on" ? "standby" : "on";
         } else if (x.TypeOfRemote === "SendInputString") s.texts.push(Buffer.from(x.Cmd, "base64").toString("utf8"));
       } else if (p.method === "ms.channel.emit") {
@@ -285,9 +285,14 @@ export function fireTvState() {
     // connection to its debugging port (sim/chrome.mjs). Without one, Patch can't see into pages here.
     browser: null,
     playing: null, // what a streaming app is playing: { app, title, state }
+    keys: [], // every button pressed, in order ("hold KEYCODE_HOME" for one held down)
+    cursor: 0, // which app on the home screen the remote is on
+    refuseKey: null, // a key code this TV's Android won't press (a test's switch)
   };
 }
 
+/** The apps on the pretend TV's home screen, in order (rows of eight). */
+const fireHomeApps = (s) => s.packages.filter((p) => !["com.amazon.tv.launcher", "com.amazon.venezia", "com.android.settings"].includes(p));
 /** The process id an app would have on this pretend TV. */
 const firePid = (s, pkg) => 4000 + s.packages.indexOf(pkg);
 /** One of Patch's own apps, from a template whose pages are open to Patch. */
@@ -326,9 +331,9 @@ function fireScreen(s) {
     const installed = s.packages.includes(s.store.pkg);
     body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: STORE_NAMES[s.store.pkg] || s.store.pkg, b: "[120,100][900,180]" }) + node({ text: "Free", b: "[120,200][300,240]" }) + node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: true, b: "[120,300][420,380]" }, node({ cls: "android.widget.Button", text: installed ? "Open" : "Get", b: "[140,310][400,370]" })) + node({ desc: "More like this", b: "[120,500][1800,1000]", scroll: true }));
   } else if (pkg === "com.amazon.tv.launcher") {
-    const apps = s.packages.filter((p) => !["com.amazon.tv.launcher", "com.amazon.venezia", "com.android.settings"].includes(p));
+    const apps = fireHomeApps(s);
     const at = (i) => ({ x: 100 + (i % 8) * 220, y: 500 + Math.floor(i / 8) * 140 }); // rows of eight
-    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: "Home", b: "[100,40][300,90]" }) + apps.map((p, i) => node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: i === 0, b: `[${at(i).x},${at(i).y}][${at(i).x + 200},${at(i).y + 120}]` }, node({ desc: s.installed[p]?.label || HOME_NAMES[p] || p.split(".").at(-1), cls: "android.widget.ImageView", b: `[${at(i).x + 10},${at(i).y + 10}][${at(i).x + 190},${at(i).y + 110}]` }))).join(""));
+    body = node({ cls: "android.widget.FrameLayout", b: "[0,0][1920,1080]" }, node({ text: "Home", b: "[100,40][300,90]" }) + apps.map((p, i) => node({ cls: "android.widget.FrameLayout", click: true, focus: true, focused: i === s.cursor, b: `[${at(i).x},${at(i).y}][${at(i).x + 200},${at(i).y + 120}]` }, node({ desc: s.installed[p]?.label || HOME_NAMES[p] || p.split(".").at(-1), cls: "android.widget.ImageView", b: `[${at(i).x + 10},${at(i).y + 10}][${at(i).x + 190},${at(i).y + 110}]` }))).join(""));
   } else {
     body = node({ cls: "android.view.SurfaceView", b: "[0,0][1920,1080]" });
   }
@@ -405,12 +410,35 @@ function fireShell(s, cmd) {
     s.store = { pkg: u.searchParams.get("p"), search: u.searchParams.get("s") };
     return `Starting: Intent { act=android.intent.action.VIEW dat=${m[1]} }\n`;
   }
-  m = cmd.match(/^input keyevent (\S+)$/);
+  m = cmd.match(/^input keyevent (--longpress )?(KEYCODE_\w+(?: KEYCODE_\w+)*)$/);
   if (m) {
-    if (m[1] === "KEYCODE_DPAD_CENTER" && s.focus.startsWith("com.amazon.venezia/")) storeGet(s);
-    if (m[1] === "KEYCODE_SLEEP") s.awake = false;
-    if (m[1] === "KEYCODE_WAKEUP") s.awake = true;
-    if (m[1] === "KEYCODE_HOME") s.focus = "com.amazon.tv.launcher/.ui.HomeActivity_vNext";
+    // (refuseKey "all": a TV whose maker keeps button presses from ADB.)
+    if (s.refuseKey === "all") return "java.lang.SecurityException: Injecting to another application requires INJECT_EVENTS permission\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3011)\n";
+    for (const code of m[2].split(" ")) {
+      // (refuseKey: a key this Android doesn't know. It presses the ones before it, then says so.)
+      if (code === s.refuseKey) return "Error: Invalid arguments for command: keyevent\nusage: input [<source>] keyevent [--longpress|--doubletap] <key code number or name> ...\n";
+      s.keys.push(m[1] ? `hold ${code}` : code);
+      const home = s.focus.startsWith("com.amazon.tv.launcher/");
+      const apps = fireHomeApps(s);
+      if (code === "KEYCODE_DPAD_CENTER" && s.focus.startsWith("com.amazon.venezia/")) storeGet(s);
+      else if (code === "KEYCODE_DPAD_CENTER" && home && apps[s.cursor]) {
+        // OK on the home screen opens the app the remote is on.
+        s.focus = `${apps[s.cursor]}/.MainActivity`;
+        if (!s.running.includes(apps[s.cursor])) s.running.push(apps[s.cursor]);
+      }
+      if (home && /^KEYCODE_DPAD_(LEFT|RIGHT|UP|DOWN)$/.test(code)) {
+        const to = s.cursor + { KEYCODE_DPAD_LEFT: -1, KEYCODE_DPAD_RIGHT: 1, KEYCODE_DPAD_UP: -8, KEYCODE_DPAD_DOWN: 8 }[code];
+        const sideways = /LEFT|RIGHT/.test(code);
+        if (to >= 0 && to < apps.length && (!sideways || Math.floor(to / 8) === Math.floor(s.cursor / 8))) s.cursor = to;
+      }
+      if (code === "KEYCODE_SLEEP") s.awake = false;
+      if (code === "KEYCODE_WAKEUP") s.awake = true;
+      if (code === "KEYCODE_HOME") {
+        s.focus = "com.amazon.tv.launcher/.ui.HomeActivity_vNext";
+        s.cursor = 0;
+      }
+      if (code === "KEYCODE_BACK" && !home) s.focus = "com.amazon.tv.launcher/.ui.HomeActivity_vNext";
+    }
     return "";
   }
   m = cmd.match(/^monkey -p (\S+) -c (\S+) 1$/);

@@ -432,3 +432,97 @@ test("TV app maker: every kind of app, previews, installing on Fire TV and openi
   assert.match(r.message, /Kids Room Fire TV: removed/);
   assert.ok(!sim.state.firetv.packages.includes(pkg));
 });
+
+test("the remote: any button, several in a row, a count, or one held down, on each kind of TV", async () => {
+  // Samsung: its own key names, in order. A held button is a press, a wait and a release.
+  let from = sim.state.samsung.keys.length;
+  let r = await control({ device: "Family Room TV", action: "press_button", value: "home, down 2, right, OK" });
+  assert.ok(r.ok, r.message);
+  assert.equal(r.message, "Pressed Home, then down twice, then right, then OK on Family Room TV.");
+  assert.deepEqual(sim.state.samsung.keys.slice(from), ["KEY_HOME", "KEY_DOWN", "KEY_DOWN", "KEY_RIGHT", "KEY_ENTER"]);
+  from = sim.state.samsung.keys.length;
+  r = await control({ device: "Family Room TV", action: "press_button", value: "hold back" });
+  assert.equal(r.message, "Held Back on Family Room TV.");
+  assert.deepEqual(sim.state.samsung.keys.slice(from), ["Press KEY_RETURN", "Release KEY_RETURN"]);
+  from = sim.state.samsung.keys.length;
+  r = await control({ device: "Family Room TV", action: "press_button", value: "7, 1" });
+  assert.deepEqual(sim.state.samsung.keys.slice(from), ["KEY_7", "KEY_1"]);
+  // Not a button; a button this remote doesn't have; far too many presses. Nothing is sent for any of them.
+  from = sim.state.samsung.keys.length;
+  r = await control({ device: "Family Room TV", action: "press_button", value: "wiggle" });
+  assert.equal(r.ok, false);
+  assert.equal(r.error, "EVALUE");
+  assert.match(r.message, /I don't know the button “wiggle”/);
+  r = await control({ device: "Family Room TV", action: "press_button", value: "next" });
+  assert.equal(r.error, "EUNSUPPORTED");
+  assert.equal(r.message, "Family Room TV doesn't have a Next button that I can press.");
+  r = await control({ device: "Family Room TV", action: "press_button", value: "down 50" });
+  assert.match(r.message, /That's 50 presses, more than I'll do in one go/);
+  assert.equal(sim.state.samsung.keys.length, from);
+
+  // LG: presses only.
+  from = sim.state.lg.buttons.length;
+  r = await control({ device: "LG TV", action: "press_button", value: "back twice then menu" });
+  assert.equal(r.message, "Pressed Back twice, then Menu on LG TV.");
+  assert.deepEqual(sim.state.lg.buttons.slice(from), ["BACK", "BACK", "MENU"]);
+  r = await control({ device: "LG TV", action: "press_button", value: "hold ok" });
+  assert.equal(r.message, "Pressed OK on LG TV. (This TV doesn't take a held button from Patch, so I pressed it once.)");
+  assert.equal(sim.state.lg.buttons.at(-1), "ENTER");
+
+  // Roku: its own names; number buttons; a held button is a key down and a key up.
+  from = sim.state.roku.keys.length;
+  r = await control({ device: "Living Room TV", action: "press_button", value: "rewind 3, play, hold home, 5" });
+  assert.equal(r.message, "Pressed Rewind three times, then Play, then held Home, then 5 on Living Room TV.");
+  assert.deepEqual(sim.state.roku.keys.slice(from), ["Rev", "Rev", "Rev", "Play", "down Home", "up Home", "Lit_5"]);
+
+  // Fire TV and Android TV: a run of buttons goes as one command, and whoever asked by voice or in
+  // the chat is told where the remote is now, with what's on screen.
+  const tv = "Kids Room Fire TV";
+  await control({ device: tv, action: "press_button", value: "home" });
+  const home = (await control({ device: tv, action: "read_screen" })).screen;
+  // The apps on its home screen, in rows of eight under the word "Home"; the remote starts on the first.
+  const names = [...home.matchAll(/^\d+\. [^:]+: (.+?)(?: \((?:[^)]*)\))?$/gm)].map((m) => m[1]).filter((n) => n !== "Home");
+  assert.ok(names.length >= 4, home);
+  assert.match(home, new RegExp(`^\\d+\\. [^:]+: ${names[0]} \\(selected\\)$`, "m"));
+  from = sim.state.firetv.keys.length;
+  const sent = sim.state.firetv.commands.length;
+  r = await control({ device: tv, action: "press_button", value: "right 3, left" });
+  assert.ok(r.ok, r.message);
+  assert.deepEqual(sim.state.firetv.keys.slice(from), ["KEYCODE_DPAD_RIGHT", "KEYCODE_DPAD_RIGHT", "KEYCODE_DPAD_RIGHT", "KEYCODE_DPAD_LEFT"]);
+  assert.ok(sim.state.firetv.commands.slice(sent).includes("input keyevent KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_LEFT"), "one command for the four presses");
+  assert.equal(r.message, `Pressed right three times, then left on Kids Room Fire TV. The remote is on “${names[2]}” now.`);
+  assert.match(r.screen, new RegExp(`^\\d+\\. [^:]+: ${names[2]} \\(selected\\)$`, "m"));
+  assert.equal((r.screen.match(/\(selected\)/g) || []).length, 1);
+  // OK opens what the remote is on.
+  r = await control({ device: tv, action: "press_button", value: "ok" });
+  assert.ok(r.ok, r.message);
+  assert.match(r.message, /^Pressed OK on Kids Room Fire TV\./);
+  assert.doesNotMatch(sim.state.firetv.focus, /launcher/);
+  // A held button.
+  from = sim.state.firetv.keys.length;
+  r = await control({ device: tv, action: "press_button", value: "hold home" });
+  assert.match(r.message, /^Held Home on Kids Room Fire TV\./);
+  assert.deepEqual(sim.state.firetv.keys.slice(from), ["hold KEYCODE_HOME"]);
+  // A button this TV's Android won't press: said plainly, never "Pressed". The ones before it in a run did go.
+  sim.state.firetv.refuseKey = "KEYCODE_GUIDE";
+  from = sim.state.firetv.keys.length;
+  r = await control({ device: tv, action: "press_button", value: "guide" });
+  assert.equal(r.ok, false);
+  assert.equal(r.error, "EUNSUPPORTED");
+  assert.equal(r.message, "Kids Room Fire TV wouldn't take that button. Its remote may not have it.");
+  r = await control({ device: tv, action: "press_button", value: "down, guide, ok" });
+  assert.equal(r.message, "Kids Room Fire TV wouldn't take those buttons. Its remote may not have one of them.");
+  assert.deepEqual(sim.state.firetv.keys.slice(from), ["KEYCODE_DPAD_DOWN"]);
+  // A TV whose maker keeps button presses from ADB until one more switch is on.
+  sim.state.firetv.refuseKey = "all";
+  r = await control({ device: tv, action: "press_button", value: "down" });
+  assert.equal(r.error, "EREFUSED");
+  assert.match(r.message, /^Kids Room Fire TV won't let Patch press its buttons\. If its Developer options have “USB debugging \(Security settings\)”/);
+  sim.state.firetv.refuseKey = null;
+  // The remote in Patch's own window isn't made to wait for the screen to be read after every press.
+  await control({ device: tv, action: "press_button", value: "home" });
+  const d = await named(tv);
+  r = await api("POST", `/api/devices/${encodeURIComponent(d.id)}/action`, { action: "press_button", value: "down" });
+  assert.equal(r.message, "Pressed down on Kids Room Fire TV.");
+  assert.equal(r.screen, undefined);
+});

@@ -13,17 +13,22 @@ import { apkInfo } from "../apk/index.mjs";
 import { fuzzyPick, normalizeText, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
-import { APPS, customAppNames, knownApp, parseChannel, pickIndex, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
+import { APPS, buttonCodes, customAppNames, describeButtons, knownApp, parseButtons, parseChannel, pickIndex, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
+// The remote's buttons (named as in tv.mjs) as Android's key codes.
 const KEYS = {
-  power: "KEYCODE_POWER", home: "KEYCODE_HOME", back: "KEYCODE_BACK", menu: "KEYCODE_MENU", settings: "KEYCODE_SETTINGS", up: "KEYCODE_DPAD_UP",
-  down: "KEYCODE_DPAD_DOWN", left: "KEYCODE_DPAD_LEFT", right: "KEYCODE_DPAD_RIGHT", ok: "KEYCODE_DPAD_CENTER", select: "KEYCODE_DPAD_CENTER",
-  enter: "KEYCODE_DPAD_CENTER", play: "KEYCODE_MEDIA_PLAY", pause: "KEYCODE_MEDIA_PAUSE", "play pause": "KEYCODE_MEDIA_PLAY_PAUSE",
-  stop: "KEYCODE_MEDIA_STOP", rewind: "KEYCODE_MEDIA_REWIND", "fast forward": "KEYCODE_MEDIA_FAST_FORWARD", forward: "KEYCODE_MEDIA_FAST_FORWARD",
-  next: "KEYCODE_MEDIA_NEXT", previous: "KEYCODE_MEDIA_PREVIOUS", "volume up": "KEYCODE_VOLUME_UP", "volume down": "KEYCODE_VOLUME_DOWN",
-  mute: "KEYCODE_VOLUME_MUTE", "channel up": "KEYCODE_CHANNEL_UP", "channel down": "KEYCODE_CHANNEL_DOWN", search: "KEYCODE_SEARCH",
-  guide: "KEYCODE_GUIDE", info: "KEYCODE_INFO", input: "KEYCODE_TV_INPUT", source: "KEYCODE_TV_INPUT", recent: "KEYCODE_APP_SWITCH", apps: "KEYCODE_ALL_APPS",
+  up: "KEYCODE_DPAD_UP", down: "KEYCODE_DPAD_DOWN", left: "KEYCODE_DPAD_LEFT", right: "KEYCODE_DPAD_RIGHT", ok: "KEYCODE_DPAD_CENTER",
+  back: "KEYCODE_BACK", home: "KEYCODE_HOME", menu: "KEYCODE_MENU", settings: "KEYCODE_SETTINGS", exit: "KEYCODE_BACK", info: "KEYCODE_INFO",
+  guide: "KEYCODE_GUIDE", search: "KEYCODE_SEARCH", play: "KEYCODE_MEDIA_PLAY", pause: "KEYCODE_MEDIA_PAUSE", "play pause": "KEYCODE_MEDIA_PLAY_PAUSE",
+  stop: "KEYCODE_MEDIA_STOP", rewind: "KEYCODE_MEDIA_REWIND", "fast forward": "KEYCODE_MEDIA_FAST_FORWARD", next: "KEYCODE_MEDIA_NEXT",
+  previous: "KEYCODE_MEDIA_PREVIOUS", replay: "KEYCODE_MEDIA_REWIND", "volume up": "KEYCODE_VOLUME_UP", "volume down": "KEYCODE_VOLUME_DOWN",
+  mute: "KEYCODE_VOLUME_MUTE", "channel up": "KEYCODE_CHANNEL_UP", "channel down": "KEYCODE_CHANNEL_DOWN", "previous channel": "KEYCODE_LAST_CHANNEL",
+  power: "KEYCODE_POWER", input: "KEYCODE_TV_INPUT", recent: "KEYCODE_APP_SWITCH", apps: "KEYCODE_ALL_APPS", captions: "KEYCODE_CAPTIONS",
+  backspace: "KEYCODE_DEL", dash: "KEYCODE_MINUS", dot: "KEYCODE_PERIOD", red: "KEYCODE_PROG_RED", green: "KEYCODE_PROG_GREEN",
+  yellow: "KEYCODE_PROG_YELLOW", blue: "KEYCODE_PROG_BLUE",
 };
+// Buttons that move around what's on screen: after these, whoever asked by voice is told where the remote is now.
+const MOVES = new Set(["up", "down", "left", "right", "ok", "back", "home", "menu", "settings", "exit", "search", "recent", "apps", "guide", "info"]);
 
 const failed = (out) => /(^|\n)\s*(Error|Exception)\b|unable to resolve|No activities found|does not exist|monkey aborted|not found/i.test(out || "");
 const safePkg = (p) => /^[A-Za-z0-9_.]+$/.test(p);
@@ -145,9 +150,16 @@ async function view(client, url, pkg) {
   return !failed(out);
 }
 
+/** Press keys, in order. One command for the lot: Android waits for each to be dealt with before the next. Gives back what Android said: nothing, when it pressed them. */
 async function key(client, ...codes) {
-  for (const c of codes) await sh(client, `input keyevent ${c}`);
+  let said = "";
+  for (let i = 0; i < codes.length; i += 16) said += await sh(client, `input keyevent ${codes.slice(i, i + 16).join(" ")}`, 30_000);
+  return said;
 }
+/** Press and hold one. */
+const holdKey = (client, code) => sh(client, `input keyevent --longpress ${code}`);
+/** Android's `input` says nothing when it has pressed a key. When it won't (a key this Android doesn't know), it says so. */
+export const refusedKey = (out) => /(^|\n)\s*(Error|Usage)\b|Exception|Unknown keycode|Invalid arguments/i.test(out || "");
 
 async function youtubePkg(client, device) {
   const list = device.ref.packages?.length ? device.ref.packages : await packages(client, device);
@@ -331,6 +343,31 @@ async function readScreen(client, device, ctx) {
   const screen = { app: tree.package ? (LAUNCHERS.test(tree.package) ? "Home screen" : appName(tree.package)) : device.name, items: tree.items, more: tree.more, full: tree.full, at: Date.now() };
   ctx.memory?.set(`tv-screen:${device.id}`, screen);
   return screen;
+}
+
+/**
+ * After the remote's buttons have moved things: where the remote is now. Only for someone asking by
+ * voice or in the chat (ctx.look): they work from what Patch tells them, and it saves them asking.
+ * The dashboard's own remote isn't slowed down by it.
+ */
+async function afterButtons(client, device, ctx, steps, lead) {
+  if (!ctx.look || !steps.some((st) => MOVES.has(st.button))) return done(lead);
+  await sleep(450);
+  try {
+    const web = await webInFront(client, device);
+    if (web) {
+      const page = await web.session.snapshot();
+      return done(lead, { screen: describePage(page, { where: appName(web.pkg) === web.pkg ? "Patch's browser" : appName(web.pkg) }).text });
+    }
+    const screen = await readScreen(client, device, ctx);
+    const on = screen.items.find((it) => /selected/.test(it.state || ""));
+    const d = describeScreen(screen);
+    if (screen.items.length < 3) return done(`${lead} ${screen.app} draws its own picture, so I can't see where that left the remote.`);
+    return done(`${lead}${on ? ` The remote is on “${on.text}” now.` : ""}`, { screen: d.text });
+  } catch {
+    // A video is playing, or the screen couldn't be read just then: the buttons were pressed all the same.
+    return done(lead);
+  }
 }
 
 async function selectOnScreen(client, device, value, ctx) {
@@ -667,8 +704,8 @@ export default {
           return done(`Changed ${device.name} to channel ${ch.number} (in its live TV app).`, { state: { ...device.state, channel: ch.number } });
         }
         case "press_button": {
-          const k = normalizeText(need(value, "button")).replace(/\b\d+ times?\b/g, "").trim();
-          if (k === "enter" || k === "back") {
+          const k = normalizeText(need(value, "button"));
+          if (k === "enter" || k === "back" || k === "go back") {
             // On a web page Patch can see into: send the search or form, or go back a page, and say what shows now.
             const web = await webInFront(client, device);
             if (web && k === "enter") {
@@ -678,11 +715,29 @@ export default {
             const r = web ? await web.session.back() : null;
             if (r) return pageDone(device, web.pkg, r, `Went back on ${device.name}. It's showing ${showing(r.page)} now.`);
           }
-          const code = /^\d$/.test(k) ? `KEYCODE_${k}` : Object.hasOwn(KEYS, k) ? KEYS[k] : null;
-          if (!code) throw new DeviceError(`I don't know the button "${value}". Try home, back, up, down, left, right, ok, play, pause or search.`, { code: "EVALUE" });
-          const times = Math.min(Math.max(parseInt(String(value).match(/\b(\d+) times?\b/)?.[1] || "1", 10), 1), 10);
-          for (let i = 0; i < times; i++) await key(client, code);
-          return done(`Pressed ${value}.`);
+          // Any of the remote's buttons, several in a row, or one held down.
+          const steps = buttonCodes(parseButtons(value), KEYS, { digit: (d) => `KEYCODE_${d}`, device: device.name });
+          let run = [];
+          let said = "";
+          for (const st of steps) {
+            if (!st.hold) {
+              run.push(...Array(st.times).fill(st.code));
+              continue;
+            }
+            if (run.length) said += await key(client, ...run);
+            run = [];
+            for (let n = 0; n < st.times; n++) said += await holdKey(client, st.code);
+          }
+          if (run.length) said += await key(client, ...run);
+          ctx.memory?.delete(`tv-screen:${device.id}`);
+          // Never "Pressed…" when Android wouldn't.
+          if (refusedKey(said)) {
+            // Some makers lock button presses away from ADB until one more switch is turned on.
+            if (/SecurityException|INJECT_EVENTS/i.test(said)) throw new DeviceError(`${device.name} won't let Patch press its buttons. If its Developer options have “USB debugging (Security settings)”, turn that on and try again.`, { code: "EREFUSED" });
+            const one = steps.length === 1 && steps[0].times === 1;
+            throw new DeviceError(`${device.name} wouldn't take ${one ? "that button" : "those buttons"}. Its remote may not have ${one ? "it" : "one of them"}.`, { code: "EUNSUPPORTED" });
+          }
+          return await afterButtons(client, device, ctx, steps, `${describeButtons(steps)} on ${device.name}.`);
         }
         case "launch_app": {
           const pkg = await findPackage(client, device, need(value, "app"));
@@ -735,7 +790,7 @@ export default {
           const code = /up/.test(dir) ? "KEYCODE_DPAD_UP" : /left/.test(dir) ? "KEYCODE_DPAD_LEFT" : /right/.test(dir) ? "KEYCODE_DPAD_RIGHT" : "KEYCODE_DPAD_DOWN";
           await key(client, code, code, code);
           ctx.memory?.delete(`tv-screen:${device.id}`);
-          return done(`Moved ${code.replace("KEYCODE_DPAD_", "").toLowerCase()} on ${device.name}.`);
+          return await afterButtons(client, device, ctx, [{ button: "down" }], `Moved ${code.replace("KEYCODE_DPAD_", "").toLowerCase()} on ${device.name}.`);
         }
         case "search": {
           const q = String(need(value, "search")).trim();
