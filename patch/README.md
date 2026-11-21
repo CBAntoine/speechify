@@ -55,10 +55,10 @@ Keep the window that started Patch open while you use it.
 | Device | Works out of the box | Setup |
 | --- | --- | --- |
 | **Philips Hue** lights, rooms and scenes | on/off, brightness, colour, white tone, scenes, blink, rename, bridge updates and auto-updates | Press the bridge's button, then say "pair the Hue bridge" (or tap **Connect**) |
-| **Roku** players and Roku TVs | open apps (Roku "channels"), live TV channels by number (Roku TVs), YouTube videos, Roku search, typing, remote buttons, inputs, power (TVs), volume | If it's blocked: Roku *Settings → System → Advanced → Control by mobile apps → Default* |
-| **Samsung** smart TVs (Tizen, 2016 on) | power, channels, apps, YouTube, web searches and websites in the TV's browser, typing, remote buttons, inputs, volume | Press **Connect**, then choose **Allow** on the TV. To turn it on from off, enable *Power On with Mobile* in the TV's network settings |
-| **LG** smart TVs (webOS) | power, channels by number or name, apps, YouTube, web browser, typing, remote buttons, inputs, volume | Press **Connect**, then choose **Accept** on the TV. To turn it on from off, enable *Turn on via Wi-Fi* |
-| **Fire TV** and **Android / Google TV** (Fire TV Stick, Cube, Sony, TCL, Hisense, Nvidia Shield…) | power, apps, YouTube search and videos, web browser (Fire TV: Silk), typing, remote buttons, channels on TVs with a tuner, volume | Turn on *ADB debugging* (Fire TV: *Settings → My Fire TV → Developer options*) or *Network debugging* (Android TV: *Settings → System → Developer options*), then press **Connect** and choose **Allow** on the TV |
+| **Roku** players and Roku TVs | open apps (Roku "channels"), list them and add new ones from the Channel Store, live TV channels by number (Roku TVs), YouTube videos, Roku search, typing, remote buttons, inputs, power (TVs), volume | If it's blocked: Roku *Settings → System → Advanced → Control by mobile apps → Default* |
+| **Samsung** smart TVs (Tizen, 2016 on) | power, channels, apps (list them, add well-known ones), YouTube, web searches and websites in the TV's browser, your own TV apps (in its browser), typing, remote buttons, inputs, volume | Press **Connect**, then choose **Allow** on the TV. To turn it on from off, enable *Power On with Mobile* in the TV's network settings |
+| **LG** smart TVs (webOS) | power, channels by number or name, apps (list them, open LG's app store), YouTube, web browser, your own TV apps (in its browser), typing, remote buttons, inputs, volume | Press **Connect**, then choose **Accept** on the TV. To turn it on from off, enable *Turn on via Wi-Fi* |
+| **Fire TV** and **Android / Google TV** (Fire TV Stick, Cube, Sony, TCL, Hisense, Nvidia Shield…) | power, apps (list, install from the store or an app file, remove), seeing and using the TV's screen, searching inside apps, your own TV apps (installed with their own icon), YouTube search and videos, web browser (Fire TV: Silk), typing, remote buttons, channels on TVs with a tuner, volume | Turn on *ADB debugging* (Fire TV: *Settings → My Fire TV → Developer options*) or *Network debugging* (Android TV: *Settings → System → Developer options*), then press **Connect** and choose **Allow** on the TV |
 | **Sonos** | play, pause, skip, volume, mute (groups handled) | none |
 | **Chromecast / Google TV / Google & Nest speakers** | volume, mute, play/pause, stop casting, open YouTube and other Cast apps on screens | none |
 | **This computer** | web searches, websites and YouTube open in its browser | none |
@@ -88,14 +88,47 @@ TVs only take commands from apps you've allowed, so each one asks once:
 
 Channels: on Roku TVs, Samsung, LG and Android TVs with an antenna, Patch tunes the TV's own tuner. If you watch through a cable or satellite box, change the channel on the box (Patch can't reach most boxes; Home Assistant can control some).
 
+### Apps on your TVs
+
+Open a TV's card and scroll down to **Apps on this TV**, or just ask:
+
+- **"What apps are on the TV?"** lists them. Tap one to open it.
+- **"Install Plex on the TV"** opens the app's page in the TV's own store and chooses **Install** (or **Get**) when it's free. If it costs money, Patch leaves that choice to you. On a Roku it opens the channel's page in the Channel Store (press OK to add it); on Samsung TVs it installs the well-known apps it knows by name; on LG TVs it opens the store for you to search.
+- **An app file from your phone** (Android TV, Google TV and Fire TV): tap **Install an app file (APK)** and choose it. Patch asks before installing it, because it doesn't come from the TV's store. Only install apps you trust.
+- **"Remove Plex from the TV"** removes it (after you say yes). Apps that came with the TV can't be removed.
+- **Use an app fully:** "open YouTube and search for Bluey" searches inside the app; then "down", "OK", "back" and typing work like the remote.
+- **See the TV's screen** (Android TV, Google TV and Fire TV): "what's on the TV?" reads what's there as a numbered list and says where the remote is; "select the second one" or "choose Install" picks it. Apps that draw their own picture (Netflix, YouTube) can't be read; Patch says so and uses the remote buttons instead.
+
+## Your own TV apps
+
+Patch can make apps for your TVs. Tap **Make a TV app** on the dashboard (or say "make a photo frame app for the TV"), pick what kind, fill in a line or two, and choose **Install on** your TV:
+
+| Kind | What it is | What you give it |
+| --- | --- | --- |
+| 🎬 Video channel | your own channel of videos, picked with the remote | YouTube links, playlists or video links |
+| 🖼️ Photo frame | a slideshow with the time | photos from your phone (Patch makes them TV-sized) |
+| 🕰️ Clock & weather | a big clock and the week's weather | your town |
+| 📝 Notes board | notes and reminders for everyone | one note per line |
+| ⏳ Countdown | days to go, then a celebration | what for, and the date |
+| 📻 Radio | internet radio stations | station names (looked up in the free Radio Browser directory) |
+| 🧩 App shortcuts | big buttons for the TV apps you use most | app names (Android TV and Fire TV) |
+| ❓ Quiz | a quiz to play with the remote | questions, or ask Patch to write them |
+| 🌐 Website | any site, full screen, with a pointer you move with the remote | its address |
+| 💻 Your own code | any page you (or Patch) write | HTML |
+
+On **Android TV, Google TV and Fire TV** the app is installed like any other, with its own name and icon in the TV's apps list, and it keeps working when your phone is off. Change it any time (**Change**, then **Update on** the TV): the new version installs over the old one. On **Samsung and LG TVs** it opens in the TV's web browser, served by Patch over your WiFi, so keep Patch open while you use it (bookmark it in the TV's browser to come back).
+
+In apps: the arrows move, **OK** chooses, **Back** goes back. In a website app the arrows move a pointer and **OK** clicks; the **Menu** button turns the pointer off for sites that work with the arrows.
+
 ## Safety and privacy
 
 - **Local only.** The server listens on this computer (`127.0.0.1`) and refuses requests with any other Host header (which blocks DNS-rebinding attacks), cross-site requests, and any API call without the token baked into the page.
 - **Only your network.** Patch scans private home address ranges only, and never guesses or cracks passwords. The agent is told to decline requests about other people's networks or devices.
-- **Risky actions need your yes.** Cutting power to a plug, unlocking, moving a garage door, restarting, installing firmware, closing a port forward, and switching off more than six things at once all need confirmation. Patch enforces this itself, not just the AI: the agent gets a one-time confirmation token only after **you** speak or tap **Yes**, so it can't confirm on your behalf.
+- **Risky actions need your yes.** Cutting power to a plug, unlocking, moving a garage door, restarting, installing firmware, closing a port forward, installing an app file that isn't from a TV's store, removing an app from a TV, choosing anything on a screen that could buy, send or delete, and switching off more than six things at once all need confirmation. Patch enforces this itself, not just the AI: the agent gets a one-time confirmation token only after **you** speak or tap **Yes**, so it can't confirm on your behalf.
 - **Your secrets stay here.** API keys, device passwords, TV pairing tokens, Patch's ADB key and the Home Assistant token are stored in `patch/.data/settings.json` (owner-only permissions, never committed). ElevenLabs sees the conversation and the device names, models and states the agent needs, never passwords or keys.
 - **TV access is yours to give.** Each TV asks you on its own screen before Patch can control it. ADB debugging on a Fire TV or Android TV lets any computer you allow control the TV; if you stop using Patch, you can turn it off again in the TV's developer options. Websites and searches opened by voice only ever open web pages (never files or scripts), and text spoken to Patch is passed to TVs as plain text, never as commands.
 - **The agent** is private (signed tokens only), keeps no voice recordings, keeps transcripts for 30 days, and is capped at 200 conversations a day and 15 minutes per conversation.
+- **Your TV apps** are signed with a key Patch makes for you (kept with Patch's settings), so only your copy of Patch can update them. On Samsung and LG TVs they're served over your WiFi only, at an address with a long random secret in it. Patch's preview of an app runs sandboxed, apart from the dashboard. Text from YouTube, radio stations and websites is always shown as text, never run.
 - The manufacturer list (to label devices like "Espressif" or "Sonos") is downloaded once from the public IEEE registry; nothing about your network is sent. You can switch it off in Settings.
 
 ## On your Android phone
@@ -160,14 +193,20 @@ patch/
   agent/prompt.md       the agent's system prompt (kept in sync with ElevenLabs)
   android/              the Android app: a WebView plus Node.js for Android running server.mjs
   src/platform.mjs      computer or phone: what the Android app passes in, "this phone", links via the app
+  src/tvapps/           the TV app maker: kinds.mjs (what each kind needs), index.mjs (apps, building,
+                        installing, serving to TV browsers), runtime/ (tvkit.js and .css, shown on the TV)
+  src/apk/              Android app files: zip.mjs, axml.mjs (binary manifest and resources), sign.mjs
+                        (JAR and APK Signature Scheme v2 signing), index.mjs (read an APK, build a TV app)
+  src/net/uitree.mjs    an Android TV's screen (uiautomator) as numbered items
+  android/tvapp/        the TV app template: a WebView activity Patch turns into each TV app
   test/                 node:test suites
 ```
 
-`npm test` runs 54 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes, the server's security checks, and running inside the phone app.
+`npm test` runs 66 tests: protocol parsers and encoders checked against real-world output and published byte layouts (WebSocket frames, ADB messages and its RSA key format, ONVIF and PlayStation replies, model-code tables), plus end-to-end runs against the simulator. The simulated home includes a Samsung TV (secure WebSocket with the Allow prompt), an LG TV (SSAP with client keys and the pointer socket), a Fire TV (ADB with real key authentication), a PlayStation 5, an Apple TV, an iPhone, a MacBook, a Spotify Connect speaker, an ONVIF camera and a pretend YouTube API. The tests cover discovery and exact identification, TV pairing, channels, apps, YouTube and web search, control by spoken name, the confirmation guard, tune-up fixes, the server's security checks, and running inside the phone app. The simulated Fire TV also receives files over ADB's sync protocol, installs and removes apps (checking their signatures and versions) and shows a screen Patch can read; the TV app tests make every kind of app, check the preview and the WiFi serving, and install, update and remove a photo frame on it. Signing is checked with independent verifiers and, in the Android build, with Google's apksigner and aapt2.
 
 **Adding a device type:** create `src/drivers/<name>.mjs` exporting `{ id, detect(host, ctx), refresh(device, ctx), act(device, action, value, ctx) }`, use action names from `src/drivers/common.mjs`, register it in `src/drivers/index.mjs`, and add a simulated device in `sim/` with a test.
 
-**The Android app** (`android/`): a small Java app that runs Patch's own server on Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile), Node 18) and shows the dashboard in a WebView. A tiny JNI bridge (`app/src/main/cpp`) starts Node and sends its output to logcat (`adb logcat -s Patch`). The app passes in what Android hides from programs (WiFi address, router, DNS servers, the phone's name) as `PATCH_*` variables and keeps `network.json` current as the phone changes networks. What only Android can do goes through `PhoneBridge`, a tiny HTTP server on 127.0.0.1 with a secret that only Patch's server is given (`PATCH_PHONE_BRIDGE`, `PATCH_PHONE_TOKEN`; client in `src/net/phone.mjs`). It opens pages, apps and music (`MEDIA_PLAY_FROM_SEARCH`, which Spotify, YouTube Music and others accept), sends media keys and sets the volume. With the accessibility service `PatchAccessibility` switched on, it also reads the screen as numbered items and taps, scrolls, types and goes back or home. `ListeningService` is a microphone foreground service that runs while a voice conversation is on, so Patch keeps listening in other apps. The workflow `.github/workflows/patch-android.yml` runs the tests on Node 18, builds the APK, tries it on an Android 14 emulator (server, scan, dashboard and links, through Chrome DevTools) and publishes it. To build it yourself, you need the Android SDK and NDK. Run `npm ci` and `node android/prepare-assets.mjs`, unzip nodejs-mobile's Android build into `android/app/libnode`, then run `gradle -p android :app:assembleRelease`. To let new versions install over old ones, give the workflow a signing key as the `PATCH_KEYSTORE_B64` and `PATCH_KEYSTORE_PASSWORD` repository secrets.
+**The Android app** (`android/`): a small Java app that runs Patch's own server on Node.js for Android ([nodejs-mobile](https://github.com/nodejs-mobile/nodejs-mobile), Node 18) and shows the dashboard in a WebView. A tiny JNI bridge (`app/src/main/cpp`) starts Node and sends its output to logcat (`adb logcat -s Patch`). The app passes in what Android hides from programs (WiFi address, router, DNS servers, the phone's name) as `PATCH_*` variables and keeps `network.json` current as the phone changes networks. What only Android can do goes through `PhoneBridge`, a tiny HTTP server on 127.0.0.1 with a secret that only Patch's server is given (`PATCH_PHONE_BRIDGE`, `PATCH_PHONE_TOKEN`; client in `src/net/phone.mjs`). It opens pages, apps and music (`MEDIA_PLAY_FROM_SEARCH`, which Spotify, YouTube Music and others accept), sends media keys and sets the volume. With the accessibility service `PatchAccessibility` switched on, it also reads the screen as numbered items and taps, scrolls, types and goes back or home. `ListeningService` is a microphone foreground service that runs while a voice conversation is on, so Patch keeps listening in other apps. The workflow `.github/workflows/patch-android.yml` runs the tests on Node 18, builds the TV app template and the APK, tries it on an Android 14 emulator (server, scan, dashboard and links through Chrome DevTools; screen control; and TV apps made by Patch, sent and installed with Patch's own ADB client, then opened and read back) and publishes it with the template. To build it yourself, you need the Android SDK and NDK. Run `npm ci` and `node android/prepare-assets.mjs`, unzip nodejs-mobile's Android build into `android/app/libnode`, then run `gradle -p android :app:assembleRelease`. To let new versions install over old ones, give the workflow a signing key as the `PATCH_KEYSTORE_B64` and `PATCH_KEYSTORE_PASSWORD` repository secrets.
 
 **The ElevenLabs agent:** `agent_3201m7wq24r6eq39fk3eq5w5fmf2` ("Patch - Home Network Voice Assistant"): Claude Haiku 5.5, voice "Danny – Calm, Clear & Helpful", the ten client tools above, and fourteen attached behaviour tests (including channels, YouTube search and pick, web search on this computer, TV pairing and describing devices exactly). If you change a tool's name or parameters in `public/voice.js`, change the matching tool in ElevenLabs too.
 

@@ -36,6 +36,7 @@ button { font: inherit; color: inherit; }
 /* Anything the remote can land on. */
 [data-focus] { outline: none; transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease; }
 [data-focus].on { transform: scale(1.06); box-shadow: 0 0 0 0.28rem var(--accent), 0 1.2rem 2.6rem rgba(0, 0, 0, 0.45); z-index: 2; }
+.btn[data-focus].on, .station.playing.on { box-shadow: 0 0 0 0.28rem #fff, 0 1.2rem 2.6rem rgba(0, 0, 0, 0.45); }
 
 .grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-gap: 1.6rem; }
 .card { background: var(--card); border-radius: var(--radius); overflow: hidden; position: relative; cursor: pointer; }

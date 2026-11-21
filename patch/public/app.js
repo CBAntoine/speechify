@@ -1,6 +1,7 @@
 // Patch dashboard. Plain ES modules, no build step.
 import { icon } from "./icons.js";
 import { createVoice } from "./voice.js";
+import { createTvApps } from "./tvapps.js";
 
 const BOOT = JSON.parse(document.getElementById("boot").textContent || "{}");
 // Inside the Patch app on an Android phone, Patch (and everything it keeps) lives on the phone.
@@ -453,6 +454,7 @@ function renderAll() {
   renderTop();
   renderHero();
   renderSetup();
+  tvApps.render();
   renderFilters();
   renderDevices();
   if (state.openId) renderDrawer();
@@ -484,6 +486,9 @@ async function doAction(id, action, value, { confirmToken } = {}) {
     return r;
   }
   if (r.device) mergeDevice(r.device);
+  if (r.apps) state.tvAppList = { id, apps: r.apps };
+  if (r.screen && d?.driver === "androidtv") state.tvScreen = { id, text: r.screen };
+  if (r.ok && ["tap", "scroll", "press_button", "launch_app"].includes(action) && state.tvScreen?.id === id) state.tvScreen = null;
   renderAll();
   toast(r.message || (r.ok ? "Done." : "That didn't work."), r.ok ? "ok" : "bad");
   if (r.ok) voice.uiActivity(`The person used the dashboard: ${r.message}`);
@@ -588,7 +593,37 @@ function remoteHtml(d) {
   if (has(d, "search")) web.push(`<form class="search-box" data-form="search" data-id="${id}">${icon("search", 17)}<input name="value" placeholder="Search for a show or movie" aria-label="Search shows"><button class="btn btn--sm">Search</button></form>`);
   if (web.length) out.push(`<div class="panel"><h3>${has(d, "web_search") ? "Web & typing" : "Search & typing"}</h3><div class="stack">${web.join("")}</div></div>`);
   if (has(d, "switch_input")) out.push(`<div class="panel"><h3>Input</h3><div class="btns">${["HDMI 1", "HDMI 2", "HDMI 3", "TV"].map((a) => btn(id, "switch_input", a, "", a)).join("")}</div></div>`);
+  if (has(d, "read_screen")) out.push(tvScreenHtml(d));
+  if (has(d, "list_apps") || has(d, "install_app")) out.push(tvAppsPanelHtml(d));
   return out.join("");
+}
+
+/** What's on an Android TV's screen, as buttons to choose things with. */
+function tvScreenHtml(d) {
+  const id = esc(d.id);
+  const shot = state.tvScreen?.id === d.id ? state.tvScreen.text : null;
+  const items = (shot || "").split("\n").map((l) => l.match(/^(\d+)\. ([^:]+): (.*)$/)).filter(Boolean);
+  return `<div class="panel"><h3>On the TV's screen</h3>
+    <p class="panel__hint">Patch can read what's on ${esc(d.name)}'s screen and choose things for you. Some apps (like Netflix) draw their own picture; use the remote for those.</p>
+    <div class="btns"><button class="btn btn--sm" data-act="read_screen" data-id="${id}">${icon("eye", 14)} ${shot ? "Look again" : "What's on the screen?"}</button>${btn(id, "scroll", `${icon("down", 14)} Move down`, "", "down")}${btn(id, "scroll", `${icon("up", 14)} Move up`, "", "up")}</div>
+    ${items.length ? `<div class="screen-items">${items.map(([, n, kind, text]) => { const here = /\((?:[^)]*, )?selected(?:, [^)]*)?\)$/.test(text); return `<button class="screen-item${here ? " is-here" : ""}" data-act="tap" data-value="${n}" data-id="${id}"><span class="screen-item__n">${n}</span><span>${esc(text.replace(/ \((?:[^)]*, )?selected(?:, [^)]*)?\)$/, ""))}</span><em>${here ? "remote is here" : esc(kind)}</em></button>`; }).join("")}</div>` : shot ? `<p class="panel__hint">${esc(shot.split("\n")[0])}</p>` : ""}
+  </div>`;
+}
+
+/** The TV's apps, adding one (from its store, or an app file on Android TVs), and your own TV apps. */
+function tvAppsPanelHtml(d) {
+  const id = esc(d.id);
+  const list = state.tvAppList?.id === d.id ? state.tvAppList.apps : null;
+  const android = d.driver === "androidtv";
+  const store = android ? (d.brand === "Amazon" ? "the Amazon Appstore" : "Google Play") : d.driver === "roku" ? "the Roku Channel Store" : "the TV's app store";
+  const mine = tvApps.apps.filter((a) => a.tvs.some((t) => t.deviceId === d.id));
+  return `<div class="panel"><h3>Apps on this TV</h3>
+    ${has(d, "list_apps") ? `<div class="btns">${btn(id, "list_apps", `${icon("grid", 14)} ${list ? "Refresh the list" : "Show all its apps"}`)}</div>` : ""}
+    ${list ? `<div class="app-list">${list.map((a) => `<span class="app-chip${a.madeWithPatch ? " app-chip--mine" : ""}"><button data-act="launch_app" data-value="${esc(a.name)}" data-id="${id}" title="Open ${esc(a.name)}">${esc(a.name)}</button>${android && a.removable && !a.madeWithPatch ? `<button class="app-chip__x" data-act="uninstall_app" data-value="${esc(a.name)}" data-id="${id}" aria-label="Remove ${esc(a.name)}">${icon("close", 12)}</button>` : ""}</span>`).join("")}</div>` : ""}
+    ${has(d, "install_app") ? `<form class="search-box" style="margin-top:10px" data-form="install_app" data-id="${id}">${icon("plus", 17)}<input name="value" placeholder="Add an app from ${esc(store)}, e.g. Plex" aria-label="App to add"><button class="btn btn--sm btn--primary">Add</button></form>` : ""}
+    ${android ? `<div class="btns" style="margin-top:10px"><label class="btn btn--sm">${icon("upload", 14)} Install an app file (APK)<input type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" data-apk="${id}" hidden></label></div>` : ""}
+    <div class="mine"><h4>Your TV apps${mine.length ? ` on ${esc(d.name)}` : ""}</h4>${mine.length ? `<div class="btns">${mine.map((a) => `<button class="btn btn--sm" data-tv="put" data-app="${esc(a.id)}">${esc(a.emoji)} ${esc(a.name)}</button>`).join("")}</div>` : `<p class="panel__hint">Make your own: a photo frame, a video channel, a clock, a quiz…</p>`}<button class="btn btn--sm btn--primary" data-tv="new">${icon("plus", 14)} Make a TV app</button></div>
+  </div>`;
 }
 
 const PHONE_APPS = [
@@ -1099,6 +1134,22 @@ document.addEventListener("change", (e) => {
   if (c) doAction(c.dataset.id, "set_color", c.value);
 });
 
+document.addEventListener("change", async (e) => {
+  const apk = e.target.closest?.("input[data-apk]");
+  if (!apk || !apk.files?.length) return;
+  const file = apk.files[0];
+  apk.value = "";
+  toast(`Sending ${file.name} to Patch…`);
+  try {
+    const res = await fetch(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "x-patch-token": BOOT.token, "content-type": "application/octet-stream" }, body: file });
+    const r = await res.json();
+    if (!r.ok) throw new Error(r.message);
+    await doAction(apk.dataset.apk, "install_app", `upload:${r.upload.id}`);
+  } catch (err) {
+    toast(err.message, "bad");
+  }
+});
+
 document.addEventListener("change", (e) => {
   if (e.target.id === "roomSelect") {
     state.room = e.target.value;
@@ -1192,6 +1243,10 @@ function connectEvents() {
     renderTop();
     if (!state.devices.length) renderDevices();
   });
+  es.addEventListener("tvapps", (e) => {
+    tvApps.set(JSON.parse(e.data));
+    if (state.openId) renderDrawer();
+  });
   es.addEventListener("tuneup", (e) => {
     state.tuneup = JSON.parse(e.data);
     renderHero();
@@ -1246,8 +1301,17 @@ export const ui = {
   },
   openSettings,
   stateLine,
+  BOOT,
+  openModal,
+  closeOverlays,
+  confirmDialog,
+  voiceActivity: (text) => voice.uiActivity(text),
+  get tvapps() {
+    return tvApps;
+  },
 };
 
+const tvApps = createTvApps(ui);
 const voice = createVoice(ui);
 $("#voiceFine").textContent = `Voice by ElevenLabs. Your devices are controlled from ${HERE}, never from the cloud.`;
 // Back in Patch after Settings (screen access, permissions): show what changed.
@@ -1267,6 +1331,8 @@ if (BOOT.demo) window.__patch = { voice, ui };
   try {
     const s = await api("GET", "/api/state");
     Object.assign(state, { devices: s.devices, setup: s.setup, app: s.app, network: s.network, tuneup: s.tuneup, speed: s.speed });
+    tvApps.set(s.tvapps || []);
+    tvApps.load();
     state.scan.running = s.scan.running;
     renderAll();
     voice.refresh();

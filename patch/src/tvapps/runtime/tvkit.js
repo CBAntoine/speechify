@@ -66,13 +66,15 @@
       if (bridge && bridge.keepAwake) bridge.keepAwake(!!on);
     } catch (e) {}
   }
-  function topBar(extra) {
-    var clock = h("div", { cls: "clock" });
+  function topBar(extra, noClock) {
+    var clock = noClock ? null : h("div", { cls: "clock" });
     var tick = function () {
       clock.textContent = timeText(new Date());
     };
-    tick();
-    setInterval(tick, 10000);
+    if (clock) {
+      tick();
+      setInterval(tick, 10000);
+    }
     return h("div", { cls: "top" }, [h("span", { cls: "emoji", text: APP.emoji || "" }), h("h1", { text: APP.name || "" }), extra || null, clock]);
   }
   function hint(text) {
@@ -369,7 +371,7 @@
     var date = h("div", { cls: "date" });
     var now = h("div", { cls: "weather-now" });
     var days = h("div", { cls: "days" });
-    root.appendChild(topBar(S.place ? h("span", { style: "margin-left:1rem;color:var(--muted);font-size:1.3rem", text: S.place }) : null));
+    root.appendChild(topBar(S.place ? h("span", { style: "margin-left:1rem;color:var(--muted);font-size:1.3rem", text: S.place }) : null, true));
     root.appendChild(h("div", { cls: "clock-face" }, [time, date, now, days]));
     var tick = function () {
       var d = new Date();
@@ -555,24 +557,28 @@
   }
   function shortcuts() {
     root.appendChild(topBar());
-    if (!bridge || !bridge.apps) {
-      root.appendChild(h("div", { cls: "empty" }, [h("span", { cls: "big", text: "🧩" }), "App shortcuts work on Android TV and Fire TV, where they open the TV's own apps."]));
-      return;
-    }
+    // In Patch's Android TV app the tiles open the TV's own apps; elsewhere (Patch's preview, a
+    // TV's browser) they're shown, but can't open anything.
+    var live = !!(bridge && bridge.apps);
     var installed = [];
-    try {
-      installed = JSON.parse(bridge.apps()) || [];
-    } catch (e) {}
+    if (live) {
+      try {
+        installed = JSON.parse(bridge.apps()) || [];
+      } catch (e) {}
+    }
     var wanted = (S.apps || []).map(function (a) {
       return typeof a === "string" ? { name: a } : a;
     });
+    if (!live && !wanted.length) {
+      root.appendChild(h("div", { cls: "empty" }, [h("span", { cls: "big", text: "🧩" }), "On Android TV and Fire TV this shows all the TV's apps, as big buttons."]));
+      return;
+    }
     var list = wanted.length
       ? wanted.map(function (w) {
           var n = norm(w.name);
           var hit = null;
           installed.forEach(function (a) {
-            var an = norm(a.name);
-            if (!hit && (an === n || a.package === w.package)) hit = a;
+            if (!hit && (norm(a.name) === n || a.package === w.package)) hit = a;
           });
           installed.forEach(function (a) {
             var an = norm(a.name);
@@ -584,14 +590,15 @@
     var colors = ["#5b6cff", "#ff7a59", "#2ec4b6", "#e84393", "#f9c74f", "#43aa8b", "#9b5de5", "#00bbf9"];
     var grid = h("div", { cls: "grid" });
     list.forEach(function (a, n) {
-      var tile = h("div", { cls: "tile" + (a.package ? "" : " missing") }, [h("div", { cls: "glyph", style: "background:" + colors[n % colors.length], text: a.emoji || (a.name || "?").charAt(0).toUpperCase() }), h("div", { cls: "label", text: a.name })]);
+      var tile = h("div", { cls: "tile" + (a.package || !live ? "" : " missing") }, [h("div", { cls: "glyph", style: "background:" + colors[n % colors.length], text: a.emoji || (a.name || "?").charAt(0).toUpperCase() }), h("div", { cls: "label", text: a.name })]);
       grid.appendChild(focusable(tile, function () {
+        if (!live) return toast("On the TV, this opens " + a.name + ".");
         if (!a.package) return toast(a.name + " isn't installed on this TV.");
         bridge.launch(a.package);
       }));
     });
     root.appendChild(h("div", { cls: "scroll" }, [grid]));
-    root.appendChild(hint("Arrows to move · OK to open"));
+    root.appendChild(hint(live ? "Arrows to move · OK to open" : "On Android TV and Fire TV, these open the TV's own apps"));
   }
 
   // ── Quiz ────────────────────────────────────────────────────────────────
@@ -601,7 +608,7 @@
     });
     var box = h("div", { cls: "quiz" });
     var scoreEl = h("div", { cls: "score" });
-    root.appendChild(topBar());
+    root.appendChild(topBar(null, true));
     root.appendChild(box);
     root.appendChild(scoreEl);
     var order;

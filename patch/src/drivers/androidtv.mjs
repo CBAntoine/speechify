@@ -28,7 +28,23 @@ const failed = (out) => /(^|\n)\s*(Error|Exception)\b|unable to resolve|No activ
 const safePkg = (p) => /^[A-Za-z0-9_.]+$/.test(p);
 
 /** Friendly names for package ids (the TV only tells us the ids). */
-const PKG_NAMES = Object.fromEntries(APPS.flatMap((a) => (a.android || []).map((p) => [p, a.names[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Youtube/, "YouTube").replace(/Tv\b/, "TV")])));
+const PKG_NAMES = {
+  ...Object.fromEntries(APPS.flatMap((a) => (a.android || []).map((p) => [p, a.names[0].replace(/\b\w/g, (c) => c.toUpperCase()).replace(/^Youtube/, "YouTube").replace(/Tv\b/, "TV")]))),
+  "com.amazon.venezia": "Appstore",
+  "com.android.vending": "Google Play Store",
+  "com.amazon.cloud9": "Silk Browser",
+  "com.amazon.tv.settings.v2": "Settings",
+  "com.android.tv.settings": "Settings",
+  "com.android.settings": "Settings",
+  "com.google.android.youtube.tv": "YouTube",
+  "com.amazon.firetv.youtube": "YouTube",
+  "com.google.android.apps.tv.launcherx": "Home",
+  "com.amazon.avod.thirdpartyclient": "Prime Video",
+  "com.amazon.music.tv": "Amazon Music",
+  "com.amazon.photos.importer": "Amazon Photos",
+  "com.google.android.katniss": "Google Assistant",
+  "com.google.android.apps.mediashell": "Chromecast built-in",
+};
 // Names of apps Patch installed from a file (Android TV only tells other apps their ids).
 const knownLabels = new Map();
 const appName = (pkg) => customAppNames.get(pkg) || PKG_NAMES[pkg] || knownLabels.get(pkg) || pkg.split(".").filter((x) => !/^(com|tv|org|android|amazon|google|app|apps|firetv|livingroom|leanback)$/.test(x)).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(" ") || pkg;
@@ -152,9 +168,11 @@ async function launchableApps(client, device) {
     const all = await packages(client, device);
     pkgs = [...new Set([...third.split("\n").map((l) => l.replace(/^package:/, "").trim()), ...all.filter((p) => PKG_NAMES[p] || customAppNames.has(p))])];
   }
+  // Apps the person installed can be removed; the ones that came with the TV can't.
+  const third = new Set((await sh(client, "pm list packages -3", 10_000).catch(() => "")).split("\n").map((l) => l.replace(/^package:/, "").trim()));
   return pkgs
     .filter((p) => safePkg(p) && !LAUNCHERS.test(p))
-    .map((p) => ({ pkg: p, name: appName(p) }))
+    .map((p) => ({ pkg: p, name: appName(p), removable: third.has(p) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -492,7 +510,7 @@ export default {
         }
         case "list_apps": {
           const apps = await launchableApps(client, device);
-          return done(`${device.name} has ${apps.length} apps: ${apps.map((a) => a.name).join(", ")}.`, { apps: apps.map((a) => ({ name: a.name, id: a.pkg, ...(customAppNames.has(a.pkg) ? { madeWithPatch: true } : {}) })) });
+          return done(`${device.name} has ${apps.length} apps: ${apps.map((a) => a.name).join(", ")}.`, { apps: apps.map((a) => ({ name: a.name, id: a.pkg, removable: a.removable, ...(customAppNames.has(a.pkg) ? { madeWithPatch: true } : {}) })) });
         }
         case "install_app":
           return await installApp(client, device, value, ctx);

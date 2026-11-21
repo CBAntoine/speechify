@@ -23,7 +23,8 @@ const clip = (s, n) => {
   const t = String(s ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
-const byLine = (text) => String(text ?? "").split(/\r?\n/).map((s) => s.replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/, "").trim()).filter(Boolean);
+// Lines, also when they arrive as a literal "\n" (as a voice agent may send them).
+const byLine = (text) => String(text ?? "").split(/\r?\n|\\n/).map((s) => s.replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/, "").trim()).filter(Boolean);
 const byLineOrComma = (text) => byLine(text).flatMap((l) => l.split(/\s*[,;]\s*/)).map((s) => s.trim()).filter(Boolean);
 
 async function getJson(url, timeout = 6000) {
