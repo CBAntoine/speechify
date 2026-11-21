@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const PATCH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { startApp } = await import(path.join(PATCH, "src/app.mjs"));
 const { startWebsite } = await import(path.join(PATCH, "sim/website.mjs"));
-const { actionsFor } = await import(path.join(PATCH, "src/drivers/androidtv.mjs"));
+const { actionsFor, lastWeb } = await import(path.join(PATCH, "src/drivers/androidtv.mjs"));
 const { readUiTree } = await import(path.join(PATCH, "src/net/uitree.mjs"));
 const { pngSize } = await import(path.join(PATCH, "src/apk/index.mjs"));
 const { stats } = await import(path.join(PATCH, "src/tvweb/session.mjs"));
@@ -38,6 +38,7 @@ let failing = false;
 const fail = async (msg) => {
   if (failing) process.exit(1);
   failing = true;
+  if (lastWeb.why) msg += ` (The last time Patch couldn't use the page in front as a page: ${lastWeb.why}.)`;
   console.error(`FAILED: ${msg}`);
   try {
     // The test script prints this again as the last line of its report, under its long diagnostics.

@@ -359,10 +359,17 @@ async function selectOnScreen(client, device, value, ctx) {
 // browser's debugging socket, which Android only opens to ADB: so Patch can list what's on a
 // page, choose things by name, type and scroll, the way it does on the phone's screen.
 
+/** The app in front: the one whose screen it is, even while a box of Android's own (the volume, "viewing full screen") has the focus for a moment. */
 async function focusedPkg(client) {
-  const out = await sh(client, "dumpsys window | grep -m 2 -E 'mCurrentFocus|mFocusedApp'").catch(() => "");
-  return out.match(/\s([A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+/)?.[1] || null;
+  const out = await sh(client, "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'").catch(() => "");
+  const named = (re) => out.match(re)?.[1] || null;
+  return named(/mFocusedApp=.*?\s([A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+/) || named(/mCurrentFocus=.*?\s([A-Za-z0-9_.]+)\/[A-Za-z0-9_.$]+/);
 }
+
+/** Why Patch last couldn't use the page in front as a page (the Android build's check prints this when a step goes the other way). */
+export const lastWeb = { why: "" };
+// Apps whose pages Patch has seen into before: for those it's worth trying again before giving up.
+const seenInto = new Set();
 
 /** The name of an app's debugging socket, if its pages are open to Patch. */
 async function devtoolsSocket(client, pkg) {
@@ -401,15 +408,30 @@ async function webSession(client, device, pkg, { wait = 0 } = {}) {
   if (!name) return null;
   const session = await WebSession.connect(() => client.openStream(`localabstract:${name}`));
   webs.set(id, { session, pkg, client });
+  seenInto.add(pkg);
   session.cdp.once("close", () => webs.get(id)?.session === session && webs.delete(id));
   return session;
 }
 
 /** The page in front, if one of Patch's own apps is showing it and Patch can see into it. */
 async function webInFront(client, device) {
-  const pkg = await focusedPkg(client);
-  if (!pkg || !customAppNames.has(pkg)) return null;
-  const session = await webSession(client, device, pkg).catch(() => null);
+  const live = webs.get(keyOf(device));
+  // If Android can't say which app is in front just now, it's the page Patch was using a moment ago.
+  const pkg = (await focusedPkg(client)) || (live?.session.alive ? live.pkg : null);
+  if (!pkg || !customAppNames.has(pkg)) {
+    lastWeb.why = pkg ? `${pkg} is in front, which isn't one of Patch's apps` : "Android didn't say which app is in front";
+    return null;
+  }
+  let session = null;
+  let error = null;
+  for (let i = 0; i < (seenInto.has(pkg) ? 3 : 1) && !session; i++) {
+    if (i) await sleep(350);
+    session = await webSession(client, device, pkg).catch((e) => {
+      error = e;
+      return null;
+    });
+  }
+  if (!session) lastWeb.why = error ? `couldn't connect into ${pkg}'s page (${String(error.message).slice(0, 120)})` : `${pkg} has no debugging socket open`;
   return session ? { session, pkg } : null;
 }
 

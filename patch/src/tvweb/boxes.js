@@ -18,9 +18,14 @@
   // A box is often the last thing a page does before it loads the next one ("Saved!", then on to
   // the list). What was said is left in the tab's own storage for the next page of the same site
   // to pick up, so Patch still hears of it. The person's yes is not passed on: it's good once.
+  // (Only the page itself does this, not the frames inside it, which share its storage.)
+  var whole = false;
   try {
-    var left = JSON.parse(window.sessionStorage.getItem(KEY) || "null");
-    window.sessionStorage.removeItem(KEY);
+    whole = window.top === window;
+  } catch (e) { /* a frame that may not look */ }
+  try {
+    var left = whole ? JSON.parse(window.sessionStorage.getItem(KEY) || "null") : null;
+    if (whole) window.sessionStorage.removeItem(KEY);
     if (left && Date.now() - left.at < 15000 && left.seen && left.seen.length <= 8) {
       b.seen = left.seen;
       b.until = Number(left.until) || 0;
@@ -35,7 +40,7 @@
   function note(type, message, accepted) {
     if (b.seen.length < 8) b.seen.push({ type: type, message: String(message === undefined ? "" : message).slice(0, 300), accepted: accepted });
     try {
-      window.sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), until: b.until, seen: b.seen }));
+      if (whole) window.sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), until: b.until, seen: b.seen }));
     } catch (e) { /* no storage: Patch hears of it unless the page moves on first */ }
   }
   window.alert = function (message) {

@@ -438,6 +438,16 @@ test("in a real browser: on a busy front page, only what a person could see and 
   assert.equal(r.error, "ENOTFOUND");
   r = await rig.act("tap", "Hidden by being see-through");
   assert.equal(r.error, "ENOTFOUND");
+
+  // A link whose words run on to a second line: the middle of the box around its two halves is
+  // other text. It's listed all the same, found by its words, and clicked on the words themselves.
+  r = await rig.act("open_website", `${site.url}/brief`);
+  assert.match(r.screen, /\d+\. Link: the full report\n/);
+  const was = { ...stats };
+  r = await rig.act("tap", "the full report");
+  assert.match(r.message, /It's showing “Story 7”/);
+  assert.equal(stats.clicks - was.clicks, 1, "a real click");
+  assert.equal(stats.clicksInside - was.clicksInside, 0);
 });
 
 test("in a real browser: no passwords or card numbers, pages that redraw themselves, message boxes, long pages and parts from other sites", needsChrome, async () => {

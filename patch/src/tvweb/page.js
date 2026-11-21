@@ -6,7 +6,7 @@
 // Written for old TV browsers (Chrome 55 and later): no async/await, no "?.", no "??", no spread.
 (function () {
   "use strict";
-  var VERSION = 6;
+  var VERSION = 7;
   var MAX_ITEMS = 45;
   var MAX_TEXT = 1500;
   var doc = document;
@@ -110,6 +110,17 @@
     var x1 = Math.max(r.left, 0), y1 = Math.max(r.top, 0), x2 = Math.min(r.right, v.w), y2 = Math.min(r.bottom, v.h);
     if (x2 - x1 < 2 || y2 - y1 < 2) return null;
     var spots = [[(x1 + x2) / 2, (y1 + y2) / 2], [x1 + Math.min(12, (x2 - x1) / 2), (y1 + y2) / 2], [(x1 + x2) / 2, y1 + Math.min(8, (y2 - y1) / 2)]];
+    // Words that run on to a second line are two boxes at opposite ends of their lines, and the
+    // middle of the box around them both is some other text: aim at each part instead.
+    var parts = el.getClientRects ? el.getClientRects() : [];
+    if (parts.length > 1) {
+      var own = [];
+      for (var p = 0; p < parts.length && own.length < 4; p++) {
+        var q = parts[p], qx1 = Math.max(q.left, 0), qy1 = Math.max(q.top, 0), qx2 = Math.min(q.right, v.w), qy2 = Math.min(q.bottom, v.h);
+        if (qx2 - qx1 >= 2 && qy2 - qy1 >= 2) own.push([(qx1 + qx2) / 2, (qy1 + qy2) / 2]);
+      }
+      spots = own.concat(spots);
+    }
     for (var i = 0; i < spots.length; i++) {
       if (reaches(topAt(spots[i][0], spots[i][1]), el)) return { x: spots[i][0], y: spots[i][1] };
     }
@@ -455,6 +466,18 @@
     }
   }
 
+  /** How well a thing's name answers to the words asked for: 0 for not at all, 100 for exactly. */
+  function alike(name, want) {
+    if (name === want) return 100;
+    if (name.indexOf(want) === 0) return 80;
+    if ((" " + name + " ").indexOf(" " + want + " ") !== -1) return 70;
+    if (name.indexOf(want) !== -1) return 55;
+    if (want.indexOf(name) !== -1 && name.length > 3) return 45;
+    var words = want.split(" "), hit = 0;
+    for (var w = 0; w < words.length; w++) if (words[w].length > 1 && (" " + name + " ").indexOf(" " + words[w] + " ") !== -1) hit++;
+    return hit && hit >= Math.ceil(words.length * 0.6) ? 30 + (hit / words.length) * 20 : 0;
+  }
+
   /** The thing with this number in the last list, or the best match for these words anywhere on the page. */
   function pick(target) {
     if (typeof target === "number") {
@@ -465,22 +488,21 @@
     }
     var want = norm(target);
     if (!want) return { error: "none" };
-    var els = candidates(), best = null, bestScore = 0, names = [];
+    var els = candidates(), best = null, bestScore = 0, names = [], squeezed = want.replace(/ /g, "");
     var v = view();
     for (var i = 0; i < els.length; i++) {
       var d = describe(els[i], true);
       if (!d) continue;
-      var name = norm(d.text), score = 0;
+      var name = norm(d.text);
       if (!name) continue;
-      if (name === want) score = 100;
-      else if (name.indexOf(want) === 0) score = 80;
-      else if ((" " + name + " ").indexOf(" " + want + " ") !== -1) score = 70;
-      else if (name.indexOf(want) !== -1) score = 55;
-      else if (want.indexOf(name) !== -1 && name.length > 3) score = 45;
-      else {
-        var words = want.split(" "), hit = 0;
-        for (var w = 0; w < words.length; w++) if (words[w].length > 1 && (" " + name + " ").indexOf(" " + words[w] + " ") !== -1) hit++;
-        if (hit && hit >= Math.ceil(words.length * 0.6)) score = 30 + (hit / words.length) * 20;
+      var score = alike(name, want);
+      if (!score && name.replace(/ /g, "").indexOf(squeezed) !== -1) {
+        // The quick way of reading a name runs its lines together ("the fullreport"): read it as shown.
+        var full = describe(els[i]);
+        if (full) {
+          d = full;
+          score = alike(norm(full.text), want);
+        }
       }
       if (!score) continue;
       var r = box(els[i]);

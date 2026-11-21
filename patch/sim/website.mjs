@@ -147,6 +147,11 @@ function route(url, cookie, state) {
   }
   let story = p.match(/^\/(story|section|slide)\/(\d+)$/);
   if (story) return page(`${story[1] === "story" ? "Story" : story[1] === "section" ? "Section" : "Slide"} ${story[2]}`, `<h1>${story[1] === "story" ? "Story number" : story[1] === "section" ? "Section" : "Slide"} ${story[2]}</h1><p>The whole of it would be here.</p><p><a href="/news">Back to the front page</a></p>`);
+  // A link whose words run on to a second line: its two halves are at opposite ends of their lines,
+  // and the middle of the box around them both is ordinary text.
+  if (p === "/brief") {
+    return page("In brief", `<h1>In brief</h1><p style="white-space:nowrap;line-height:2.4">The council met on Tuesday evening and, for those who want all of it, <a href="/story/7">the full<br>report</a> is ready to read, with every vote and who said what to whom.</p><p><a href="/news">More news</a></p>`);
+  }
   // A page that puts up a message box by itself, a moment after it has loaded.
   if (p === "/nag") return page("Still there?", `<h1>Are you still watching?</h1><p>This page asks after a while.</p><a href="/">Back to the shop</a><script>setTimeout(function () { alert("Are you still there?"); document.title = "Welcome back"; }, 1500);</script>`);
   // A button that jumps away as the pointer reaches it: the click lands on what was underneath.

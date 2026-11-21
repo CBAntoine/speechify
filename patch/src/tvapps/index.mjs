@@ -106,7 +106,9 @@ export class TvApps {
   }
 
   syncNames() {
-    customAppNames.clear();
+    // Only this Patch's own names are replaced (tests run several Patches side by side).
+    for (const pkg of this.named || []) customAppNames.delete(pkg);
+    this.named = Object.values(this.data.apps).map((a) => a.package);
     for (const a of Object.values(this.data.apps)) customAppNames.set(a.package, a.name);
   }
 
