@@ -34,11 +34,26 @@ if sample.exists():
                          "decision_maker_name": r["decision_maker_name"], "decision_maker_title": r["decision_maker_title"],
                          "email": r["email"], "email_type": r["email_type"], "email_status": r["email_status"],
                          "linkedin_url": r["linkedin_url"], "maps_url": r["maps_url"], "address": r["address"], "notes": r["notes"]})
-for f in sorted(LEADS.glob("batch2-*.csv")):
+for f in sorted(LEADS.glob("batch*-*.csv")):          # batch2-*, batch3-*, ...
     if "screened-out" in f.name:
         continue
     for r in csv.DictReader(f.open(newline="")):
         rows.append({k: r.get(k, "") for k in FIELDS if k not in ("priority", "status", "pitch", "score")})
+
+# Later contact lookups (updates-*.csv, keyed by lead_id) fill in decision makers and emails.
+# A miss never replaces contact details a lead already has.
+CONTACT = ["decision_maker_name", "decision_maker_title", "email", "email_type", "email_status", "linkedin_url"]
+by_id = {r.get("lead_id"): r for r in rows}
+for f in sorted(LEADS.glob("updates-*.csv")):
+    for u in csv.DictReader(f.open(newline="")):
+        r = by_id.get(u.get("lead_id"))
+        if not r or not (u.get("email") or u.get("decision_maker_name")):
+            continue
+        for k in CONTACT:
+            if u.get(k):
+                r[k] = u[k]
+        if u.get("notes"):
+            r["notes"] = (r.get("notes", "") + f" | {f.stem}: " + u["notes"]).strip(" |")
 
 seen, merged = set(), []
 for r in rows:
