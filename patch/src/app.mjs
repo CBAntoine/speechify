@@ -188,6 +188,8 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
 
   async function control(body) {
     const { device, kind, room, action, value, confirmToken } = body;
+    // Sight: whoever is asking (the voice assistant) can be shown a picture of a TV's screen, and the person hasn't switched that off.
+    const sight = body.sight === true && store.data.features.sight !== false;
     if (!ACTIONS[action]) return { ok: false, error: "EACTION", message: `Unknown action "${action}".` };
     if (!device && (kind || room)) {
       const all = inventory.findMany({ kind, room }).filter((d) => d.actions?.includes(action));
@@ -196,7 +198,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
       if (!list.length) {
         return { ok: false, error: "ENOTFOUND", message: `I couldn't find any ${kind || "devices"}${room ? ` in the ${room}` : ""} that can ${ACTIONS[action].label.toLowerCase()}${offline ? ` (${offline} are offline)` : ""}.${setupHint()}` };
       }
-      const r = list.length === 1 ? await controller.act(list[0].id, action, value, { confirmToken, look: true }) : await controller.actMany(list.map((d) => d.id), action, value, { confirmToken });
+      const r = list.length === 1 ? await controller.act(list[0].id, action, value, { confirmToken, look: true, sight }) : await controller.actMany(list.map((d) => d.id), action, value, { confirmToken });
       if (offline && r.ok) r.message += ` (${offline} offline ${offline === 1 ? "device was" : "devices were"} skipped.)`;
       return r;
     }
@@ -206,17 +208,17 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     const anyTv = !device || /^(on\s+)?((the|my|our|a)\s+)?(tv|telly|television|big screen|screen)$/i.test(String(device).trim());
     if (youtube && !room && anyTv) {
       const tv = inventory.defaultTv(inventory.tvs().filter((d) => d.setup || d.actions?.includes(action)));
-      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true });
+      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true, sight });
     }
     const r = inventory.resolve(room && device ? `${room} ${device}` : device, { kind, action });
     if (r.ambiguous && youtube) {
       const tv = inventory.defaultTv(r.ambiguous.filter((d) => inventory.tvs().some((t) => t.id === d.id)));
-      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true });
+      if (tv) return controller.act(tv.id, action, value, { confirmToken, look: true, sight });
     }
     if (r.ambiguous) return { ok: false, error: "EAMBIGUOUS", message: `Which one do you mean: ${r.ambiguous.map((d) => inventory.displayName(d)).join(", ")}?`, candidates: r.ambiguous.map((d) => inventory.toPublic(d)) };
     if (r.none) return { ok: false, error: "ENOTFOUND", message: `I couldn't find "${device}".${r.suggestions.length ? ` Did you mean ${r.suggestions.join(" or ")}?` : " A new scan might find it."}${setupHint()}` };
     // Asked for by voice or in the chat: the answer says what's on screen afterwards, where it can.
-    return controller.act(r.device.id, action, value, { confirmToken, look: true });
+    return controller.act(r.device.id, action, value, { confirmToken, look: true, sight });
   }
 
   async function applyFix(fixId, confirmToken) {
@@ -288,6 +290,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     }
     if (typeof b.lanEnabled === "boolean") store.data.lan.enabled = b.lanEnabled;
     if (typeof b.vendorLookup === "boolean") store.data.features.vendorLookup = b.vendorLookup;
+    if (typeof b.sight === "boolean") store.data.features.sight = b.sight;
     await store.save();
     if (checks.homeAssistant?.ok) scanner.scan().catch(() => {});
     return { ok: true, settings: redactedSettings(), checks, restartNeeded: typeof b.lanEnabled === "boolean" && b.lanEnabled !== lan };
@@ -296,7 +299,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
   const routes = [
     ["GET", /^\/api\/state$/, async () => ({
       app: { version: appVersion(), demo, lan, platform: onPhone() ? "android" : process.platform },
-      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), claude: !!store.anthropic.apiKey, agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
+      setup: { voice: !!store.elevenlabs.apiKey, sdk: !!findSdk(), claude: !!store.anthropic.apiKey, sight: store.data.features.sight !== false, agentId: store.elevenlabs.agentId || DEFAULT_AGENT_ID, homeAssistant: !!store.secrets.homeAssistant, scanned: !!store.data.history.firstScanAt },
       network: scanner.network ? { cidr: scanner.network.cidr, gateway: scanner.network.gateway, address: scanner.network.address, iface: scanner.network.iface } : null,
       scan: { running: !!scanner.running, last: scanner.lastScan },
       devices: inventory.list(),

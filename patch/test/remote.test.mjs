@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buttonCodes, describeButtons, parseButtons, pressPlan } from "../src/drivers/tv.mjs";
-import { mediaSession, refusedKey } from "../src/drivers/androidtv.mjs";
+import { mediaSession, refusedKey, spotIn } from "../src/drivers/androidtv.mjs";
 import { youtubeVoiceParams, youtubeVoiceUrl } from "../src/net/youtube.mjs";
 
 const said = (v) => parseButtons(v).map((s) => `${s.hold ? "hold " : ""}${s.button}${s.times > 1 ? ` x${s.times}` : ""}`).join(", ");
@@ -157,4 +157,13 @@ test("what a TV says its YouTube app is playing", () => {
   assert.deepEqual(mediaSession(newer, "com.amazon.firetv.youtube"), { playing: true, title: "Lofi Girl" });
   assert.deepEqual(mediaSession(newer.replace("PLAYING(3)", "PAUSED(2)"), "com.amazon.firetv.youtube"), { playing: false, title: "Lofi Girl" });
   assert.equal(mediaSession("", "com.amazon.firetv.youtube"), null);
+});
+
+test("a spot pointed at on a picture of the screen", () => {
+  assert.deepEqual(spotIn("at 62% 40%"), { x: 62, y: 40 });
+  assert.deepEqual(spotIn("62%, 40%"), { x: 62, y: 40 });
+  assert.deepEqual(spotIn("at 62.5% 7%"), { x: 62.5, y: 7 });
+  assert.deepEqual(spotIn("50% across and 30% down"), { x: 50, y: 30 });
+  // The numbered items and words of a screen read as a list are not spots.
+  for (const v of ["3", "Install", "the second one", "62 40", "at 120% 40%", ""]) assert.equal(spotIn(v), null, v);
 });

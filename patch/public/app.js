@@ -1104,6 +1104,7 @@ async function openSettings(focus) {
       <label class="field"><span>Network to scan</span><input name="subnet" value="${esc(s.network.subnet)}" placeholder="Automatic"><small>Only needed if Patch picks the wrong network, e.g. <code>192.168.1.0/24</code>. Patch only ever scans private home addresses.</small></label>
 ${BOOT.phone ? "" : `<label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="lanEnabled" ${s.lan.enabled ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Let phones and tablets on my WiFi open Patch (asks for an access code${s.lan.active ? `: <code>${esc(s.lan.accessCode)}</code>` : ""}). Needs a restart. Voice works on this computer; other devices can type.</span></label>`}
       <label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="vendorLookup" ${s.features.vendorLookup ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Look up who made each device (downloads the public IEEE manufacturer list once; nothing about your network is sent).</span></label>
+      <label class="field" style="grid-template-columns:auto 1fr;align-items:center"><input type="checkbox" name="sight" ${s.features.sight !== false ? "checked" : ""} style="width:18px;height:18px"><span style="font-weight:500">Let Patch see my TVs' screens while I'm talking to it, so it can work apps like YouTube by itself. (A picture of the TV's screen is sent to ElevenLabs with the conversation. Android TV, Google TV and Fire TV.)</span></label>
       <button class="btn">Save</button><div class="check" id="netCheck"></div>
       <p style="color:var(--muted);font-size:12.5px;margin:12px 0 0">Settings and saved passwords live in <code>${esc(s.dataDir)}</code>.</p>
     </form>
@@ -1135,11 +1136,13 @@ async function saveSettings(form) {
     body.subnet = String(fd.get("subnet") || "");
     body.lanEnabled = fd.get("lanEnabled") === "on";
     body.vendorLookup = fd.get("vendorLookup") === "on";
+    body.sight = fd.get("sight") === "on";
   }
   const btn = $("button", form);
   btn.disabled = true;
   const r = await api("POST", "/api/settings", body).catch((err) => ({ ok: false, checks: { x: { ok: false, message: err.message } } }));
   btn.disabled = false;
+  if (r.ok && typeof body.sight === "boolean" && state.setup) state.setup.sight = body.sight;
   const check = r.checks?.elevenlabs || r.checks?.youtube || r.checks?.claude || r.checks?.homeAssistant || r.checks?.subnet;
   const out = $(".check", form);
   if (check) {
@@ -1491,6 +1494,12 @@ function connectEvents() {
 // ── start ─────────────────────────────────────────────
 
 export const ui = {
+  /** A picture of a TV's screen as it is now (a PNG), for the assistant to look at. */
+  async picture(id) {
+    const res = await fetch(`/api/devices/${encodeURIComponent(id)}/screen.png`, { headers: { "x-patch-token": BOOT.token } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "The TV didn't give a picture of its screen.");
+    return res.blob();
+  },
   phone: !!BOOT.phone,
   api,
   esc,

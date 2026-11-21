@@ -592,3 +592,55 @@ test("“YouTube” with no TV named means the YouTube app on the TV, at once", 
   r = await control({ device: "the TV", action: "volume_up" });
   assert.equal(r.error, "EAMBIGUOUS", r.message);
 });
+
+test("sight: when a TV's screen can't be read as a list, whoever can look is sent a picture instead", async () => {
+  const tv = "Kids Room Fire TV";
+  await control({ device: tv, action: "launch_app", value: "Netflix" });
+  // Asked by something that can't look (the dashboard, an older Patch): as before, it says it can't see.
+  let r = await control({ device: tv, action: "read_screen" });
+  assert.ok(r.ok, r.message);
+  assert.equal(r.picture, undefined);
+  assert.match(r.message, /draws its own picture, so I can only read a little of it/);
+  // Asked by the assistant in a conversation that takes pictures: a picture is to follow.
+  r = await control({ device: tv, action: "read_screen", sight: true });
+  assert.match(r.message, /^Netflix is on Kids Room Fire TV\. It draws its own picture, so it can't be read as a list\. A picture of the screen follows/);
+  assert.deepEqual(r.picture, { wait: 0 });
+  // The picture itself is the TV's screen, as a PNG.
+  const d = await named(tv);
+  const png = Buffer.from(await (await fetch(`${base}/api/devices/${encodeURIComponent(d.id)}/screen.png`, { headers: { "x-patch-token": app.token } })).arrayBuffer());
+  assert.equal(png.readUInt32BE(0), 0x89504e47);
+  // After the remote's buttons there: a picture again, where it used to say "I can't see where that left the remote".
+  r = await control({ device: tv, action: "press_button", value: "down 2, ok", sight: true });
+  assert.equal(r.message, "Pressed down twice, then OK on Kids Room Fire TV. A picture of the screen follows in the next message: look at it before the next step.");
+  assert.ok(r.picture);
+  r = await control({ device: tv, action: "press_button", value: "down" });
+  assert.match(r.message, /draws its own picture, so I can't see where that left the remote/);
+  // Pointing at a spot on the picture, like a mouse: so far across, so far down.
+  let from = sim.state.firetv.taps.length;
+  r = await control({ device: tv, action: "tap", value: "at 25% 50%", sight: true });
+  assert.ok(r.ok, r.message);
+  assert.deepEqual(sim.state.firetv.taps.slice(from), [[480, 540]]);
+  assert.match(r.message, /^Pressed Kids Room Fire TV's screen there \(25% across, 50% down\)\./);
+  assert.deepEqual(r.picture, { wait: 1200 });
+  // A screen that can be read as a list is read, not pictured.
+  r = await control({ device: tv, action: "press_button", value: "home", sight: true });
+  assert.ok(r.screen);
+  assert.equal(r.picture, undefined);
+  // YouTube in its app: a picture of what came up follows, once the app has had time to show it.
+  r = await control({ device: tv, action: "search_youtube", value: "trains", sight: true });
+  assert.ok(r.picture.wait >= 4000, JSON.stringify(r.picture));
+  assert.match(r.next, /A picture of the screen follows/);
+  // Switched off in Settings: no pictures for anyone.
+  let st = await api("POST", "/api/settings", { sight: false });
+  assert.equal(st.settings.features.sight, false);
+  assert.equal((await api("GET", "/api/state")).setup.sight, false);
+  await control({ device: tv, action: "launch_app", value: "Netflix" });
+  r = await control({ device: tv, action: "read_screen", sight: true });
+  assert.equal(r.picture, undefined);
+  assert.match(r.message, /draws its own picture, so I can only read a little of it/);
+  st = await api("POST", "/api/settings", { sight: true });
+  assert.equal(st.settings.features.sight, true);
+  // Other makes of TV have no picture to give: nothing changes for them.
+  r = await control({ device: "Family Room TV", action: "press_button", value: "down", sight: true });
+  assert.equal(r.picture, undefined);
+});

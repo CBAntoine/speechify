@@ -97,7 +97,7 @@ export class Controller {
    * Do one action. Risky actions come back first as { needsConfirmation, confirmToken, message };
    * repeat the call with that confirmToken once the person has said yes.
    */
-  async act(id, action, value, { confirmToken, look = false } = {}) {
+  async act(id, action, value, { confirmToken, look = false, sight = false } = {}) {
     const d = this.inventory.get(id);
     if (!d) return { ok: false, error: "ENOTFOUND", message: "I can't find that device any more. Try a new scan." };
     const name = this.inventory.displayName(d);
@@ -156,7 +156,7 @@ export class Controller {
       } else {
         const driver = driverById[d.driver];
         if (!driver?.act) throw new DeviceError(`${name} can't be controlled from here.`);
-        r = await driver.act(view, action, value, { ...this.ctx(), confirmed, look });
+        r = await driver.act(view, action, value, { ...this.ctx(), confirmed, look, sight });
       }
       const patch = { online: true };
       if (r.state) patch.state = r.state;
@@ -168,7 +168,7 @@ export class Controller {
       if (r.rescan && this.scanner) this.scanner.scan().catch(() => {});
       // "The TV" now means this one, until another is used.
       this.inventory.usedTv(this.inventory.get(id));
-      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}), ...(r.screen ? { screen: r.screen } : {}), ...(r.apps ? { apps: r.apps } : {}), ...(r.installed ? { installed: r.installed } : {}), ...(r.next ? { next: r.next } : {}) };
+      return { ok: true, message: r.message, device: this.publicDevice(id), ...(r.results ? { results: r.results } : {}), ...(r.screen ? { screen: r.screen } : {}), ...(r.apps ? { apps: r.apps } : {}), ...(r.installed ? { installed: r.installed } : {}), ...(r.next ? { next: r.next } : {}), ...(r.picture ? { picture: r.picture } : {}) };
     } catch (err) {
       const e = err instanceof DeviceError ? err : new DeviceError(err.message || String(err));
       if (e.code === "ECONFIRM") {

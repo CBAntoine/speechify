@@ -354,6 +354,7 @@ function storeGet(s) {
 function fireShell(s, cmd) {
   s.commands.push(cmd);
   if (/getprop ro\.product\.manufacturer/.test(cmd)) return "Amazon|AFTKA|9|Kids Room Fire TV\n";
+  if (cmd === "wm size") return "Physical size: 1920x1080\n";
   if (/^dumpsys power/.test(cmd)) return `  mWakefulness=${s.awake ? "Awake" : "Asleep"}\n`;
   if (/^dumpsys window/.test(cmd)) return `  mCurrentFocus=Window{4a3b2c1 u0 ${s.focus}}\n  mFocusedApp=AppWindowToken{5d4e3f2 token=Token{6e5f4a3 ActivityRecord{7f6a5b4 u0 ${s.focus} t12}}}\n`;
   if (/^pm list packages -3$/.test(cmd)) return s.packages.filter((p) => !s.system.includes(p)).map((p) => `package:${p}`).join("\n") + "\n";

@@ -389,6 +389,34 @@ async function readScreen(client, device, ctx) {
   return screen;
 }
 
+// Said to an assistant that can look, when a picture of the screen is on its way to it.
+const SEE = "A picture of the screen follows in the next message: look at it before the next step.";
+
+/**
+ * After something in an app that can't be read as a list (the YouTube app): with sight, a picture of
+ * the screen follows once the app has had `wait` milliseconds to show it, and that is how to carry on.
+ */
+function seen(ctx, wait, r) {
+  if (!ctx.sight || !r?.ok || !r.next) return r;
+  return { ...r, next: `${SEE} Then work the app with the remote (press_button), or point at a spot with tap "at X% Y%".`, picture: { wait } };
+}
+
+/** A spot on the screen said the way someone points at a picture: "at 62% 40%" (across, then down). */
+export function spotIn(value) {
+  const m = String(value ?? "").trim().match(/^(?:at\s+)?(\d{1,3}(?:\.\d+)?)\s*%?\s*(?:,|\s|x|by|across)\s*(?:and\s+)?(\d{1,3}(?:\.\d+)?)\s*%(?:\s+down)?$/i);
+  if (!m || !/%/.test(String(value))) return null;
+  const x = Number(m[1]);
+  const y = Number(m[2]);
+  return x <= 100 && y <= 100 ? { x, y } : null;
+}
+
+/** The screen's size in its own dots, as taps are counted. */
+async function screenSize(client) {
+  const out = await sh(client, "wm size").catch(() => "");
+  const m = out.match(/Override size:\s*(\d+)x(\d+)/) || out.match(/Physical size:\s*(\d+)x(\d+)/);
+  return m ? { w: Number(m[1]), h: Number(m[2]) } : { w: 1920, h: 1080 };
+}
+
 /**
  * After the remote's buttons have moved things: where the remote is now. Only for someone asking by
  * voice or in the chat (ctx.look): they work from what Patch tells them, and it saves them asking.
@@ -407,11 +435,12 @@ async function afterButtons(client, device, ctx, steps, lead) {
     const screen = await readScreen(client, device, ctx);
     const on = screen.items.find((it) => /selected/.test(it.state || ""));
     const d = describeScreen(screen);
-    if (screen.items.length < 3) return done(`${lead} ${screen.app} draws its own picture, so I can't see where that left the remote.`);
+    // An app that draws its own picture can't be read as a list: whoever can look is shown the picture instead.
+    if (screen.items.length < 3) return ctx.sight ? done(`${lead} ${SEE}`, { picture: { wait: 300 } }) : done(`${lead} ${screen.app} draws its own picture, so I can't see where that left the remote.`);
     return done(`${lead}${on ? ` The remote is on “${on.text}” now.` : ""}`, { screen: d.text });
   } catch {
     // A video is playing, or the screen couldn't be read just then: the buttons were pressed all the same.
-    return done(lead);
+    return ctx.sight ? done(`${lead} ${SEE}`, { picture: { wait: 300 } }) : done(lead);
   }
 }
 
@@ -826,12 +855,25 @@ export default {
             const d = describePage(page, { where: appName(web.pkg) === web.pkg ? "Patch's browser" : appName(web.pkg) });
             return done(d.summary, { screen: d.text });
           }
-          const screen = await readScreen(client, device, ctx);
+          // With sight, an app that can't be read as a list (or is in the middle of a video) is looked at instead.
+          const screen = await readScreen(client, device, ctx).catch((err) => (ctx.sight ? null : Promise.reject(err)));
+          if (!screen) return done(`${device.name}'s screen can't be read as a list just now. ${SEE}`, { picture: { wait: 0 } });
           const d = describeScreen(screen);
+          if (screen.items.length < 3 && ctx.sight) return done(`${screen.app} is on ${device.name}. It draws its own picture, so it can't be read as a list. ${SEE}`, { screen: d.text, picture: { wait: 0 } });
           const thin = screen.items.length < 3 ? ` ${screen.app} draws its own picture, so I can only read a little of it; I can still press the remote's buttons.` : "";
           return done(`${d.summary}${thin}`, { screen: d.text });
         }
         case "tap": {
+          // A spot pointed at on the picture of the screen ("at 62% 40%"): pressed there, the way a mouse or a finger would.
+          const spot = spotIn(value);
+          if (spot) {
+            const size = await screenSize(client);
+            const x = Math.min(size.w - 1, Math.round((spot.x / 100) * size.w));
+            const y = Math.min(size.h - 1, Math.round((spot.y / 100) * size.h));
+            await sh(client, `input tap ${x} ${y}`);
+            ctx.memory?.delete(`tv-screen:${device.id}`);
+            return done(`Pressed ${device.name}'s screen there (${Math.round(spot.x)}% across, ${Math.round(spot.y)}% down).${ctx.sight ? ` ${SEE}` : ""}`, ctx.sight ? { picture: { wait: 1200 } } : {});
+          }
           const web = await webInFront(client, device);
           if (web) return await webTap(device, web, value, ctx);
           return await selectOnScreen(client, device, value, ctx);
@@ -910,16 +952,16 @@ export default {
         }
         case "search_youtube": {
           const yt = await youtubePkg(client, device);
-          return await youtubeSearch(device, value, ctx, {
+          return seen(ctx, 5500, await youtubeSearch(device, value, ctx, {
             // "YouTube" is the TV's YouTube app: it's handed the search the way the TV's own voice search does.
             askApp: yt ? (q) => youtubeAsk(client, yt, q) : null,
             browserSearch: async (q) => ((await view(client, youtubeSearchUrl(q))) ? "in the web browser" : false),
             openYouTube: yt ? () => launchPkg(client, yt) : null,
-          });
+          }));
         }
         case "play_youtube": {
           const yt = await youtubePkg(client, device);
-          return await youtubePlay(device, value, ctx, {
+          return seen(ctx, 6500, await youtubePlay(device, value, ctx, {
             playVideo: async (id) => {
               if (!((yt && (await view(client, watchUrl(id), yt))) || (await view(client, watchUrl(id))))) throw new DeviceError(`${device.name} couldn't open the video. Is the YouTube app installed?`, { code: "ENOTINSTALLED" });
               await sleep(50);
@@ -934,7 +976,7 @@ export default {
                 }
               : null,
             askApp: yt ? (q) => youtubeAsk(client, yt, q) : null,
-          });
+          }));
         }
         default:
           throw unsupported(device, action);

@@ -19,7 +19,7 @@ const DEFAULTS = () => ({
   meta: {},
   network: { subnet: "" },
   lan: { enabled: false, accessCode: "" },
-  features: { vendorLookup: true },
+  features: { vendorLookup: true, sight: true }, // sight: the assistant may be shown pictures of TV screens
   history: { firstScanAt: null, lastTuneupAt: null },
 });
 
