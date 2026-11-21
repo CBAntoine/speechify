@@ -11,15 +11,16 @@ PKG=app.patch.home
 BASE=http://127.0.0.1:4545
 
 # Google Play services on a freshly booted emulator sometimes crashes or restarts itself, and Android
-# then also stops every app using one of its services (Patch's web view uses its font service). That
-# isn't Patch failing: when Android says that's why it stopped Patch, start from scratch and run every
-# check again, once. Any other failure fails the test.
+# then also stops every app using one of its services (Patch's web view uses its font service, and so
+# do the web views of the TV apps the checks install). That isn't Patch failing: when Android says
+# that's why it stopped Patch, or that Play services itself went down while the checks were running,
+# start from scratch and run every check again, once. Any other failure fails the test.
 if [ -z "${PATCH_EMULATOR_RUN:-}" ]; then
   if PATCH_EMULATOR_RUN=1 bash "$0" "$@"; then exit 0; fi
   adb logcat -d -b system,main > "$OUT/android-first-run.txt" 2> /dev/null || true
-  if ! grep -qE "Killing [0-9]+:$PKG/.*depends on provider .* in dying proc" "$OUT/android-first-run.txt"; then exit 1; fi
+  if ! grep -qE "Killing [0-9]+:$PKG/.*depends on provider .* in dying proc|Process com\.google\.android\.gms(\.persistent)? \(pid [0-9]+\) has died" "$OUT/android-first-run.txt"; then exit 1; fi
   echo
-  echo "Android stopped Patch because Google Play services went down on the emulator (not Patch's doing)."
+  echo "Google Play services went down on the emulator while the checks were running (not Patch's doing), and Android stopped an app with it."
   echo "Starting again from scratch, and running every check again…"
   adb uninstall "$PKG" > /dev/null 2>&1 || true
   for p in $(adb shell pm list packages app.patch.tvapp | tr -d '\r' | cut -d: -f2); do adb uninstall "$p" > /dev/null 2>&1 || true; done
