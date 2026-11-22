@@ -28,7 +28,7 @@ export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id
         <span className="small muted">Find your next client</span>
       </div>
       <h2>Who do you want to work with?</h2>
-      <p>Pick a niche, a province or state, and a city. Rainmaker finds the businesses, checks their websites, and ranks them by how much they need you.</p>
+      <p>Pick a niche, a province, state or country, and a city. Rainmaker finds the businesses, checks their websites, and ranks them by how much they need you.</p>
       <form className="hero-form" onSubmit={go}>
         <select className="select" value={niche} onChange={(e) => setNiche(e.target.value)} aria-label="Niche">
           {niches.map((n) => (

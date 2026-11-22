@@ -72,11 +72,16 @@ export async function geocode(location: string): Promise<Place | null> {
   let rows =
     p.city && p.state && p.country
       ? await nominatim<Row>(what, { city: p.city, state: p.state, country: p.country, ...within })
-      : await nominatim<Row>(what, { q: p.query });
-  if (!rows.length && p.city) {
+      : await nominatim<Row>(what, { q: p.query, ...within });
+  if (!rows.length && p.city && p.state) {
     // Not filed as a city (a neighbourhood, say): try plain text, still
     // inside the country.
     rows = await nominatim<Row>(what, { q: p.query, ...within });
+  }
+  if (!rows.length && p.countryCode && !p.state) {
+    // Outside Canada, the US and Mexico some territories are filed under
+    // another country's code (the query still names the place's country).
+    rows = await nominatim<Row>(what, { q: p.query });
   }
   if (!rows.length) return null;
   const place = { lat: Number(rows[0].lat), lon: Number(rows[0].lon), label: rows[0].display_name };

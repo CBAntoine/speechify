@@ -64,6 +64,17 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/api/store/") ||
     pathname === "/api/payments/stripe/webhook" ||
     pathname === "/api/payments/paypal/webhook" ||
-    pathname.startsWith("/api/cron/")
+    pathname.startsWith("/api/cron/") ||
+    // Clients' websites, tracked review/referral links, results reports and
+    // proposals, and what they post to. Lead intake checks the client's key,
+    // Twilio webhooks check Twilio's signature, forms are rate limited.
+    pathname.startsWith("/s/") ||
+    pathname.startsWith("/r/") ||
+    pathname.startsWith("/report/") ||
+    pathname.startsWith("/proposal/") ||
+    pathname.startsWith("/api/sites/") ||
+    pathname.startsWith("/api/intake/") ||
+    pathname.startsWith("/api/twilio/") ||
+    pathname.startsWith("/api/proposal/")
   );
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { getOffer, type Offer, type Price } from "@/lib/catalog";
+import { offerForOrder } from "@/lib/clients/team-offer";
 import { matchNiche } from "@/lib/niches";
 import { findDuplicate } from "@/lib/repo";
 import { newId, readDb, update } from "@/lib/store";
@@ -153,7 +154,7 @@ export async function activateOrder(m: OrderMatch, a: Activation): Promise<{ ord
     if (order.status === "active") return { order: structuredClone(order), activatedNow: false };
     order.status = "active";
     order.activatedAt ??= now();
-    const offer = getOffer(order.offerId);
+    const offer = offerForOrder(order);
     order.fulfillment ??= { status: "queued", steps: offer ? plannedSteps(offer) : [], updatedAt: now() };
     const lead = offer ? upsertLead(db, order, order.leadId, offer, "won") : undefined;
     if (lead) {

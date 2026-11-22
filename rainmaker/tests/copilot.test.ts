@@ -20,6 +20,7 @@ const NO_KEYS: Integrations = {
   paypal: false,
   paypalMode: "sandbox",
   cron: false,
+  twilio: false,
 };
 
 test("spoken requests map to the right screen", () => {
@@ -28,6 +29,8 @@ test("spoken requests map to the right screen", () => {
   assert.equal(matchScreen("Go to Autopilot")?.id, "autopilot");
   assert.equal(matchScreen("show me the ad studio")?.id, "ad_studio");
   assert.equal(matchScreen("open the public store")?.id, "public_store");
+  assert.equal(matchScreen("show me my clients")?.id, "clients");
+  assert.equal(screenForPath("/clients/cli_1?tab=reviews").id, "clients");
   assert.equal(matchScreen("what's the weather"), undefined);
 });
 
@@ -47,6 +50,10 @@ test("the guide answers how-to questions", () => {
   assert.equal(searchGuide("autopilot")[0]?.id, "autopilot");
   assert.equal(searchGuide("which key turns on voice")[0]?.id, "keys");
   assert.equal(searchGuide("find_clients")[0]?.id, "find_clients");
+  assert.equal(searchGuide("how do I handle missed calls for a client?")[0]?.id, "missed_calls");
+  assert.equal(searchGuide("send a proposal")[0]?.id, "proposals");
+  assert.equal(searchGuide("win back past customers")[0]?.id, "winback");
+  assert.equal(searchGuide("which countries can I target in Mexico or the Caribbean")[0]?.id, "north_america");
   for (const t of GUIDE) assert.ok(t.text.length > 120 && t.text.length < 1600, `${t.id} guide length`);
 });
 
@@ -67,6 +74,8 @@ test("the app snapshot covers everything and stays small", () => {
   assert.equal(s.connected.claude_ai, false);
   assert.equal(typeof s.autopilot.on, "boolean");
   assert.ok(s.sample_data_present);
+  assert.equal(s.clients.total, 0);
+  assert.equal(s.connected.texting_twilio, false);
   const size = JSON.stringify(s).length;
   assert.ok(size < 20_000, `snapshot is ${size} bytes`);
 });

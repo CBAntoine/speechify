@@ -8,6 +8,7 @@ import { api, CopyButton, Drawer, useToast } from "@/components/client";
 import { shareOrCopy, useCanShare } from "@/components/pwa";
 import { topSignals } from "@/lib/prospecting/score";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
+import { DeliverPanel } from "./DeliverPanel";
 import { SellPanel } from "./SellPanel";
 import { DynIcon, ScoreRing, TierBadge } from "@/components/ui";
 import { timeAgo, money } from "@/lib/format";
@@ -248,6 +249,7 @@ export function LeadDrawer({
               </div>
               <SignalList signals={lead.signals} />
             </section>
+            <DeliverPanel lead={lead} onChange={(l) => onChange(l)} />
             <SellPanel lead={lead} onChange={(l) => onChange(l)} />
             {lead.audit && (
               <section>

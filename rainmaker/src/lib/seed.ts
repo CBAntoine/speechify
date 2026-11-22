@@ -384,6 +384,7 @@ export function seedDb(opts: { withSamples: boolean }): Db {
     store: structuredClone(DEFAULT_STORE),
     payments: defaultPayments(),
     autopilot: defaultAutopilot(),
+    clients: [],
     seeded: true,
   };
 }

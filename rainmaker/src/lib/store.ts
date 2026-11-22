@@ -38,6 +38,7 @@ function migrate(raw: Partial<Db>): Db {
     activity: raw.activity ?? [],
     stopRequests: raw.stopRequests ?? [],
     orders: raw.orders ?? [],
+    clients: raw.clients ?? [],
     store: { ...base.store, ...(raw.store ?? {}), prices: { ...(raw.store?.prices ?? {}) } },
     payments: {
       stripe: { ...(payments?.stripe ?? {}) },

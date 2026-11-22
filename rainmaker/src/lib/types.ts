@@ -1,6 +1,8 @@
 // Shared data model. Kept free of runtime imports so tests can load it with
 // Node's type stripping.
 
+import type { CountryCode, Lang } from "./markets.ts";
+
 export type Stage = "new" | "contacted" | "replied" | "meeting" | "proposal" | "won" | "lost";
 
 export const STAGES: { id: Stage; label: string; hint: string }[] = [
@@ -103,6 +105,10 @@ export interface Lead {
   clientAgentId?: string;
   /** Follow-up emails written with the first touch; autopilot drafts each when it's due. */
   sequence?: SequenceStep[];
+  /** An outcome proposal sent to this prospect (/proposal/<token>). */
+  proposal?: Proposal;
+  /** The client workspace this lead became, once they signed. */
+  clientId?: string;
 }
 
 export interface SequenceStep {
@@ -393,7 +399,7 @@ export interface PriceOverride {
   hidden?: boolean;
 }
 
-export type StoreCurrency = "usd" | "cad" | "gbp" | "eur" | "aud";
+export type StoreCurrency = "usd" | "cad" | "mxn" | "gbp" | "eur" | "aud";
 
 export interface StoreSettings {
   /** Public storefront switched on. */
@@ -505,5 +511,356 @@ export interface Db {
   autopilot: AutopilotState;
   /** The CRM copilot's ElevenLabs agent, once synced from this app. */
   copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string };
+  /** Businesses the agency delivers the seven services to. */
+  clients: Client[];
+  /** The sales-practice partner agent (a customer to role-play with), once created. */
+  practiceAgent?: { agentId: string; syncedAt: string };
   seeded: boolean;
+}
+
+// ── Clients: seven services, deployed in order ────────────────
+// The agency sells outcomes (calls answered, past customers back, reviews,
+// leads followed up in seconds) and delivers them with software. Each client
+// has a workspace in the main document; their customers, messages and calls
+// live in a separate per-client document (ClientData) so busy clients don't
+// slow everything else down.
+
+export type ServiceId = "website" | "reactivation" | "reviews" | "speed_to_lead" | "missed_calls" | "sales_coach" | "ads";
+
+export type ServiceStatus = "off" | "setup" | "live" | "paused";
+
+export interface ServiceState {
+  /** off: nothing automated; setup: everything is drafted for checking; live: it runs; paused: stopped for now. */
+  status: ServiceStatus;
+  /** Part of what the client pays for. */
+  included: boolean;
+  /** When the status last changed. */
+  since?: string;
+}
+
+export interface SiteItem {
+  title: string;
+  text: string;
+}
+
+/** Everything on a client's website, in their customers' language. */
+export interface SiteContent {
+  lang: Lang;
+  headline: string;
+  subheadline: string;
+  /** Main button label, e.g. "Book a free estimate". */
+  cta: string;
+  /** A short offer badge, e.g. "Free estimates". Empty for none. */
+  offer: string;
+  about: string;
+  services: SiteItem[];
+  benefits: SiteItem[];
+  steps: SiteItem[];
+  faqs: { q: string; a: string }[];
+  /** Only real reviews the business gave us. Never generated. */
+  testimonials: { quote: string; author: string }[];
+  hours: string[];
+  serviceArea: string;
+  formTitle: string;
+  formButton: string;
+  seoTitle: string;
+  seoDescription: string;
+  colors: { primary: string; ink: string; soft: string };
+}
+
+export interface ClientSite {
+  /** Public address: /s/<slug>. */
+  slug: string;
+  published: boolean;
+  content: SiteContent;
+  createdBy: "ai" | "template" | "user";
+  updatedAt: string;
+  publishedAt?: string;
+}
+
+export interface ClientSettings {
+  /** forwarded: the business forwards unanswered calls to our number. ring_first: our number rings their staff, then the AI. */
+  callFlow: "forwarded" | "ring_first";
+  /** Seconds staff phones ring before the AI picks up (ring_first). */
+  ringSeconds: number;
+  /** Text the caller when a call goes unanswered and the AI didn't take it. */
+  textBack: boolean;
+  textBackMessage: string;
+  /** The AI answers incoming texts. Off: you answer them yourself. */
+  aiReplies: boolean;
+  /** Send automated messages without waiting for approval. Off: they wait in the client's Messages tab. */
+  autoSend: boolean;
+  /** Most automated messages sent per day (protects the number's reputation). */
+  dailyCap: number;
+  /** Local hours (24h) when automated messages may go out. */
+  quietStart: number;
+  quietEnd: number;
+  /** Days automated messages may go out: US default skips Sundays; French territories weekdays only. */
+  sendDays: "every" | "mon_sat" | "weekdays";
+  /** Hours after a job is marked done before the review request goes out. */
+  reviewDelayHours: number;
+  referralOffer: string;
+  reactivationOffer: string;
+  /** What lead follow-up aims for, e.g. "Book a free estimate". */
+  nurtureGoal: string;
+  /** Text on WhatsApp instead of SMS when a WhatsApp sender is set. */
+  whatsapp: boolean;
+}
+
+export interface AdMonth {
+  /** YYYY-MM. */
+  month: string;
+  /** Ad spend, in the client's currency. */
+  spend: number;
+  leads: number;
+  booked: number;
+  revenue?: number;
+  notes?: string;
+}
+
+export interface Client {
+  id: string;
+  /** Short random code used in the client's tracked links (/r/<ref>/...). */
+  ref: string;
+  name: string;
+  niche: string;
+  status: "onboarding" | "active" | "paused" | "ended";
+  leadId?: string;
+  orderId?: string;
+  contactName?: string;
+  /** The owner's email: where alerts and reports go. */
+  email?: string;
+  /** Their main business number. */
+  phone?: string;
+  /** Who gets hot-lead alerts and rings first on ring_first (E.164). */
+  staffPhone?: string;
+  /** Their existing website, if any. */
+  website?: string;
+  address?: string;
+  /** "City, XX" place: decides country, language, currency and time zone. */
+  place: string;
+  country: CountryCode;
+  lang: Lang;
+  timezone: string;
+  currency: string;
+  /** What one booked customer or job is worth to them, in their currency. */
+  jobValue: number;
+  /** What they pay the agency each month and once, in their currency. */
+  monthly: number;
+  setup: number;
+  bookingUrl?: string;
+  /** Where customers leave a review (Google "Ask for reviews" link or similar). */
+  reviewUrl?: string;
+  /** The agency's Twilio number that texts and calls for this business (E.164). */
+  smsNumber?: string;
+  /** A WhatsApp sender on the agency's Twilio account (E.164). */
+  whatsappNumber?: string;
+  /** ElevenLabs agent that answers their calls. */
+  agentId?: string;
+  services: Record<ServiceId, ServiceState>;
+  settings: ClientSettings;
+  site?: ClientSite;
+  audit?: AuditResult;
+  /** Ad Studio campaigns made for them. */
+  campaignIds: string[];
+  adMonths: AdMonth[];
+  /** Secret for the lead intake webhook. */
+  intakeKey: string;
+  /** Token for the public results report. */
+  reportToken: string;
+  notes?: string;
+  sample?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ContactSource = "import" | "website" | "call" | "text" | "ad" | "referral" | "manual" | "webhook";
+
+export type ContactStatus = "new" | "contacted" | "engaged" | "booked" | "lost" | "opted_out";
+
+export interface Consent {
+  /** Marketing email allowed. */
+  email: boolean;
+  /** Marketing texts allowed (they gave permission to be texted). */
+  sms: boolean;
+  /** form: filled in a form with the texting notice; customer: bought before; inquiry: asked a question; written: signed or typed permission. */
+  basis: "form" | "customer" | "inquiry" | "written" | "none";
+  at?: string;
+}
+
+export type SequenceKind = "nurture" | "reactivation" | "review" | "referral";
+
+export interface Enrollment {
+  seqId: string;
+  kind: SequenceKind;
+  startedAt: string;
+  /** Index of the next step to send. */
+  next: number;
+  stoppedAt?: string;
+  stop?: "replied" | "opted_out" | "booked" | "finished" | "manual" | "clicked" | "no_channel";
+}
+
+/** One of the client's customers or leads. */
+export interface Contact {
+  id: string;
+  /** Short code for this contact's tracked links. */
+  ref: string;
+  name: string;
+  /** E.164. */
+  phone?: string;
+  email?: string;
+  lang?: Lang;
+  source: ContactSource;
+  status: ContactStatus;
+  consent: Consent;
+  /** What they asked about or bought. */
+  interest?: string;
+  /** What they wrote in the form. */
+  message?: string;
+  /** Last purchase or visit (for win-back). */
+  lastVisit?: string;
+  /** Job finished: the review request goes out after the delay. */
+  jobDoneAt?: string;
+  reviewClickedAt?: string;
+  referralClicks?: number;
+  /** Contact id of whoever referred them. */
+  referredBy?: string;
+  bookedAt?: string;
+  /** What the booking was worth, when known. */
+  value?: number;
+  /** The AI handed this conversation to a person. */
+  needsHuman?: boolean;
+  optedOutAt?: string;
+  enrollments: Enrollment[];
+  utm?: { source?: string; medium?: string; campaign?: string };
+  notes?: string;
+  /** First message they got back (speed to lead). */
+  firstReplyAt?: string;
+  lastInboundAt?: string;
+  lastOutboundAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MsgChannel = "sms" | "whatsapp" | "email";
+
+export type MsgPurpose = "nurture" | "reactivation" | "review" | "referral" | "missed_call" | "reply" | "manual" | "opt_out" | "alert";
+
+export interface ClientMessage {
+  id: string;
+  contactId: string;
+  channel: MsgChannel;
+  direction: "out" | "in";
+  purpose: MsgPurpose;
+  subject?: string;
+  body: string;
+  by: "ai" | "template" | "staff" | "contact";
+  /** draft: waiting for approval; sending: claimed by a sender. */
+  status: "draft" | "sending" | "sent" | "failed" | "received";
+  at: string;
+  sentAt?: string;
+  providerId?: string;
+  error?: string;
+  seqId?: string;
+  step?: number;
+}
+
+export interface CallLog {
+  id: string;
+  /** Twilio CallSid. */
+  sid?: string;
+  from?: string;
+  contactId?: string;
+  at: string;
+  /** answered: staff picked up; ai: the AI agent took it; missed: nobody did. */
+  outcome: "answered" | "ai" | "missed";
+  durationSec?: number;
+  textedBack?: boolean;
+  summary?: string;
+}
+
+export interface SequenceStepContent {
+  /** Hours after the contact was enrolled. */
+  delayHours: number;
+  sms: string;
+  subject: string;
+  email: string;
+}
+
+export interface Sequence {
+  id: string;
+  kind: SequenceKind;
+  name: string;
+  status: "draft" | "running" | "paused";
+  steps: SequenceStepContent[];
+  createdBy: "ai" | "template" | "user";
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Numbers read straight off a sales conversation, no AI needed. */
+export interface TranscriptMetrics {
+  words: number;
+  turns: number;
+  /** Share of the words spoken by the rep, 0-100. */
+  repShare: number;
+  repQuestions: number;
+  askedForBooking: boolean;
+  mentionedPrice: boolean;
+  nextStepSet: boolean;
+  usedName: boolean;
+  fillers: number;
+}
+
+export interface Scorecard {
+  /** 0-100. */
+  overall: number;
+  /** One per skill, 1-5. */
+  scores: { id: string; label: string; score: number; note: string }[];
+  strengths: string[];
+  fixes: { issue: string; instead: string }[];
+  summary: string;
+  by: "ai" | "rules";
+}
+
+export interface CallReview {
+  id: string;
+  rep: string;
+  title: string;
+  source: "transcript" | "recording" | "practice";
+  transcript: string;
+  metrics: TranscriptMetrics;
+  scorecard: Scorecard;
+  createdAt: string;
+}
+
+/** A client's customers, conversations, calls and coaching, stored apart from the main document. */
+export interface ClientData {
+  version: 1;
+  clientId: string;
+  contacts: Contact[];
+  messages: ClientMessage[];
+  calls: CallLog[];
+  sequences: Sequence[];
+  reviews: CallReview[];
+  /** Per day (YYYY-MM-DD, client's time zone): automated messages sent and website visits. */
+  daily: Record<string, { sent: number; views: number }>;
+}
+
+/** An outcome proposal for a prospect: their gaps, the services in order, and the price next to what staff would cost. */
+export interface Proposal {
+  token: string;
+  createdAt: string;
+  services: ServiceId[];
+  place: string;
+  lang: Lang;
+  currency: string;
+  /** Monthly total and one-time setup, in `currency`. */
+  monthly: number;
+  setup: number;
+  /** What people doing the same work would cost per month, in `currency`. */
+  humanMonthly: number;
+  views?: number;
+  viewedAt?: string;
+  acceptedAt?: string;
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
+import { BookOpen, Bot, Briefcase, ChevronRight, CircleDollarSign, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
 import { openCopilot } from "./copilot/Copilot";
 import { useOverlay } from "./client";
 import { InstallButton, useInstall } from "./pwa";
@@ -19,12 +19,15 @@ const NAV = [
   { href: "/autopilot", label: "Autopilot", short: "Autopilot", icon: Zap },
 ];
 
+const DELIVER = [{ href: "/clients", label: "Clients", icon: Briefcase }];
+
 const SELL = [
   { href: "/sales", label: "Sales", icon: CircleDollarSign },
   { href: "/sell", label: "Store & pricing", icon: Store },
 ];
 
 const MORE = [
+  { href: "/clients", label: "Clients", sub: "The seven services, deployed in order", icon: Briefcase },
   { href: "/ads", label: "Ad Studio", sub: "Tailored ads for any business", icon: Megaphone },
   { href: "/agents", label: "Agents", sub: "Give a goal, watch it work", icon: Bot },
   { href: "/autopilot", label: "Autopilot", sub: "Finds, pitches and onboards clients daily", icon: Zap },
@@ -35,6 +38,7 @@ const MORE = [
 ];
 
 const TITLES: [string, string][] = [
+  ["/clients", "Clients"],
   ["/prospects", "Find clients"],
   ["/pipeline", "Pipeline"],
   ["/inbox", "Inbox"],
@@ -107,6 +111,13 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
             <n.icon size={17} aria-hidden />
             {n.label}
             {n.badge && inbox > 0 && <span className="count">{inbox}</span>}
+          </Link>
+        ))}
+        <div className="nav-label">Deliver</div>
+        {DELIVER.map((n) => (
+          <Link key={n.href} href={n.href} className="nav-link" aria-current={active(n.href) ? "page" : undefined}>
+            <n.icon size={17} aria-hidden />
+            {n.label}
           </Link>
         ))}
         <div className="nav-label">Sell</div>

@@ -80,6 +80,8 @@ export interface Integrations {
   paypal: boolean;
   paypalMode: "sandbox" | "live";
   cron: boolean;
+  /** Texts and calls for clients (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN). */
+  twilio: boolean;
 }
 
 export function integrations(): Integrations {
@@ -97,5 +99,6 @@ export function integrations(): Integrations {
     paypal: paypalEnabled(),
     paypalMode: paypalMode(),
     cron: Boolean(process.env.CRON_SECRET),
+    twilio: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
   };
 }

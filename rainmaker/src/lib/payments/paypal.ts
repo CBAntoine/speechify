@@ -143,7 +143,7 @@ export interface PaypalSubscription {
   links?: { href: string; rel: string }[];
 }
 
-export async function createSubscription(input: { planId: string; order: Order; base: string; brand: string; slug: string }): Promise<{ id: string; approveUrl: string }> {
+export async function createSubscription(input: { planId: string; order: Order; base: string; brand: string; slug: string; cancelUrl?: string }): Promise<{ id: string; approveUrl: string }> {
   const { order } = input;
   const [given, ...rest] = (order.name ?? "").trim().split(/\s+/);
   const sub = await paypal<PaypalSubscription>(
@@ -160,7 +160,7 @@ export async function createSubscription(input: { planId: string; order: Order; 
         user_action: "SUBSCRIBE_NOW",
         shipping_preference: "NO_SHIPPING",
         return_url: `${input.base}/store/thanks?order=${encodeURIComponent(order.id)}&provider=paypal`,
-        cancel_url: `${input.base}/store/${input.slug}?canceled=1`,
+        cancel_url: input.cancelUrl ?? `${input.base}/store/${input.slug}?canceled=1`,
       },
     },
     { requestId: `rm-sub-${order.id}` }

@@ -5,7 +5,7 @@ import type { LeadSource, Prospect } from "@/lib/types";
 import { findBusinessesWithClaude } from "@/lib/claude/find-businesses";
 import { describeError as describeClaudeError } from "@/lib/claude/client";
 import { claudeEnabled } from "@/lib/config";
-import { expandPlace, parsePlace } from "@/lib/regions";
+import { marketOf, parsePlace, placeWords } from "@/lib/regions";
 import { auditWebsite, mapLimit } from "./audit";
 import { crawlSite, findWebsite } from "./crawler";
 import { searchOpenData } from "./opendata";
@@ -201,7 +201,7 @@ function inHouse(wanted: Normalized["wanted"]): boolean {
 
 async function searchCenter(n: Normalized): Promise<Place> {
   const center = n.near ? { lat: n.near.lat, lon: n.near.lon, label: "your location" } : ((await geocode(n.location)) ?? undefined);
-  if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Pick a province or state and a city, or type it as "City, ON".`);
+  if (!center) throw new Error(`Couldn't find "${n.location}" on the map. Pick a province, state or country and a city, or type it as "City, ON".`);
   if (n.niche.id === "custom" && !n.niche.nameWords?.length) throw new Error("Pick a niche from the list for map search");
   return center;
 }
@@ -284,7 +284,8 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
   // In-house: the free sources in parallel, Claude's web research when they
   // come up short, then one list crawled and scored.
   const center = await searchCenter(n);
-  const place = n.near ? undefined : expandPlace(n.location);
+  // Unknown places keep the old Canadian-first domain guesses.
+  const market = n.near ? undefined : marketOf(n.location, "CA");
   const town = n.near ? undefined : parsePlace(n.location).city || undefined;
   const errors: string[] = [];
   const reason = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -319,10 +320,9 @@ export async function findBusinesses(input: SearchInput): Promise<SearchResult> 
 
   const pool = crawlOrder(merged, center).slice(0, n.limit + 6);
   if (input.audit && input.audit > 0) {
-    const region = n.near ? undefined : parsePlace(n.location).region;
     await crawlProspects(pool, {
-      tlds: place?.countryCode === "us" ? ["com"] : ["ca", "com"],
-      places: [town, place?.state, region?.code].filter((x): x is string => !!x),
+      tlds: market?.tlds ?? ["ca", "com"],
+      places: n.near ? [] : placeWords(n.location),
       deadline: Date.now() + 40_000,
       count: Math.max(input.audit, pool.length),
     });

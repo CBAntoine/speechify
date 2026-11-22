@@ -116,7 +116,7 @@ export const COPILOT_TOOLS: CopilotToolSpec[] = [
         lead_id: id("Pipeline or Ad Studio: open this lead."),
         campaign_id: id("Ad Studio: open this campaign."),
         niche: id("Find clients or Ad Studio: the niche, e.g. dentist, roofer, med spa."),
-        location: id("Find clients or Ad Studio: city and province or state, e.g. Toronto, ON."),
+        location: id("Find clients or Ad Studio: city and province, state or country, e.g. Toronto, ON; Monterrey, NLE; Kingston, Jamaica."),
         search: { type: "boolean", description: "Find clients: run the search on screen right away." },
         agent: { type: "string", enum: ["prospector", "outreach", "ads", "ops"], description: "Agents: which agent to select." },
         goal: id("Agents: a goal to prefill (it doesn't start until they press Run)."),

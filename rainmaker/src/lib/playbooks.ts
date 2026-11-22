@@ -15,6 +15,24 @@ export interface Playbook {
 
 export const PLAYBOOKS: Playbook[] = [
   {
+    id: "sell-outcomes",
+    title: "Sell the outcome, priced under a person",
+    tag: "The done-for-you offer",
+    why: "Owners don't buy “AI automations”. They buy the jobs they already pay people for: answering calls, following up, chasing reviews. Price each job below what a person doing it would cost locally, do the work with AI behind the scenes, and switch the jobs on in order so each one feeds the next. Ads come last, because they only pay once every lead is answered fast: in a Harvard Business Review study, the average reply to a web lead took 42 hours, and firms that answered within an hour were about seven times as likely to qualify the lead.",
+    steps: [
+      "Open a lead in the Pipeline and use “Sell the outcome”: it prices the seven jobs against local wages and makes a proposal in their language and currency.",
+      "Pitch the jobs and what people doing them would cost, not the technology. If they ask how it works, say plainly that software does the routine work and your team supervises it.",
+      "Once they sign, deliver in order from their client workspace: website, win-back, reviews, instant follow-up, every call answered, sales coaching, then ads.",
+      "Send the monthly results link: leads answered, calls caught, customers back, reviews and bookings.",
+    ],
+    script: "When someone fills in your form at 8pm, how long until they hear back? And when the front desk is busy, who picks up? We take those jobs off your plate: every new lead answered within a minute, every missed caller texted back, a review request after every visit. It costs less than a part-time hire, and you see the results every month.",
+    action: { label: "Make a proposal", href: "/pipeline" },
+    sources: [
+      { text: "JP Middleton, “The AI Gold Rush is back”: sell outcomes, and the seven-step order", url: "https://www.youtube.com/watch?v=co5d77_qFqI" },
+      { text: "Harvard Business Review: The Short Life of Online Sales Leads", url: "https://hbr.org/2011/03/the-short-life-of-online-sales-leads" },
+    ],
+  },
+  {
     id: "referrals",
     title: "Referral engine",
     tag: "Where most clients come from",

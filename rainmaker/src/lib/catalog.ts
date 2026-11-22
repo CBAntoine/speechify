@@ -921,6 +921,7 @@ export function bundleWorth(plan: Offer, settings: Pick<StoreSettings, "prices" 
 export const CURRENCIES: { id: StoreSettings["currency"]; label: string; symbol: string }[] = [
   { id: "usd", label: "US dollars", symbol: "$" },
   { id: "cad", label: "Canadian dollars", symbol: "$" },
+  { id: "mxn", label: "Mexican pesos", symbol: "$" },
   { id: "gbp", label: "British pounds", symbol: "£" },
   { id: "eur", label: "Euros", symbol: "€" },
   { id: "aud", label: "Australian dollars", symbol: "$" },

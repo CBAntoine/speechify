@@ -73,6 +73,8 @@ export async function createCheckoutSession(input: {
   currency: string;
   base: string;
   brand: string;
+  /** Where "back" goes from Stripe's page (default: the product's store page). */
+  cancelUrl?: string;
 }): Promise<CheckoutSession> {
   const { order, offer, price, currency, base } = input;
   const interval = price.interval;
@@ -108,7 +110,7 @@ export async function createCheckoutSession(input: {
     metadata: { order_id: order.id, offer_id: offer.id, business: order.business?.slice(0, 450) },
     subscription_data: { metadata: { order_id: order.id, offer_id: offer.id }, description: `${input.brand}: ${offer.name}` },
     success_url: `${base}/store/thanks?order=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${base}/store/${offer.slug}?canceled=1`,
+    cancel_url: input.cancelUrl ?? `${base}/store/${offer.slug}?canceled=1`,
     ...(process.env.STRIPE_AUTOMATIC_TAX === "1" ? { automatic_tax: { enabled: true } } : {}),
   };
   return stripe<CheckoutSession>("POST", "/checkout/sessions", params, { idempotencyKey: `checkout_${order.id}` });

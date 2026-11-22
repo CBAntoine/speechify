@@ -13,6 +13,7 @@ export const SCREENS: Screen[] = [
   { id: "find_clients", label: "Find clients", path: "/prospects", aliases: ["find clients", "find", "prospects", "prospecting", "search"] },
   { id: "pipeline", label: "Pipeline", path: "/pipeline", aliases: ["pipeline", "leads", "board", "deals", "crm"] },
   { id: "inbox", label: "Inbox", path: "/inbox", aliases: ["inbox", "drafts", "messages", "approvals", "tasks"] },
+  { id: "clients", label: "Clients", path: "/clients", aliases: ["clients", "my clients", "client", "client workspace", "workspaces", "seven services", "7 services", "deliver", "delivery"] },
   { id: "ad_studio", label: "Ad Studio", path: "/ads", aliases: ["ad studio", "ads", "campaigns", "creative"] },
   { id: "agents", label: "Agents", path: "/agents", aliases: ["agents", "agent", "team"] },
   { id: "autopilot", label: "Autopilot", path: "/autopilot", aliases: ["autopilot", "automation"] },

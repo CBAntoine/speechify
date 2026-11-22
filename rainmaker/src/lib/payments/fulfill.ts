@@ -1,5 +1,8 @@
 import "server-only";
-import { getOffer, type Offer } from "@/lib/catalog";
+import type { Offer } from "@/lib/catalog";
+import { clientFromLead } from "@/lib/clients/repo";
+import { buildSite } from "@/lib/clients/site";
+import { offerForOrder } from "@/lib/clients/team-offer";
 import { generateCampaign, templateCampaign, toCampaign, type AdBrief } from "@/lib/claude/ads";
 import { describeError } from "@/lib/claude/client";
 import { claudeEnabled, elevenEnabled, resendEnabled } from "@/lib/config";
@@ -52,6 +55,22 @@ async function agentStep(order: Order, lead: Lead | undefined, profile: AgencyPr
     });
   }
   return { status: "done", detail: `${lead?.demo ? "Turned their demo into their receptionist" : "Built their receptionist"}: ${agentDashboardUrl(agentId)}` };
+}
+
+/** An accepted proposal: their workspace with the proposal's services and price, and a first draft of their website. */
+async function clientStep(order: Order, lead: Lead | undefined): Promise<StepResult> {
+  if (!lead) return { status: "error", detail: "No lead on this order to build the client from" };
+  const client = await clientFromLead(lead.id, { orderId: order.id, email: order.email ?? lead.email, phone: order.phone ?? lead.phone });
+  let site = "";
+  if (!client.site) {
+    try {
+      await buildSite(client.id);
+      site = " and drafted their website";
+    } catch (err) {
+      site = ` (website not drafted: ${describeError(err)})`;
+    }
+  }
+  return { status: "done", detail: `Opened their workspace${site}: /clients/${client.id}` };
 }
 
 async function campaignStep(order: Order, lead: Lead | undefined, profile: AgencyProfile, offer: Offer): Promise<StepResult> {
@@ -131,7 +150,7 @@ export async function fulfillOrder(orderId: string, _base?: string): Promise<Ord
   const claimed = await update((db) => {
     const o = db.orders.find((x) => x.id === orderId);
     if (!o || o.status !== "active") return undefined;
-    const offer = getOffer(o.offerId);
+    const offer = offerForOrder(o);
     o.fulfillment ??= { status: "queued", steps: offer ? plannedSteps(offer) : [], updatedAt: now() };
     if (o.fulfillment.status === "done") return undefined;
     if (o.fulfillment.status === "running" && Date.now() - Date.parse(o.fulfillment.updatedAt) < STALE_MS) return undefined;
@@ -141,7 +160,7 @@ export async function fulfillOrder(orderId: string, _base?: string): Promise<Ord
   });
   if (!claimed?.fulfillment) return (await readDb()).orders.find((o) => o.id === orderId);
 
-  const offer = getOffer(claimed.offerId);
+  const offer = offerForOrder(claimed);
   const profile = await getProfile();
   for (const step of claimed.fulfillment.steps) {
     if (step.status === "done" || step.status === "skipped") continue;
@@ -149,6 +168,7 @@ export async function fulfillOrder(orderId: string, _base?: string): Promise<Ord
     let result: StepResult;
     try {
       if (!offer) result = { status: "error", detail: "This product is no longer in the catalog" };
+      else if (step.id === "client") result = await clientStep(claimed, lead);
       else if (step.id === "agent") result = await agentStep(claimed, lead, profile);
       else if (step.id === "campaign") result = await campaignStep(claimed, lead, profile, offer);
       else if (step.id === "tasks") result = await tasksStep(claimed, lead, offer);

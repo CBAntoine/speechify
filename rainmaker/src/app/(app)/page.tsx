@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CircleAlert, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, Store, TrendingUp, UserPlus, Zap } from "lucide-react";
+import { ArrowRight, Briefcase, CalendarClock, CircleAlert, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, Store, TrendingUp, UserPlus, Zap } from "lucide-react";
+import { readClientData } from "@/lib/clients/data-store";
+import { formatMoney } from "@/lib/clients/pricing";
 import { InstallBanner } from "@/components/today/InstallBanner";
 import { QuickStart } from "@/components/today/QuickStart";
 import { AgentAvatar, Empty, PageHead, ScoreRing, Stat } from "@/components/ui";
@@ -45,12 +47,26 @@ export default async function Today() {
   const leadName = (id?: string) => leads.find((l) => l.id === id)?.name;
 
   const sales = salesStats(db.orders);
+  const clients = db.clients.filter((c) => c.status !== "ended");
+  const clientMrr = new Map<string, number>();
+  for (const c of clients) clientMrr.set(c.currency, (clientMrr.get(c.currency) ?? 0) + c.monthly);
+  const live = clients.reduce((a, c) => a + Object.values(c.services).filter((x) => x.status === "live").length, 0);
+  const planned = clients.reduce((a, c) => a + Object.values(c.services).filter((x) => x.included).length, 0);
+  const waiting = await Promise.all(
+    clients.slice(0, 30).map(async (c) => {
+      const d = await readClientData(c.id);
+      return { c, n: d.messages.filter((m) => m.status === "draft" && m.direction === "out").length + d.contacts.filter((x) => x.needsHuman && !x.optedOutAt).length };
+    })
+  );
+  const clientsWaiting = waiting.filter((w) => w.n > 0);
   const lastRun = db.autopilot.runs[0];
   const doNext: { href: string; icon: React.ReactNode; title: string; sub: string; tone: string }[] = [];
   for (const o of db.orders.filter((x) => x.status === "past_due").slice(0, 2))
     doNext.push({ href: "/sales", icon: <CircleAlert size={15} />, title: `Payment failed: ${o.business ?? o.email ?? "a client"}`, sub: `${o.offerName}. Check in before it cancels.`, tone: "var(--hot)" });
   for (const o of db.orders.filter((x) => x.status === "active" && x.fulfillment?.status === "error").slice(0, 2))
     doNext.push({ href: "/sales", icon: <CircleAlert size={15} />, title: `Finish onboarding ${o.business ?? o.email ?? "a client"}`, sub: "A setup step needs you", tone: "var(--warm)" });
+  for (const w of clientsWaiting.slice(0, 3))
+    doNext.push({ href: `/clients/${w.c.id}?tab=messages`, icon: <Briefcase size={15} />, title: `${w.c.name}: ${w.n} message${w.n === 1 ? "" : "s"} need you`, sub: "Drafts to approve or customers who asked for a person", tone: "var(--hot)" });
   if (pending.length)
     doNext.push({ href: "/inbox", icon: <Inbox size={15} />, title: `Approve ${pending.length} message${pending.length > 1 ? "s" : ""}`, sub: "Your agents drafted them. Nothing goes out until you say so.", tone: "var(--hot)" });
   for (const t of dueSoon.slice(0, 3)) {
@@ -114,6 +130,34 @@ export default async function Today() {
         <Stat icon={<Flame size={15} />} label="Hot leads" value={hot.length} sub="New, score 70+" tone="hot" />
         <Stat icon={<Inbox size={15} />} label="Waiting on you" value={pending.length + dueSoon.length} sub={`${pending.length} drafts, ${dueSoon.length} tasks due`} tone="violet" />
       </div>
+
+      <section className="card" style={{ marginBottom: 18 }}>
+        <div className="card-head">
+          <h2>Delivering</h2>
+          <Link href="/clients" className="btn ghost sm">
+            <Briefcase size={14} /> Clients
+          </Link>
+        </div>
+        <div className="card-body grid-3" style={{ gap: 14 }}>
+          <Link href="/clients" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Clients</span>
+            <b className="metric">{clients.length}</b>
+            <span className="muted small">{clients.filter((c) => c.status === "onboarding").length} onboarding</span>
+          </Link>
+          <Link href="/clients" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Client retainers</span>
+            <b className="metric">{clientMrr.size ? [...clientMrr].map(([cur, n]) => formatMoney(n, cur)).join(" + ") : "–"}</b>
+            <span className="muted small">per month</span>
+          </Link>
+          <Link href="/clients" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Services live</span>
+            <b className="metric">
+              {live}/{planned || 0}
+            </b>
+            <span className="muted small">{clientsWaiting.length ? `${clientsWaiting.reduce((a, w) => a + w.n, 0)} messages need you` : "Nothing waiting"}</span>
+          </Link>
+        </div>
+      </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
         <div className="card-head">

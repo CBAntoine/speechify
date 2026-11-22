@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { REGIONS, formatPlace, parsePlace, regionByCode } from "@/lib/regions";
+import { countryByCode, type Area } from "@/lib/markets";
+import { REGIONS, formatPlace, parsePlace, regionByKey, regionKey, type Region } from "@/lib/regions";
 
-// Where to search: a province or state, then one of its main cities (or any
-// other town, typed). "Somewhere else" takes free text for other countries.
-// The value is a place string, "London, ON", which the server expands.
+// Where to search: a province, state or country, then one of its main cities
+// (or any other town, typed). "Somewhere else" takes free text for places
+// outside North America. The value is a place string ("London, ON",
+// "Monterrey, NLE", "Kingston, Jamaica"), which the server expands.
 
 const OTHER_CITY = "__other";
 const ELSEWHERE = "";
-const DEFAULT_REGION = "ON";
+const DEFAULT_REGION = "CA:ON";
 const SAVED_KEY = "rm:place";
+const TERRITORIES = new Set(["PR", "VI"]);
 
 /** The last place searched on this device, if one was saved. */
 export function loadSavedPlace(): string | null {
@@ -30,10 +33,23 @@ export function savePlace(place: string) {
 }
 
 const byName = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" });
-const CANADA = REGIONS.filter((r) => r.country === "CA").sort((a, b) => byName(a.name, b.name));
-const USA = REGIONS.filter((r) => r.country === "US").sort((a, b) => byName(a.name, b.name));
+const sorted = (list: Region[]) => [...list].sort((a, b) => byName(a.name, b.name));
+const inArea = (area: Area) => (r: Region) => r.country !== "CA" && r.country !== "US" && r.country !== "MX" && countryByCode(r.country)?.area === area;
+
+const GROUPS: { label: string; regions: Region[] }[] = [
+  { label: "Canada", regions: sorted(REGIONS.filter((r) => r.country === "CA")) },
+  {
+    label: "United States",
+    regions: [...sorted(REGIONS.filter((r) => r.country === "US" && !TERRITORIES.has(r.code))), ...sorted(REGIONS.filter((r) => r.country === "US" && TERRITORIES.has(r.code)))],
+  },
+  { label: "Mexico", regions: sorted(REGIONS.filter((r) => r.country === "MX")) },
+  { label: "Central America", regions: sorted(REGIONS.filter(inArea("central"))) },
+  { label: "Caribbean", regions: sorted(REGIONS.filter(inArea("caribbean"))) },
+  { label: "North Atlantic", regions: sorted(REGIONS.filter(inArea("north"))) },
+];
 
 interface Pick {
+  /** Region key ("CA:ON", "PA:PA"), or "" for somewhere else. */
   region: string;
   city: string;
   /** Typing a town that isn't in the list. */
@@ -42,16 +58,16 @@ interface Pick {
 
 function pickFrom(value: string): Pick {
   const { city, region } = parsePlace(value);
-  if (region) return { region: region.code, city, typing: !region.cities.includes(city) };
+  if (region) return { region: regionKey(region), city, typing: !region.cities.includes(city) };
   if (!value.trim()) {
-    const r = regionByCode(DEFAULT_REGION)!;
-    return { region: r.code, city: r.cities[0], typing: false };
+    const r = regionByKey(DEFAULT_REGION)!;
+    return { region: regionKey(r), city: r.cities[0], typing: false };
   }
   return { region: ELSEWHERE, city: value.trim(), typing: true };
 }
 
 function toPlace(p: Pick): string {
-  const r = regionByCode(p.region);
+  const r = regionByKey(p.region);
   return r ? formatPlace(p.city, r) : p.city.trim();
 }
 
@@ -90,33 +106,28 @@ export function PlacePicker({
     else setPick(pickFrom(value));
   }, [value]); // emit only touches state setters and the onChange of this render
 
-  const region = regionByCode(pick.region);
+  const region = regionByKey(pick.region);
   const cities = useMemo(() => (region ? [...region.cities].sort(byName) : []), [region]);
 
   const regionSelect = (
     <select
       className="select"
       value={pick.region}
-      aria-label={labels ? undefined : "Province or state"}
+      aria-label={labels ? undefined : "Province, state or country"}
       onChange={(e) => {
-        const r = regionByCode(e.target.value);
-        emit(r ? { region: r.code, city: r.cities[0], typing: false } : { region: ELSEWHERE, city: "", typing: true });
+        const r = regionByKey(e.target.value);
+        emit(r ? { region: regionKey(r), city: r.cities[0], typing: false } : { region: ELSEWHERE, city: "", typing: true });
       }}
     >
-      <optgroup label="Canada">
-        {CANADA.map((r) => (
-          <option key={r.code} value={r.code}>
-            {r.name}
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="United States">
-        {USA.map((r) => (
-          <option key={r.code} value={r.code}>
-            {r.name}
-          </option>
-        ))}
-      </optgroup>
+      {GROUPS.map((g) => (
+        <optgroup key={g.label} label={g.label}>
+          {g.regions.map((r) => (
+            <option key={regionKey(r)} value={regionKey(r)}>
+              {r.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
       <option value={ELSEWHERE}>Somewhere else…</option>
     </select>
   );
@@ -196,7 +207,7 @@ export function PlacePicker({
   return (
     <>
       <label className="field">
-        <span>Province or state</span>
+        <span>Province, state or country</span>
         {regionSelect}
       </label>
       <div className="field">

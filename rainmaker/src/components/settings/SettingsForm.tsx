@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
+import { PhoneCall, Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
 import { api, useToast } from "@/components/client";
 import { InstallButton } from "@/components/pwa";
 import { CopilotConnection } from "./CopilotConnection";
@@ -290,6 +290,18 @@ export function SettingsForm({
                   <Status ok={i.resend} on="Resend" off="Your mail app" />
                 </div>
                 <div className="muted small">Set RESEND_API_KEY and RESEND_FROM (a sender on a domain you verified) to send approved emails from the Inbox.</div>
+              </span>
+            </div>
+            <div className="list-item">
+              <span className="icon-tile" style={{ background: "var(--teal-soft)", color: "var(--teal)" }}>
+                <PhoneCall size={15} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div className="row between" style={{ gap: 8 }}>
+                  <b>Texts and calls for clients</b>
+                  <Status ok={i.twilio} on="Twilio" off="Drafts only" />
+                </div>
+                <div className="muted small">Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to text your clients&apos; customers, text back missed calls and answer calls with their voice agent. Buy one local number per client in Twilio (register US numbers for A2P 10DLC). Without it, texts wait as drafts you can copy.</div>
               </span>
             </div>
             <div className="list-item">

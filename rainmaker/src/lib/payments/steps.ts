@@ -14,6 +14,8 @@ export function offerIncludes(offer: Pick<Offer, "id" | "bundles">, productId: s
 
 export function plannedSteps(offer: Pick<Offer, "id" | "bundles">): FulfillmentStep[] {
   const steps: FulfillmentStep[] = [];
+  // An accepted proposal: their client workspace, website first (the services go live in order from there).
+  if (offer.id === "team") steps.push({ id: "client", label: "Open their client workspace and draft the website", status: "todo" });
   if (AGENT_PRODUCTS.some((p) => offerIncludes(offer, p))) steps.push({ id: "agent", label: "Build their AI agent from their website", status: "todo" });
   if (AD_PRODUCTS.some((p) => offerIncludes(offer, p))) steps.push({ id: "campaign", label: "Write their launch ad campaign", status: "todo" });
   steps.push({ id: "tasks", label: "Create the onboarding checklist", status: "todo" });
@@ -44,6 +46,12 @@ const TASKS: Record<string, string[]> = {
   captions: ["Collect the first videos to caption"],
   "audio-cleanup": ["Collect the first files to clean"],
   "ad-campaigns": ["Get access to their Meta and Google ad accounts (or confirm they'll launch themselves)"],
+  team: [
+    "Kickoff call: services, hours, prices, booking link, Google review link and who gets alerts",
+    "Get their past-customer list (name, mobile, email, last visit) and who agreed to texts",
+    "Buy a local Twilio number for them (in the US, register it for A2P 10DLC before texting)",
+    "Have them forward unanswered calls to it (the Calls tab has the carrier codes)",
+  ],
 };
 
 /** Human onboarding tasks for an offer (a plan gets every bundled product's). */

@@ -18,7 +18,11 @@ export interface BusinessFacts {
   website?: string;
   audit?: AuditResult;
   agencyName: string;
+  /** The language callers speak most (ISO 639-1); default English. */
+  lang?: string;
 }
+
+const LANGUAGE_NAMES: Record<string, string> = { en: "English", es: "Spanish", fr: "French", nl: "Dutch", da: "Danish" };
 
 export function receptionistPrompt(f: BusinessFacts, mode: "demo" | "client"): string {
   const niche = getNiche(f.niche);
@@ -47,6 +51,7 @@ ${env}
 
 # Tone
 Short, natural sentences. One question at a time. Warm but quick: callers are often busy or stressed.
+Speak ${LANGUAGE_NAMES[f.lang ?? "en"] ?? "English"} by default; if the caller speaks another language, answer in theirs.
 
 # Goal
 1. Greet the caller and find out what they need.
@@ -67,7 +72,9 @@ ${facts.join("\n")}
 - Stay on the topic of ${f.business}; politely steer back if the caller drifts.`;
 }
 
-export function receptionistFirstMessage(f: Pick<BusinessFacts, "business">, mode: "demo" | "client"): string {
+export function receptionistFirstMessage(f: Pick<BusinessFacts, "business" | "lang">, mode: "demo" | "client"): string {
+  if (f.lang === "es") return mode === "demo" ? `¡Gracias por llamar a ${f.business}! Le atiende la recepcionista virtual. ¿En qué le puedo ayudar?` : `¡Gracias por llamar a ${f.business}! ¿En qué le puedo ayudar?`;
+  if (f.lang === "fr") return mode === "demo" ? `Merci d'appeler ${f.business}! Ici la réceptionniste virtuelle. Comment puis-je vous aider?` : `Merci d'appeler ${f.business}! Comment puis-je vous aider?`;
   return mode === "demo" ? `Thanks for calling ${f.business}! This is the virtual receptionist. How can I help you today?` : `Thanks for calling ${f.business}! How can I help you today?`;
 }
 
@@ -103,7 +110,7 @@ export async function createReceptionist(f: BusinessFacts, mode: "demo" | "clien
     conversation_config: {
       agent: {
         first_message: receptionistFirstMessage(f, mode),
-        language: "en",
+        language: f.lang && LANGUAGE_NAMES[f.lang] ? f.lang : "en",
         prompt: {
           prompt: receptionistPrompt(f, mode),
           llm: AGENT_LLM,

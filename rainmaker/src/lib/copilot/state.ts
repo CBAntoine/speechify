@@ -40,6 +40,7 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
       email_sending_resend: i.resend,
       google_places: i.googlePlaces,
       daily_autopilot_schedule: i.cron,
+      texting_twilio: i.twilio,
     },
     pipeline: {
       leads_by_stage: Object.fromEntries(STAGES.map((s) => [s.id, db.leads.filter((l) => l.stage === s.id).length])),
@@ -101,6 +102,20 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
       cancelled_this_month: sales.churnedThisMonth,
       unfinished_checkouts: sales.pending,
       recent_orders: db.orders.slice(0, 5).map((o) => ({ order_id: o.id, client: o.business ?? o.name ?? o.email ?? null, product: o.offerName, status: o.status, amount: o.amount, interval: o.interval, onboarding: o.fulfillment?.status ?? null })),
+    },
+    clients: {
+      total: db.clients.length,
+      list: db.clients.slice(0, 8).map((c) => ({
+        client_id: c.id,
+        name: c.name,
+        status: c.status,
+        place: c.place,
+        monthly: `${c.monthly} ${c.currency.toUpperCase()}`,
+        live: Object.entries(c.services).filter(([, v]) => v.status === "live").map(([k]) => k),
+        setting_up: Object.entries(c.services).filter(([, v]) => v.status === "setup").map(([k]) => k),
+        workspace: `/clients/${c.id}`,
+      })),
+      tabs: "overview, website, reactivation, reviews, speed_to_lead, missed_calls, sales_coach, ads, messages, contacts, settings (open with /clients/<id>?tab=<tab>)",
     },
     ad_campaigns: { total: db.campaigns.length, latest: db.campaigns.slice(0, 3).map((c) => ({ campaign_id: c.id, business: c.businessName, made: ago(c.createdAt, now) })) },
     agent_runs: db.runs.slice(0, 3).map((r) => ({ run_id: r.id, agent: r.agentId, goal: r.goal.slice(0, 140), status: r.status, started: ago(r.startedAt, now) })),
