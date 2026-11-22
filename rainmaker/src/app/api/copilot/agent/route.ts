@@ -10,7 +10,7 @@ export const maxDuration = 60;
 /** Is the copilot's ElevenLabs agent reachable with this API key? */
 export const GET = route(async () => {
   const agentId = await resolveCopilotAgentId();
-  if (!elevenEnabled()) return Response.json({ connected: false, agentId, reason: "Add ELEVENLABS_API_KEY" });
+  if (!elevenEnabled()) return Response.json({ connected: false, agentId, reason: "Add your ElevenLabs API key in API keys" });
   if (!agentId) return Response.json({ connected: false, reason: "No copilot yet: press Sync copilot to create it" });
   try {
     const a = await eleven<{ name?: string }>("GET", `/v1/convai/agents/${agentId}`);
@@ -22,6 +22,6 @@ export const GET = route(async () => {
 
 /** Create the copilot, or push its prompt and tools from the code. */
 export const POST = route(async () => {
-  if (!elevenEnabled()) throw new HttpError(400, "Add ELEVENLABS_API_KEY first");
+  if (!elevenEnabled()) throw new HttpError(400, "Add your ElevenLabs API key in Settings → API keys first");
   return Response.json(await syncCopilot((await getProfile()).agencyName));
 });

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const POST = route(async (req: Request) => {
   const b = await readBody<{ mode?: string }>(req);
   const mode = b.mode === "text" ? "text" : "voice";
-  if (!elevenEnabled()) throw new HttpError(503, "Add ELEVENLABS_API_KEY to talk to the copilot. Until then I can open screens and explain features.");
+  if (!elevenEnabled()) throw new HttpError(503, "Add your ElevenLabs API key in Settings → API keys to talk to the copilot. Until then I can open screens and explain features.");
   const agentId = await resolveCopilotAgentId();
   if (!agentId) throw new HttpError(503, "The copilot isn't set up yet. Press Sync copilot in Settings.");
   try {

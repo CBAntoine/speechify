@@ -53,7 +53,7 @@ export function ArtControls({ campaign, size, enabled, onUpdate }: { campaign: A
           ? current
             ? `Made ${timeAgo(current.createdAt)} with ElevenLabs (${current.model}), in the business's brand colours when its website has them.`
             : "Made with the ElevenLabs Image & Video API in the business's brand colours. Needs the Pro plan or above; uses credits."
-          : "Add ELEVENLABS_API_KEY to make custom art."}
+          : "Add your ElevenLabs key in Settings → API keys to make custom art."}
       </div>
     </div>
   );
@@ -130,7 +130,7 @@ export function AudioTab({ campaign, enabled, onUpdate }: { campaign: AdCampaign
             {busy === "make" ? <LoaderCircle size={15} className="spin" /> : <Mic size={15} />} {busy === "make" ? "Recording…" : "Make voiceover"}
           </button>
         </div>
-        {!enabled && <div className="faint small">Add ELEVENLABS_API_KEY to make voiceovers.</div>}
+        {!enabled && <div className="faint small">Add your ElevenLabs key in Settings → API keys to make voiceovers.</div>}
       </div>
       <div className="card card-pad stack">
         <b>Voiceovers</b>

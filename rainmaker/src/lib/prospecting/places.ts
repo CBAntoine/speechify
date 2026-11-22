@@ -52,7 +52,7 @@ export async function searchPlaces(params: {
   near?: { lat: number; lon: number; radiusKm: number };
 }): Promise<Prospect[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) throw new Error("GOOGLE_PLACES_API_KEY is not set");
+  if (!key) throw new Error("Add your Google Places API key in Settings → API keys");
   // "London, ON" → "London, Ontario, Canada", with Canada as the region, so
   // Google doesn't pick another country's London.
   const place = expandPlace(params.location);

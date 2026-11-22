@@ -14,7 +14,14 @@ const ago = (iso: string | undefined, now: number) => {
   return m < 60 ? `${Math.max(0, m)} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
 
-export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; path?: string; now?: Date }) {
+/** Which keys are in effect, by where they come from (names only, never values). */
+export interface KeySources {
+  saved_in_rainmaker: string[];
+  from_hosting: string[];
+  not_set: string[];
+}
+
+export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; path?: string; now?: Date; keys?: KeySources }) {
   const nowDate = opts.now ?? new Date();
   const now = nowDate.getTime();
   const open = db.leads.filter((l) => l.stage !== "won" && l.stage !== "lost");
@@ -40,6 +47,7 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
       email_sending_resend: i.resend,
       google_places: i.googlePlaces,
       daily_autopilot_schedule: i.cron,
+      ...(opts.keys ? { api_keys: { ...opts.keys, where: "Settings > API keys: saved keys stay until removed" } } : {}),
     },
     pipeline: {
       leads_by_stage: Object.fromEntries(STAGES.map((s) => [s.id, db.leads.filter((l) => l.stage === s.id).length])),

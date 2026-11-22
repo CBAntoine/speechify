@@ -139,7 +139,7 @@ export function SellPanel({ lead, onChange }: { lead: Lead; onChange: (l: Lead) 
                 <button className="btn sm primary" style={{ marginTop: 8 }} onClick={() => void buildDemo()} disabled={busy === "demo" || !info?.elevenlabs}>
                   {busy === "demo" ? <LoaderCircle size={14} className="spin" /> : <Bot size={14} />} {busy === "demo" ? "Building (about 20 seconds)…" : "Build demo receptionist"}
                 </button>
-                {info && !info.elevenlabs && <div className="faint small" style={{ marginTop: 6 }}>Needs ELEVENLABS_API_KEY.</div>}
+                {info && !info.elevenlabs && <div className="faint small" style={{ marginTop: 6 }}>Needs your ElevenLabs key (Settings → API keys).</div>}
               </>
             )}
           </div>

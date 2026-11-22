@@ -3,7 +3,7 @@ import { resendEnabled } from "@/lib/config";
 
 /** Send a plain-text email through Resend's REST API. */
 export async function sendEmail(input: { to: string; subject: string; text: string; replyTo?: string }): Promise<{ id: string }> {
-  if (!resendEnabled()) throw new Error("Set RESEND_API_KEY and RESEND_FROM to send from Rainmaker");
+  if (!resendEnabled()) throw new Error("Add your Resend API key and Send from address in Settings → API keys to send from Rainmaker");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },

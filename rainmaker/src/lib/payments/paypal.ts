@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { paypalEnabled, paypalMode } from "@/lib/config";
 import type { Offer, Price } from "@/lib/catalog";
 import { readDb, update } from "@/lib/store";
@@ -36,11 +37,13 @@ export function paypalBase(): string {
 
 const g = globalThis as { __rmPaypalToken?: { token: string; exp: number; key: string } };
 
-async function accessToken(): Promise<string> {
-  if (!paypalEnabled()) throw new PaypalError("Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to take PayPal payments", 400);
-  const key = `${paypalMode()}:${process.env.PAYPAL_CLIENT_ID}`;
+/** An OAuth token for the credentials in effect; `fresh` skips the cache (to test new credentials). */
+export async function accessToken(fresh = false): Promise<string> {
+  if (!paypalEnabled()) throw new PaypalError("Add your PayPal client ID and secret in Settings → API keys to take PayPal payments", 400);
+  const secretTag = createHash("sha256").update(process.env.PAYPAL_CLIENT_SECRET ?? "").digest("hex").slice(0, 12);
+  const key = `${paypalMode()}:${process.env.PAYPAL_CLIENT_ID}:${secretTag}`;
   const cached = g.__rmPaypalToken;
-  if (cached && cached.key === key && cached.exp > Date.now() + 60_000) return cached.token;
+  if (!fresh && cached && cached.key === key && cached.exp > Date.now() + 60_000) return cached.token;
   const basic = Buffer.from(`${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`).toString("base64");
   const res = await fetch(`${paypalBase()}/v1/oauth2/token`, {
     method: "POST",
@@ -51,7 +54,7 @@ async function accessToken(): Promise<string> {
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !data.access_token) {
     throw new PaypalError(
-      res.status === 401 ? `PayPal rejected the client id or secret (${paypalMode()} mode). Check PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_MODE.` : data.error_description ?? `PayPal error ${res.status}`,
+      res.status === 401 ? `PayPal rejected the client ID or secret in ${paypalMode()} mode. Check them, and the Mode, in Settings → API keys.` : data.error_description ?? `PayPal error ${res.status}`,
       res.status
     );
   }

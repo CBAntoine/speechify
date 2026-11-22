@@ -9,7 +9,7 @@ export const maxDuration = 120;
 // them to a new version when their prompt or tools changed). Runs also do
 // this lazily, so this is only a convenience for checking your key.
 export const POST = route(async () => {
-  if (agentRuntime() !== "managed") throw new HttpError(400, "Managed Agents is off: set ANTHROPIC_API_KEY and leave AGENT_RUNTIME unset or 'managed'.");
+  if (agentRuntime() !== "managed") throw new HttpError(400, "Managed Agents is off: add your Claude API key in Settings → API keys and leave AGENT_RUNTIME unset or 'managed'.");
   const out: Record<string, { agentId: string; version: number }> = {};
   let environmentId = "";
   for (const def of AGENTS) {

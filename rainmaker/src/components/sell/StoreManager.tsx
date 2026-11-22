@@ -222,7 +222,13 @@ export function StoreManager({
                     </button>
                   </div>
                 ) : (
-                  <span className="faint small">Add STRIPE_SECRET_KEY (Stripe dashboard → Developers → API keys) to your hosting's environment variables, redeploy, then connect the webhook here.</span>
+                  <span className="faint small">
+                    Paste your Stripe secret key in{" "}
+                    <a href="/settings?keys=stripe" className="key-get">
+                      Settings → API keys
+                    </a>
+                    , then connect the webhook here.
+                  </span>
                 )}
               </div>
               <div className="stack" style={{ gap: 6 }}>
@@ -240,7 +246,13 @@ export function StoreManager({
                     </button>
                   </div>
                 ) : (
-                  <span className="faint small">Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET (developer.paypal.com → Apps & Credentials) and PAYPAL_MODE=live when you're ready, redeploy, then connect the webhook here.</span>
+                  <span className="faint small">
+                    Paste your PayPal client ID and secret in{" "}
+                    <a href="/settings?keys=paypal" className="key-get">
+                      Settings → API keys
+                    </a>{" "}
+                    (switch Mode to Live when you&apos;re ready), then connect the webhook here.
+                  </span>
                 )}
               </div>
               {!i.stripe && !i.paypal && <div className="tip">Until a payment provider is connected, the checkout collects the buyer's details and creates a callback task, so no sale is lost.</div>}
@@ -277,7 +289,13 @@ export function StoreManager({
                   </div>
                 </>
               ) : (
-                <span className="faint small">Add ELEVENLABS_API_KEY (ElevenLabs → Developers → API keys, with Agents write access) to switch it on.</span>
+                <span className="faint small">
+                  Paste your ElevenLabs API key (with Agents write access) in{" "}
+                  <a href="/settings?keys=elevenlabs" className="key-get">
+                    Settings → API keys
+                  </a>{" "}
+                  to switch it on.
+                </span>
               )}
             </div>
           </section>

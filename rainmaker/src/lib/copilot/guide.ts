@@ -76,7 +76,7 @@ export const GUIDE: GuideTopic[] = [
     id: "payments",
     title: "Taking payments (Stripe and PayPal)",
     keywords: ["stripe", "paypal", "payments", "checkout", "webhook", "card", "pay", "billing", "connect", "test mode", "live"],
-    text: "Add STRIPE_SECRET_KEY and/or PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to the hosting's environment variables and redeploy, then in Store & pricing > Payments press Connect webhook for each (the app must be on a public https address). Test keys (sk_test_, PayPal sandbox) show a test-mode banner on the store; Stripe's test card is 4242 4242 4242 4242. Stripe Checkout charges the monthly or yearly price plus the setup fee on the first invoice; PayPal subscriptions include the setup fee. Webhooks mark orders paid, record renewals, flag failed payments and cancellations, move the lead to Won and start onboarding. Switch to live keys and PAYPAL_MODE=live when ready.",
+    text: "Paste the Stripe secret key and/or the PayPal client ID and secret in Settings > API keys and press Save (they stay saved until removed), then in Store & pricing > Payments press Connect webhook for each (the app must be on a public https address). Test keys (sk_test_, PayPal sandbox) show a test-mode banner on the store; Stripe's test card is 4242 4242 4242 4242. Stripe Checkout charges the monthly or yearly price plus the setup fee on the first invoice; PayPal subscriptions include the setup fee. Webhooks mark orders paid, record renewals, flag failed payments and cancellations, move the lead to Won and start onboarding. When ready, replace the test keys with live ones and set PayPal's Mode to Live in API keys.",
   },
   {
     id: "sales",
@@ -87,14 +87,14 @@ export const GUIDE: GuideTopic[] = [
   {
     id: "settings",
     title: "Settings (agency profile and connections)",
-    keywords: ["settings", "profile", "agency", "name", "address", "booking link", "keys", "connections", "sample data", "voice"],
-    text: "Settings holds the agency profile the agents and emails use: Agency name, Your name (signs messages), Reply-to email, Home city, Website, Booking link, Postal address for email footers (required for auto-send), Core offer, Services, Pricing, Phone, Proof and results, Writing voice and Target niches. It also shows which services are connected and lets you remove the sample businesses.",
+    keywords: ["settings", "profile", "agency", "name", "address", "booking link", "connections", "sample data", "voice"],
+    text: "Settings holds the agency profile the agents and emails use: Agency name, Your name (signs messages), Reply-to email, Home city, Website, Booking link, Postal address for email footers (required for auto-send), Core offer, Services, Pricing, Phone, Proof and results, Writing voice and Target niches. Beside it: API keys (paste a key, press Save; it stays until Remove), Connections (what's switched on, Sync copilot), Data (remove the sample businesses) and installing on a phone.",
   },
   {
     id: "keys",
-    title: "Which key turns on what",
-    keywords: ["key", "keys", "api", "environment", "env", "connect", "anthropic", "claude", "elevenlabs", "resend", "google", "database", "password", "cron", "site url"],
-    text: "ANTHROPIC_API_KEY: Claude for ads, outreach, research and real agents. ELEVENLABS_API_KEY: the store's sales assistant, this copilot's voice, demo and client receptionists, voiceovers and ad art. STRIPE_SECRET_KEY, PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET: payments. RESEND_API_KEY + RESEND_FROM: sending email from the Inbox and Autopilot. GOOGLE_PLACES_API_KEY: Google ratings and review counts. DATABASE_URL: Postgres (needed on Vercel). APP_PASSWORD: puts the CRM behind a sign-in (set it before going public). SITE_URL: your public address for links and webhooks. CRON_SECRET: lets Autopilot run daily. Keys are set in the hosting provider's environment variables, then redeploy.",
+    title: "API keys: adding, saving and removing them",
+    keywords: ["key", "keys", "which key", "what key", "api", "token", "secret", "environment", "env", "anthropic", "claude", "elevenlabs", "resend", "google"],
+    text: "Settings > API keys: paste a key and press Save. It's encrypted and kept through restarts and redeploys until you press Remove; only a masked preview is ever shown, and Check asks the service if it works. Claude key: AI ads, outreach, research and agents. ElevenLabs key: this copilot's voice, the store assistant, demo receptionists, voiceovers, art. Stripe secret key, PayPal client ID + secret + Mode: payments. Resend key + Send from: email. Google Places key: ratings and reviews. A saved key is used instead of one in the hosting settings; Remove brings that one back. Saving needs the sign-in password on. Hosting-only settings: DATABASE_URL, APP_PASSWORD, SITE_URL, CRON_SECRET, SECRETS_KEY.",
   },
   {
     id: "playbooks",

@@ -93,14 +93,14 @@ export default async function Today() {
           <span>
             <b>Demo mode.</b>{" "}
             <span className="desktop-only">
-              Search, audits, scoring and the pipeline all work now on free map data. Add <span className="mono">ANTHROPIC_API_KEY</span> to let Claude write the ads and emails
-              and run the agents.{" "}
+              Search, audits, scoring and the pipeline all work now on free map data. Paste a Claude API key in Settings to let Claude write the ads and emails and run the
+              agents. It stays saved until you remove it.{" "}
             </span>
             <span className="mobile-inline">
               Add a Claude API key to switch on AI ads, emails and agents.{" "}
             </span>
-            <Link href="/settings" style={{ textDecoration: "underline" }}>
-              How to connect
+            <Link href="/settings?keys=claude" style={{ textDecoration: "underline" }}>
+              Add your key
             </Link>
           </span>
         </div>

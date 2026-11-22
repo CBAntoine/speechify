@@ -4,7 +4,7 @@ import { fulfillOrder } from "@/lib/payments/fulfill";
 import { activateOrder, firstTimeSeen, forgetEvent, recordPayment, setOrderStatus } from "@/lib/payments/orders";
 import { invoiceSubscription } from "@/lib/payments/stripe";
 import { siteUrl } from "@/lib/site";
-import { readDb } from "@/lib/store";
+import { readDb, syncSavedKeys } from "@/lib/store";
 
 // Stripe → Rainmaker. Every delivery is signature-checked against the raw
 // body, and each event id is handled once (Stripe retries deliveries).
@@ -23,6 +23,7 @@ function orderIdOf(o: Obj): string | undefined {
 
 export async function POST(req: Request) {
   const raw = await req.text();
+  await syncSavedKeys().catch(() => undefined);
   const secret = process.env.STRIPE_WEBHOOK_SECRET || (await readDb()).payments.stripe.webhookSecret;
   if (!secret) return Response.json({ error: "Webhook signing secret not set: connect Stripe in Store & pricing" }, { status: 400 });
   if (!verifyStripeSignature(raw, req.headers.get("stripe-signature"), secret)) return Response.json({ error: "Bad signature" }, { status: 400 });

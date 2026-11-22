@@ -26,7 +26,21 @@ With no keys, it runs in **demo mode**:
 - Agents follow a fixed script that uses the real tools.
 - The first run creates a small workspace of fictional sample businesses. Remove them in Settings.
 
-Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outreach, researches the web, and runs the agents for real.
+Add a Claude API key to switch on Claude. Claude then writes the ads and outreach, researches the web, and runs the agents for real.
+
+### Adding API keys
+
+Paste them in **Settings → API keys** and press **Save**. A saved key:
+- **stays until you press Remove**, through restarts and redeploys. It's stored in your database (Postgres table `rainmaker_secrets`, or `.data/secrets.json`), apart from the CRM data, so no page, export or agent ever sees it;
+- is **encrypted** with AES-256-GCM, and only a masked preview (`sk-ant-••••Ab12`) is ever shown again;
+- **is used instead of** the same key in your hosting settings. Remove it and the hosting one comes back;
+- takes effect right away on that server, and on your other server instances within 30 seconds.
+
+**Check** asks the service whether it accepts the key (and, for Stripe and PayPal, whether the webhook is connected). On a public deployment, saving needs `APP_PASSWORD` on, so nobody else with your link can change your keys. Keys you can save there: Claude, ElevenLabs, Stripe (secret key, webhook secret), PayPal (client ID, secret, mode, webhook ID), Resend (API key, send-from address) and Google Places. `DATABASE_URL`, `APP_PASSWORD`, `SITE_URL`, `CRON_SECRET` and `SECRETS_KEY` stay in your hosting settings.
+
+Without `SECRETS_KEY`, the encryption key is created on the first save and kept next to the saved keys: that keeps them unreadable in a copied file or log, not from someone with full database access. Set `SECRETS_KEY` (any long random text) in your hosting settings to keep the encryption key out of the database; keys saved earlier are re-encrypted with it automatically. Keep it: if it changes, saved keys can't be unlocked and need pasting again.
+
+Environment variables still work as before:
 
 | Variable | What it turns on |
 |---|---|
@@ -42,6 +56,7 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` | PayPal subscriptions in the store (`PAYPAL_MODE=live` when you're ready; sandbox by default). |
 | `SITE_URL` | Your public address, for checkout return links, webhooks and links in Autopilot's emails. Vercel's domain is used if empty. |
 | `CRON_SECRET` | Lets Vercel Cron start Autopilot once a day. |
+| `SECRETS_KEY` | Optional. Encrypts the keys saved in Settings → API keys with a key that isn't stored in the database. |
 
 All of them, with defaults and optional overrides, are in [.env.example](.env.example).
 
@@ -59,7 +74,7 @@ All of them, with defaults and optional overrides, are in [.env.example](.env.ex
 | **Sales** | Orders from the store: monthly recurring revenue, money collected this month, lifetime revenue, cancellations and unfinished checkouts. Each order shows its payment status and onboarding steps. Run or retry onboarding, open Stripe's billing portal for the client, cancel a subscription, or record a sale made outside the store. |
 | **Store & pricing** | Turn the store on, set every price and setup fee (with the margin at full usage beside each), hide products, pick the currency, yearly billing, headline and assistant name. Connect Stripe and PayPal webhooks with one button each, and sync the AI sales assistant. |
 | **Playbooks** | 13 client-finding plays from agency surveys and practitioner reports, niche cheat sheets, and a table of common GoHighLevel complaints next to what Rainmaker does instead. Every claim links to its source. |
-| **Settings** | Agency profile (agents read it every run), connection status, sample data. |
+| **Settings** | Agency profile (agents read it every run), **API keys** (saved until you remove them), connection status, sample data. |
 
 ### How a prospect is scored
 
@@ -144,10 +159,10 @@ The store sells what ElevenLabs makes possible as **your agency's done-for-you s
 4. Sends the welcome email.
 
 **Connect payments:**
-1. Add `STRIPE_SECRET_KEY`, and/or `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`, to your hosting's environment variables and redeploy. Start with test keys (Stripe `sk_test_…`, a PayPal sandbox app): the store shows a test-mode banner and no real money moves.
+1. Paste your Stripe secret key, and/or your PayPal client ID and secret, in **Settings → API keys** and press **Save** (or set `STRIPE_SECRET_KEY`, `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in your hosting settings). Start with test keys (Stripe `sk_test_…`, a PayPal sandbox app): the store shows a test-mode banner and no real money moves.
 2. In **Store & pricing → Payments**, press **Connect webhook** for each. Rainmaker registers `https://YOUR-SITE/api/payments/stripe/webhook` and `https://YOUR-SITE/api/payments/paypal/webhook` and keeps the signing secret. This needs the app on a public https address.
 3. Buy a plan with Stripe's test card `4242 4242 4242 4242` (any future date, any CVC) or a PayPal sandbox buyer. The order appears in **Sales**.
-4. Swap in live keys (and set `PAYPAL_MODE=live`), redeploy, and press **Connect webhook** again.
+4. Replace them with live keys in **Settings → API keys** (and set PayPal's **Mode** to Live), then press **Connect webhook** again.
 
 **Prices.** Launch $297/mo + $497 setup, Growth $597/mo + $997 setup, Scale $1,297/mo + $1,997 setup; products from $49 to $397 a month. Yearly billing is 10 months' price for 12, with the setup fee waived. At full included usage, the gross margin is 69–99% (Scale is the lowest). Change any price in **Store & pricing**; the full table, unit costs and sources are in [docs/pricing.md](docs/pricing.md).
 
@@ -171,7 +186,7 @@ Open it from **Copilot** at the top of the sidebar, the orb in the phone's top b
 - **Work the CRM directly:** find businesses, audit websites, save leads, update stages and notes, draft messages for your approval, write ad campaigns, add tasks, research the web and start the Claude agents. These are the same tools, rules and validation the agents use: messages become drafts, nothing is sent on its own.
 - **Know the software and your account:** a built-in guide covers every screen, button and workflow (`src/lib/copilot/guide.ts`), and a live snapshot covers your pipeline, inbox, tasks, Autopilot, store, prices, sales and which keys are connected.
 
-**What it won't do without you:** it asks before anything that sends, deletes or discards, cancels a subscription, changes prices, charges money or turns on auto-send, and those clicks are refused unless it has your yes. It never types passwords or API keys. It acts as you, through the app's own sign-in-protected endpoints, so it can't do anything you couldn't.
+**What it won't do without you:** it asks before anything that sends, deletes or discards, cancels a subscription, changes prices, charges money or turns on auto-send, and those clicks are refused unless it has your yes. It never reads, types or repeats passwords or API keys: ask it to add a key and it opens that key's field in Settings for you to paste into. It acts as you, through the app's own sign-in-protected endpoints, so it can't do anything you couldn't.
 
 **How it works:** an ElevenLabs agent (Claude Sonnet 5.5 inside) with 19 tools that run in your browser. Screen tools act on the page; CRM tools call `/api/copilot/tool`; the snapshot comes from `/api/copilot/state`. The agent is private: your signed-in browser gets a one-conversation token from `/api/copilot/session`. The agent is already built in this agency's ElevenLabs workspace (`agent_6701m80nkwe4ekh9nkkcjbtj81ns`), and six tests (checks the live state, opens the pipeline, searches with the right niche and city, opens the prices screen, refuses API keys, asks before cancelling) passed 12 of 12 runs. They're attached to the agent, so you can rerun them in ElevenLabs.
 - Its prompt and tools are in `src/lib/copilot/spec.ts`. **Settings → Connections → Copilot → Sync copilot** pushes them to ElevenLabs, or creates the copilot if your key belongs to another workspace.
@@ -256,7 +271,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 82 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes, the store catalog and margins, yearly pricing and price overrides, Stripe form encoding and webhook signatures, sales stats, onboarding plans, Autopilot's targeting, follow-up timing and auto-send rules, the copilot's screen matching, guide and live snapshot, and which pages are public
+npm test          # 90 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes, the store catalog and margins, yearly pricing and price overrides, Stripe form encoding and webhook signatures, sales stats, onboarding plans, Autopilot's targeting, follow-up timing and auto-send rules, the copilot's screen matching, guide and live snapshot, saved API keys (encryption, masking, save and remove), and which pages are public
 npm run build
 ```
 

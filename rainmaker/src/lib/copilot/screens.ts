@@ -19,7 +19,7 @@ export const SCREENS: Screen[] = [
   { id: "sales", label: "Sales", path: "/sales", aliases: ["sales", "orders", "revenue"] },
   { id: "store_and_pricing", label: "Store & pricing", path: "/sell", aliases: ["store and pricing", "store & pricing", "store settings", "pricing", "prices", "payments", "sell"] },
   { id: "playbooks", label: "Playbooks", path: "/playbooks", aliases: ["playbooks", "playbook"] },
-  { id: "settings", label: "Settings", path: "/settings", aliases: ["settings", "profile", "agency profile"] },
+  { id: "settings", label: "Settings", path: "/settings", aliases: ["settings", "profile", "agency profile", "api keys", "keys"] },
   { id: "public_store", label: "Public store", path: "/store", aliases: ["public store", "store page", "storefront", "sales page", "my store", "the store"] },
 ];
 
@@ -46,6 +46,27 @@ export function matchScreen(text: string): Screen | undefined {
     }
   }
   return best?.s;
+}
+
+/** Services whose keys go in Settings > API keys (ids match keys-core). */
+export const KEY_SERVICES = [
+  { id: "claude", name: "Claude", words: ["claude", "anthropic"] },
+  { id: "elevenlabs", name: "ElevenLabs", words: ["elevenlabs", "eleven labs", "11labs", "11 labs", "voice"] },
+  { id: "stripe", name: "Stripe", words: ["stripe"] },
+  { id: "paypal", name: "PayPal", words: ["paypal", "pay pal"] },
+  { id: "resend", name: "Resend", words: ["resend", "email sending", "sending email"] },
+  { id: "places", name: "Google Places", words: ["google places", "places", "google maps", "google"] },
+] as const;
+
+export const KEY_SERVICE_IDS = KEY_SERVICES.map((k) => k.id);
+
+/** "add my Stripe key" → Stripe; null when the text isn't about a key. */
+export function matchKeyService(text: string): (typeof KEY_SERVICES)[number] | null {
+  const t = ` ${text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `;
+  if (!/ (api key|api keys|key|keys|token|secret|client id|credentials?) /.test(t)) return null;
+  let best: { k: (typeof KEY_SERVICES)[number]; len: number } | null = null;
+  for (const k of KEY_SERVICES) for (const w of k.words) if (t.includes(` ${w} `) && (!best || w.length > best.len)) best = { k, len: w.length };
+  return best?.k ?? null;
 }
 
 /** The copilot's tools, by where they run. */

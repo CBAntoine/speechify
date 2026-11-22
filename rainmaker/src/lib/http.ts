@@ -1,5 +1,6 @@
 import "server-only";
 import { describeError } from "@/lib/claude/client";
+import { syncSavedKeys } from "@/lib/store";
 
 export class HttpError extends Error {
   constructor(
@@ -29,6 +30,8 @@ export function fail(err: unknown): Response {
 export function route<A extends unknown[]>(fn: (...args: A) => Promise<Response>) {
   return async (...args: A): Promise<Response> => {
     try {
+      // Keys saved in Settings are in effect before the handler checks for them.
+      await syncSavedKeys().catch((err) => console.error("[rainmaker] couldn't load saved API keys", err));
       return await fn(...args);
     } catch (err) {
       return fail(err);
