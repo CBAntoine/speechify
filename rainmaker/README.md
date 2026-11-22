@@ -1,12 +1,14 @@
 # Rainmaker
 
-A simpler, AI-first alternative to GoHighLevel for agencies that sell to local businesses. It does three jobs:
+A simpler, AI-first alternative to GoHighLevel for agencies that sell to local businesses. It does five jobs:
 
 1. **Find clients.** Search a niche in any city. Rainmaker pulls the businesses from the map, audits each website, and ranks them by how much they need you and whether they can pay.
 2. **Run the pipeline with Claude agents.** Four agents (Prospector, Outreach Writer, Ad Strategist, Chief of Staff) take a goal in plain English, use the CRM's tools, and leave drafts for you to approve.
-3. **Make tailored ads.** Ad Studio writes a full campaign for any business: strategy, three Meta ads with creative, a Google search ad with 15 headlines, short-video scripts and landing-page copy, all checked against each platform's limits.
+3. **Make tailored ads.** Ad Studio writes a full campaign for any business: strategy, three Meta ads with creative, a Google search ad with 15 headlines, short-video scripts and landing-page copy, all checked against each platform's limits. With ElevenLabs it also paints custom ad art in the business's brand colours and records audio ads.
+4. **Sell every ElevenLabs product as your own service.** A public store (`/store`) sells 18 done-for-you services and 3 plans (AI receptionists, voice and chat agents, voiceovers, dubbing, podcasts, music, ad creative, transcription…) with monthly prices, setup fees and yearly billing. An ElevenLabs voice and chat assistant explains each product to visitors and opens checkout. Clients pay by card (Stripe) or PayPal, and subscriptions, renewals and cancellations flow back into the CRM.
+5. **Run itself.** Autopilot runs every day: it finds businesses, builds each one a demo AI receptionist from their own website, writes the pitch and a follow-up sequence, makes sample ads with custom art, follows up, and onboards new paying clients.
 
-It's built around what agencies complain about in GoHighLevel and around how agencies actually land clients. The research, with sources, is in [docs/research.md](docs/research.md).
+It's built around what agencies complain about in GoHighLevel and around how agencies actually land clients. The research, with sources, is in [docs/research.md](docs/research.md). How the store is priced, with costs, margins and ElevenLabs' terms, is in [docs/pricing.md](docs/pricing.md).
 
 ## Run it
 
@@ -34,6 +36,13 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | `RESEND_API_KEY` + `RESEND_FROM` | Send approved emails from the Inbox, from your own verified domain. Without them, "Open in my email" fills in your own mail app. |
 | `APP_PASSWORD` | Puts the whole app behind a sign-in page. **Set it before you deploy anywhere public.** |
 | `DATABASE_URL` | Postgres for cloud hosting (required on Vercel). Without it, data goes to a local JSON file. |
+| `ELEVENLABS_API_KEY` | The store's AI sales assistant (voice and chat), demo receptionists for prospects, receptionists for paying clients, ad voiceovers and custom ad art. |
+| `STRIPE_SECRET_KEY` | Card payments and subscriptions in the store. A `sk_test_` key puts the store in test mode. |
+| `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` | PayPal subscriptions in the store (`PAYPAL_MODE=live` when you're ready; sandbox by default). |
+| `SITE_URL` | Your public address, for checkout return links, webhooks and links in Autopilot's emails. Vercel's domain is used if empty. |
+| `CRON_SECRET` | Lets Vercel Cron start Autopilot once a day. |
+
+All of them, with defaults and optional overrides, are in [.env.example](.env.example).
 
 ## The screens
 
@@ -41,10 +50,13 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 |---|---|
 | **Today** | Greeting, a "find clients" search box, pipeline value, recurring revenue, hot leads, a "do next" list and agent activity. |
 | **Find clients** | Pick a niche, a province or state, and a city: every Canadian province and territory and every US state, each with its main cities, plus "Other city or town" and "Somewhere else" for anywhere. Places are looked up inside their country, so London, ON never lands in England. Results come from Rainmaker's own finder (below). Each result shows an opportunity score (0–100) and the gaps you can sell against. Filter by "No website", "No online booking", "Not running ads", "Few reviews" and more, then add the best ones to the pipeline in one click. The side panel shows what one customer is worth in that niche, offers that convert, and sources. |
-| **Pipeline** | Drag-and-drop board (or list view). Click a lead for its website audit, Claude-written outreach (email + 3 follow-ups, text, DM, call script, 45-second video-audit script), sample ads, notes and tasks. |
+| **Pipeline** | Drag-and-drop board (or list view). Click a lead for its website audit, Claude-written outreach (email + 3 follow-ups, text, DM, call script, 45-second video-audit script), sample ads, notes and tasks. Its **Sell** section suggests what to pitch from the store (from the audit and niche), gives checkout links that tie a purchase to the lead, and builds a demo AI receptionist from their website with a private link to send them. |
 | **Inbox** | Every message an agent writes lands here. Edit, then send (Resend), open in your mail or Messages app, or mark it sent. Tasks live here too. |
-| **Ad Studio** | Brief → campaign, with live feed and search-ad previews, character counters, a creative card you can restyle and download as a PNG in 3 sizes, a Google Ads Editor CSV export, and "copy all". |
+| **Ad Studio** | Brief → campaign, with live feed and search-ad previews, character counters, a creative card you can restyle and download as a PNG in 3 sizes, a Google Ads Editor CSV export, and "copy all". With ElevenLabs: custom AI art behind the creative card in the business's brand colours, and an **Audio** tab that records the audio-ad script as an MP3 in the voice you pick. |
 | **Agents** | Pick an agent, give it a goal, and watch each step live. Send follow-ups in the same session. Stop a run at any time. Each run shows its cost and links to the session in the Claude Console. |
+| **Autopilot** | Turn it on, pick cities and niches, choose what it does (demo receptionists, outreach, sample ads, art, follow-ups, onboarding, auto-send), and see every run's log. "Run now" runs it on the spot. |
+| **Sales** | Orders from the store: monthly recurring revenue, money collected this month, lifetime revenue, cancellations and unfinished checkouts. Each order shows its payment status and onboarding steps. Run or retry onboarding, open Stripe's billing portal for the client, cancel a subscription, or record a sale made outside the store. |
+| **Store & pricing** | Turn the store on, set every price and setup fee (with the margin at full usage beside each), hide products, pick the currency, yearly billing, headline and assistant name. Connect Stripe and PayPal webhooks with one button each, and sync the AI sales assistant. |
 | **Playbooks** | 13 client-finding plays from agency surveys and practitioner reports, niche cheat sheets, and a table of common GoHighLevel complaints next to what Rainmaker does instead. Every claim links to its source. |
 | **Settings** | Agency profile (agents read it every run), connection status, sample data. |
 
@@ -103,11 +115,55 @@ The tools:
 - Every call sets **server-side refusal fallback** (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`): if the model declines a request on policy grounds, the API retries on a fallback model inside the same call. Remove `FALLBACK` in `src/lib/claude/client.ts` to turn it off.
 - Platform limits are enforced after generation (Google headlines ≤30 characters, descriptions ≤90, Meta headlines ≤40), and the UI shows counters.
 
+## Sell ElevenLabs services: the store
+
+The store sells what ElevenLabs makes possible as **your agency's done-for-you services**: you build and run the AI, the client pays you monthly. It never resells ElevenLabs credits or uses ElevenLabs as your brand; [docs/pricing.md](docs/pricing.md) explains why, with the terms quoted.
+
+**Public pages** (no sign-in, even with `APP_PASSWORD`; the CRM stays locked):
+- `/store`: the sales page. Three plans with a monthly/yearly switch, all 18 products by category (AI agents, content, business tools, marketing), how it works, a comparison with do-it-yourself platforms, and an FAQ. Signed-out visitors to `/` land here.
+- `/store/<product>`: one page per product: what it does, what's included each month, how it works, who it's for, an example, price, setup fee and FAQ.
+- `/store/thanks`, `/store/terms` (terms and refunds), `/store/privacy`.
+- `/demo/<token>`: a prospect's private demo receptionist (hidden from search engines).
+
+**The AI sales assistant.** Visitors can talk to it ("Talk to Ava") or type ("Chat instead") on every store page. It's an ElevenLabs agent with six tools that run in the visitor's browser: it reads the live catalog and prices (so it never quotes an old price), puts a product on screen, opens checkout, saves the visitor as a lead in your pipeline (after asking permission), and opens your booking link (Settings → Booking link). The agent is private: the browser gets a one-conversation token from the server, and each network is rate-limited.
+- Its prompt and tools are in `src/lib/elevenlabs/sales-spec.ts`. **Store & pricing → AI sales assistant → Sync prompt and tools** pushes them to ElevenLabs, or creates the agent if your key belongs to another workspace.
+- The agent is already built in this agency's ElevenLabs workspace (`agent_2301m80gw6zvekktsm8d0sr9gwe3`: Claude Sonnet 5.5 as its LLM, the "Amber" voice, and it only accepts conversations started with a token from your server). Five tests (loads the catalog before quoting a price, fetches a product's details, opens checkout, refuses card numbers in chat, promises no results) passed 10 of 10 runs. They're attached to the agent, so you can rerun them in ElevenLabs.
+
+**Checkout.** The buyer picks monthly or yearly, enters their business name, name, phone, email and website, then pays:
+- **Card, through Stripe Checkout:** a subscription for the monthly or yearly price, with the setup fee added to the first invoice. Nothing to set up in Stripe's product catalog: each checkout carries its own price.
+- **PayPal:** Rainmaker creates the PayPal product and billing plan the first time (setup fee included), then sends the buyer to PayPal to approve.
+- **Webhooks** (signature-checked, each event handled once) mark the order paid, record renewals, flag failed payments and cancellations, move the lead to Won and start onboarding.
+
+**After someone pays,** Rainmaker onboards them by itself (or from **Sales**):
+1. Builds their AI agent from their website, or turns the demo receptionist they tried into their real one.
+2. Writes their launch ad campaign, with custom art.
+3. Adds their onboarding checklist to your Inbox: the steps that need a person, such as forwarding their phone line and assigning it to their agent in ElevenLabs, or collecting written consent for a voice clone.
+4. Sends the welcome email.
+
+**Connect payments:**
+1. Add `STRIPE_SECRET_KEY`, and/or `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`, to your hosting's environment variables and redeploy. Start with test keys (Stripe `sk_test_…`, a PayPal sandbox app): the store shows a test-mode banner and no real money moves.
+2. In **Store & pricing → Payments**, press **Connect webhook** for each. Rainmaker registers `https://YOUR-SITE/api/payments/stripe/webhook` and `https://YOUR-SITE/api/payments/paypal/webhook` and keeps the signing secret. This needs the app on a public https address.
+3. Buy a plan with Stripe's test card `4242 4242 4242 4242` (any future date, any CVC) or a PayPal sandbox buyer. The order appears in **Sales**.
+4. Swap in live keys (and set `PAYPAL_MODE=live`), redeploy, and press **Connect webhook** again.
+
+**Prices.** Launch $297/mo + $497 setup, Growth $597/mo + $997 setup, Scale $1,297/mo + $1,997 setup; products from $49 to $397 a month. Yearly billing is 10 months' price for 12, with the setup fee waived. At full included usage, the gross margin is 69–99% (Scale is the lowest). Change any price in **Store & pricing**; the full table, unit costs and sources are in [docs/pricing.md](docs/pricing.md).
+
+## Autopilot
+
+Once a day (Vercel Cron calls `/api/cron/autopilot` at 13:17 UTC with your `CRON_SECRET`; see `vercel.json`), or whenever you press **Run now**, Autopilot:
+1. Searches the next niche and city in rotation, audits each website, and saves the businesses above your minimum score.
+2. For the best few new leads: builds a demo AI receptionist from their website (a private link, up to 12 conversations a day), writes a personal email and a 3-step follow-up sequence pitching the product their audit points to, and builds a sample ad campaign with custom art in their brand colours.
+3. Drafts follow-ups on days 3, 7 and 14 until they reply, and a nudge to anyone who started checkout but didn't finish.
+4. Onboards new paying clients (above).
+5. Emails you a summary.
+
+Everything waits in your Inbox for approval unless you turn on auto-send. Auto-send is email only. It needs Resend and your postal address in Settings, only sends emails that include that address and an opt-out line and have no `[placeholders]` left, and stops at your daily cap. Autopilot never calls or texts anyone.
+
 ## Use it on your Android phone
 
 Rainmaker installs on Android as an app: Chrome adds it to your home screen and app drawer, and it opens full screen like a normal app. Your phone needs to reach it over the internet, so you host it once (free tiers work). You can do every step below from your phone's browser.
 
-**1. Put the code on your default branch.** Vercel deploys a repository's default branch (in this repo, `ccr-e923554b-5tyguk`). Merge the `ccr-461324e6-fulfni` branch into it on GitHub. The pull request page has a Merge button.
+**1. Put the code on your default branch.** Vercel deploys a repository's default branch (in this repo, `ccr-e923554b-5tyguk`). Merge the `ccr-1339edef-a0joj9` branch into it on GitHub with a pull request. The pull request page has a Merge button.
 
 **2. Create a Vercel project for Rainmaker.**
 - On vercel.com, choose **Add New → Project**, import the `speechify` repository, and set **Root Directory** to `rainmaker`.
@@ -115,6 +171,9 @@ Rainmaker installs on Android as an app: Chrome adds it to your home screen and 
   - `APP_PASSWORD`: pick a password. Required, because anyone could open the site without it.
   - `ANTHROPIC_API_KEY`: switches on Claude for ads, emails and agents. Optional.
   - `GOOGLE_PLACES_API_KEY`: adds ratings and review counts to search. Optional.
+  - `ELEVENLABS_API_KEY`: the store's AI sales assistant, demo receptionists, voiceovers and ad art. Optional.
+  - `STRIPE_SECRET_KEY`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`: take payments in the store. Optional; see "Connect payments" above.
+  - `CRON_SECRET`: any long random string, so Autopilot runs every day. Optional.
 - Tap **Deploy**.
 - If opening the site shows a Vercel sign-in page instead of Rainmaker's, Vercel's own login wall is on. New projects put it in front of `.vercel.app` addresses too. In the project, open **Settings → Deployment Protection** and limit **Vercel Authentication** to preview deployments, or turn it off. `APP_PASSWORD` still locks the app.
 
@@ -166,9 +225,10 @@ On Vercel's free plan, each agent run is limited to 5 minutes, which covers typi
 ## Not built yet
 
 Rainmaker is deliberately smaller than GoHighLevel. It does **not** have:
-- A phone system or SMS sending
-- Funnels or a website builder, calendars or booking pages, payments, or membership sites
-- White-label or SaaS reselling
+- A phone system or SMS sending. AI receptionists answer calls through ElevenLabs; you connect the phone numbers (yours or Twilio's) in ElevenLabs, from the onboarding checklist.
+- Funnels or a website builder, calendars or booking pages, invoices or one-off payment links, or membership sites. Payments cover the store's subscriptions only.
+- White-label or SaaS reselling of the software itself. The store sells your services, not Rainmaker logins.
+- A client portal. Clients manage card billing in Stripe's billing portal (you open it from Sales) and PayPal billing in PayPal.
 - A Play Store app (it installs from Chrome as an app; [PWABuilder](https://www.pwabuilder.com) can package it for the Play Store if you want one)
 - Multi-user accounts (one shared password)
 
@@ -178,15 +238,22 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 54 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes
+npm test          # 77 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes, the store catalog and margins, yearly pricing and price overrides, Stripe form encoding and webhook signatures, sales stats, onboarding plans, Autopilot's targeting, follow-up timing and auto-send rules, and which pages are public
 npm run build
 ```
 
 Project layout:
 
 ```
-src/app/                 pages (Today, prospects, pipeline, inbox, ads, agents, playbooks, settings) + api/ routes
+src/app/                 pages (Today, prospects, pipeline, inbox, ads, agents, autopilot, sales, sell, playbooks, settings) + api/ routes
+src/app/store/           the public store: home, product pages, thanks, terms, privacy (store.css is its stylesheet)
+src/app/demo/            a prospect's private demo receptionist
 src/components/          UI (Sidebar, ProspectFinder, Board + LeadDrawer, Inbox, AdStudio + Creative, AgentConsole, …)
+src/components/store/    store UI: the AI assistant (ElevenLabs React SDK), checkout, plan and product cards
+src/lib/catalog.ts       what the store sells: plans, products, prices, unit costs, margins, recommendations
+src/lib/payments/        Stripe and PayPal (REST, no SDKs), orders, webhooks, onboarding after payment
+src/lib/elevenlabs/      agents (sales assistant, receptionists, demos), text to speech, image art
+src/lib/autopilot/       the daily run: plan.ts decides (pure, tested), run.ts does
 src/lib/prospecting/     OpenStreetMap + Google Places search, website audit, scoring
 src/lib/claude/          Claude client, ad campaigns, outreach, web research
 src/lib/agents/          agent roster, CRM tools, runtimes (Managed Agents, Messages API, demo)
@@ -195,4 +262,6 @@ src/lib/playbooks.ts     client-finding playbooks with sources
 src/lib/store.ts         storage: Postgres (DATABASE_URL) or a JSON file; repo.ts holds the domain operations
 src/app/manifest.ts      installable app (PWA): icons, shortcuts, share target; public/sw.js is the service worker
 docs/research.md         the research, with sources and caveats
+docs/pricing.md          store pricing: costs, margins, sources, ElevenLabs' terms, compliance
+vercel.json              the daily Autopilot schedule
 ```

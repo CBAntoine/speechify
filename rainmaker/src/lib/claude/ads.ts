@@ -44,7 +44,9 @@ export const CampaignSchema = z.object({
     badge: z.string(),
     cta: z.string(),
     palette: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }),
+    artPrompt: z.string(),
   }),
+  audio: z.object({ title: z.string(), script: z.string() }),
 });
 
 export type CampaignContent = z.infer<typeof CampaignSchema>;
@@ -86,7 +88,9 @@ Platform rules (hard limits; count characters):
 - Meta (Facebook/Instagram): write 3 ads, one per strategic angle. The first ${LIMITS.metaPrimary} characters of primary text must stand alone as the hook; total primary text under 450 characters. Headline at most ${LIMITS.metaHeadline} characters. Description at most ${LIMITS.metaDescription} characters.
 - Short video (Reels/TikTok/Shorts): write 2 scripts of 15 to 30 seconds. The hook must land in the first 2 seconds. Describe shots a small business can film on a phone.
 - Landing page: one headline, one subheadline, 3 to 5 benefit bullets and a button label that matches the goal.
-- Creative card (a static image the app renders): headline at most 6 words, subline at most 8 words, badge at most 4 words (a fact from the brief, or a placeholder), CTA at most 4 words. Palette: three hex colors (bg, fg, accent) where fg on bg has strong contrast; fit the niche (calm and clinical for health, bold for trades, warm for food).`;
+- Creative card (a static image the app renders): headline at most 6 words, subline at most 8 words, badge at most 4 words (a fact from the brief, or a placeholder), CTA at most 4 words. Palette: three hex colors (bg, fg, accent) where fg on bg has strong contrast; when the brief lists the business's brand colours, build the palette from them; otherwise fit the niche (calm and clinical for health, bold for trades, warm for food).
+- Art prompt (creative.artPrompt): one or two sentences describing a photo-style background image for this ad: the scene, the subject, the mood and the light, in the brand colours when given. It must describe a real-looking setting or product for this kind of business. No text, letters, logos or signage in the image; no real or named people; no before-and-after medical imagery.
+- Audio ad (audio): a 20 to 30 second radio, streaming or on-hold spot read by one voice: 55 to 80 spoken words, plain sentences only (no stage directions, no sound cues, no brackets except placeholders), the business name twice, the offer, and one clear call to action. Title it in 3 to 6 words.`;
 
 function brief(b: AdBrief, profile: AgencyProfile, niche: Niche | undefined): string {
   const lines: string[] = [];
@@ -109,6 +113,7 @@ function brief(b: AdBrief, profile: AgencyProfile, niche: Niche | undefined): st
     if (a.socials.length) lines.push(`- Social profiles: ${a.socials.join(", ")}`);
     const gaps = topSignals(deriveSignals({ website: b.website, audit: a, booking: niche?.booking }), 4);
     if (gaps.length) lines.push(`- Gaps: ${gaps.map((g) => g.label).join("; ")}`);
+    if (a.brandColors?.length) lines.push(`- Brand colours on their site: ${a.brandColors.join(", ")}`);
   }
   if (b.research) lines.push("", "RESEARCH NOTES:", b.research.slice(0, 4000));
   if (b.notes) lines.push("", `NOTES FROM THE AGENCY: ${b.notes}`);
@@ -262,9 +267,28 @@ export function templateCampaign(b: AdBrief): CampaignContent {
       subline: `${service} · ${city}`,
       badge: "[Your proof]",
       cta: cta === "Call Now" ? "Call today" : cta === "Get Quote" ? "Get a free quote" : "Book online",
-      palette: paletteFor(niche?.id),
+      palette: brandPalette(b.audit?.brandColors) ?? paletteFor(niche?.id),
+      artPrompt: "",
+    },
+    audio: {
+      title: `${service} offer spot`,
+      script: `Looking for a ${service.toLowerCase()} in ${city}? ${b.businessName} makes it easy. ${offer}. Friendly local team, clear pricing and fast scheduling. That's ${b.businessName}. ${cta === "Call Now" ? "Call today" : cta === "Get Quote" ? "Get your free quote today" : "Book online today"}.`,
     },
   });
+}
+
+/** A card palette from the business's own colours: their darkest colour as the background. */
+function brandPalette(colors: string[] | undefined): { bg: string; fg: string; accent: string } | undefined {
+  const hex = (colors ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c));
+  if (!hex.length) return undefined;
+  const lum = (c: string) => {
+    const n = parseInt(c.slice(1), 16);
+    return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+  };
+  const sorted = [...hex].sort((a, b) => lum(a) - lum(b));
+  const bg = lum(sorted[0]) < 110 ? sorted[0] : "#14161c";
+  const accent = sorted.find((c) => c !== bg) ?? sorted[sorted.length - 1];
+  return { bg, fg: "#ffffff", accent: accent === bg ? "#ffb020" : accent };
 }
 
 export function toCampaign(content: CampaignContent, b: AdBrief, createdBy: string): Omit<AdCampaign, "id" | "createdAt"> {

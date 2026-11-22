@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyzeHtml } from "../src/lib/prospecting/analyze.ts";
+import { analyzeHtml, brandColors } from "../src/lib/prospecting/analyze.ts";
 
 const NOW = new Date("2026-11-20T12:00:00Z");
 
@@ -72,4 +72,12 @@ test("a bare 'book now' link counts as booking when no known widget is found", (
 test("ignores Facebook share/plugin links when listing socials", () => {
   const a = analyzeHtml({ html: "<a href='https://www.facebook.com/sharer/sharer.php?u=x'>share</a>", url: "https://x.example", status: 200, now: NOW });
   assert.deepEqual(a.socials, []);
+});
+
+test("brand colours: theme-color first, then the most used colourful CSS values, never greys", () => {
+  const html = `<meta name="theme-color" content="#0A7">
+    <style>.a{color:#ffffff;background:#333}.b{color:#e63946}.c{border-color:#E63946}.d{color:#1d3557}</style>
+    <div style="background:#1d3557;color:#f1faee"></div><div style="color:#1d3557"></div>`;
+  assert.deepEqual(brandColors(html), ["#00aa77", "#1d3557", "#e63946"]);
+  assert.deepEqual(brandColors("<p>plain</p>"), []);
 });

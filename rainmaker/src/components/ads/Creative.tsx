@@ -55,8 +55,8 @@ function luminance(hex: string) {
 
 const FONT = "Inter Variable, Inter, Helvetica Neue, Arial, sans-serif";
 
-export const CreativeSvg = forwardRef<SVGSVGElement, { creative: Creative; business: string; size?: CreativeSize; template?: CreativeTemplate; className?: string }>(
-  function CreativeSvg({ creative, business, size = "square", template = "bold", className }, ref) {
+export const CreativeSvg = forwardRef<SVGSVGElement, { creative: Creative; business: string; size?: CreativeSize; template?: CreativeTemplate; className?: string; art?: string }>(
+  function CreativeSvg({ creative, business, size = "square", template = "bold", className, art }, ref) {
     const { w, h } = SIZES[size];
     const p = safe(creative.palette);
     const onAccent = luminance(p.accent) > 0.45 ? "#111111" : "#ffffff";
@@ -100,10 +100,25 @@ export const CreativeSvg = forwardRef<SVGSVGElement, { creative: Creative; busin
           </radialGradient>
         </defs>
         <rect width={w} height={h} fill={p.bg} />
-        <rect width={w} height={h} fill={`url(#${id}-bg)`} />
-        {template !== "minimal" && <rect width={w} height={h} fill={`url(#${id}-glow)`} />}
-        {template === "split" && !story && <rect x={w * 0.62} y={0} width={w * 0.38} height={h} fill={p.accent} opacity="0.92" />}
-        {template === "split" && story && <rect x={0} y={h * 0.7} width={w} height={h * 0.3} fill={p.accent} opacity="0.92" />}
+        {art ? (
+          <>
+            {/* Custom art fills the card; a scrim in the background colour keeps the text readable. */}
+            <defs>
+              <linearGradient id={`${id}-scrim`} x1="0" y1="0" x2={story ? "0" : "1"} y2={story ? "1" : "0"}>
+                <stop offset="0" stopColor={p.bg} stopOpacity={story ? "0.88" : "0.94"} />
+                <stop offset={story ? "0.55" : "0.5"} stopColor={p.bg} stopOpacity="0.55" />
+                <stop offset="1" stopColor={p.bg} stopOpacity={story ? "0.9" : "0.05"} />
+              </linearGradient>
+            </defs>
+            <image href={art} x="0" y="0" width={w} height={h} preserveAspectRatio="xMidYMid slice" />
+            <rect width={w} height={h} fill={`url(#${id}-scrim)`} />
+          </>
+        ) : (
+          <rect width={w} height={h} fill={`url(#${id}-bg)`} />
+        )}
+        {template !== "minimal" && !art && <rect width={w} height={h} fill={`url(#${id}-glow)`} />}
+        {template === "split" && !story && !art && <rect x={w * 0.62} y={0} width={w * 0.38} height={h} fill={p.accent} opacity="0.92" />}
+        {template === "split" && story && !art && <rect x={0} y={h * 0.7} width={w} height={h * 0.3} fill={p.accent} opacity="0.92" />}
         {template === "bold" &&
           Array.from({ length: 9 }, (_, i) => (
             <circle key={i} cx={w - pad - (i % 3) * 46} cy={pad + 10 + Math.floor(i / 3) * 46} r="9" fill={p.accent} opacity={0.5 - i * 0.04} />
@@ -149,11 +164,31 @@ export const CreativeSvg = forwardRef<SVGSVGElement, { creative: Creative; busin
   }
 );
 
+/** An SVG drawn into a canvas can't load outside images, so embed them first. */
+async function inlineImages(svg: SVGSVGElement) {
+  for (const img of Array.from(svg.querySelectorAll("image"))) {
+    const href = img.getAttribute("href");
+    if (!href || href.startsWith("data:")) continue;
+    const blob = await fetch(href).then((r) => {
+      if (!r.ok) throw new Error("Couldn't load the ad art");
+      return r.blob();
+    });
+    const data = await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = () => reject(new Error("Couldn't read the ad art"));
+      fr.readAsDataURL(blob);
+    });
+    img.setAttribute("href", data);
+  }
+}
+
 /** Render an SVG element to a PNG blob at full size. */
 export async function renderPng(svg: SVGSVGElement, width: number, height: number): Promise<Blob> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
+  await inlineImages(clone);
   const xml = new XMLSerializer().serializeToString(clone);
   const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
   try {

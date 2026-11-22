@@ -40,7 +40,12 @@ export async function verifySession(value: string | undefined, password: string)
   return safeEqual(sig, await sign(password, `rm1.${exp}`));
 }
 
-/** Paths anyone may load: the sign-in page and what installing the app needs. */
+/**
+ * Paths anyone may load: the sign-in page, what installing the app needs,
+ * the public storefront and prospect demo pages, and the endpoints those
+ * call. Each public API protects itself (rate limits, webhook signatures,
+ * CRON_SECRET); everything else needs the sign-in.
+ */
 export function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
@@ -50,6 +55,15 @@ export function isPublicPath(pathname: string): boolean {
     pathname === "/offline.html" ||
     pathname === "/icon.svg" ||
     pathname === "/favicon.ico" ||
-    pathname.startsWith("/icons/")
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname.startsWith("/icons/") ||
+    pathname === "/store" ||
+    pathname.startsWith("/store/") ||
+    pathname.startsWith("/demo/") ||
+    pathname.startsWith("/api/store/") ||
+    pathname === "/api/payments/stripe/webhook" ||
+    pathname === "/api/payments/paypal/webhook" ||
+    pathname.startsWith("/api/cron/")
   );
 }

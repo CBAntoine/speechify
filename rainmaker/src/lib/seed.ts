@@ -2,9 +2,15 @@
 // sample workspace so every screen has something to show. Sample businesses
 // are fictional and use reserved ".example" domains.
 
-import type { AdCampaign, AgencyProfile, AuditResult, Db, Draft, Lead, Stage, Task, Activity } from "./types.ts";
+import type { AdCampaign, AgencyProfile, AuditResult, Db, Draft, Lead, PaymentsState, Stage, Task, Activity } from "./types.ts";
 import { deriveSignals, scoreProspect } from "./prospecting/score.ts";
 import { getNiche } from "./niches.ts";
+import { DEFAULT_STORE } from "./catalog.ts";
+import { defaultAutopilot } from "./autopilot/plan.ts";
+
+export function defaultPayments(): PaymentsState {
+  return { stripe: {}, paypal: { products: {}, plans: {} }, seenEvents: [] };
+}
 
 export function defaultProfile(): AgencyProfile {
   return {
@@ -374,6 +380,10 @@ export function seedDb(opts: { withSamples: boolean }): Db {
     runs: [],
     activity: samples ? sampleActivity() : [],
     managed: { agents: {} },
+    orders: [],
+    store: structuredClone(DEFAULT_STORE),
+    payments: defaultPayments(),
+    autopilot: defaultAutopilot(),
     seeded: true,
   };
 }

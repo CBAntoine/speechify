@@ -13,7 +13,7 @@ export const STAGES: { id: Stage; label: string; hint: string }[] = [
   { id: "lost", label: "Lost", hint: "Not now" },
 ];
 
-export type LeadSource = "google_places" | "openstreetmap" | "open_data" | "web" | "manual" | "agent" | "sample";
+export type LeadSource = "google_places" | "openstreetmap" | "open_data" | "web" | "manual" | "agent" | "sample" | "store";
 
 export type Severity = "high" | "medium" | "low" | "info";
 
@@ -58,6 +58,10 @@ export interface AuditResult {
   phones: string[];
   /** The site's robots.txt asks automated visitors not to read it, so it wasn't audited. */
   robotsBlocked?: boolean;
+  /** Brand colours found on the site (theme-color first, then the most used), as #rrggbb. */
+  brandColors?: string[];
+  /** The page's social share image, useful as a style reference for ad art. */
+  ogImage?: string;
   error?: string;
 }
 
@@ -93,6 +97,30 @@ export interface Lead {
   createdAt: string;
   updatedAt: string;
   lastContactAt?: string;
+  /** A demo AI receptionist built for this prospect from their website. */
+  demo?: DemoAgent;
+  /** The client's own ElevenLabs agent, once they pay. */
+  clientAgentId?: string;
+  /** Follow-up emails written with the first touch; autopilot drafts each when it's due. */
+  sequence?: SequenceStep[];
+}
+
+export interface SequenceStep {
+  /** Days after the first email was sent. */
+  dayOffset: number;
+  subject: string;
+  body: string;
+  draftedAt?: string;
+}
+
+export interface DemoAgent {
+  agentId: string;
+  /** Random token in the private demo link (/demo/<token>). */
+  token: string;
+  createdAt: string;
+  knowledgeBaseId?: string;
+  /** Voice sessions used today, to cap what a shared link can spend. */
+  usage?: { day: string; sessions: number };
 }
 
 /** A business found by search, before it is saved as a lead. */
@@ -174,6 +202,28 @@ export interface Creative {
   badge: string;
   cta: string;
   palette: { bg: string; fg: string; accent: string };
+  /** Prompt for custom background art (no text in the image; the card adds it). */
+  artPrompt?: string;
+}
+
+export type ArtSize = "square" | "story" | "landscape";
+
+/** Custom ad art made with the ElevenLabs Image & Video API and stored as an asset. */
+export interface ArtAsset {
+  assetId: string;
+  prompt: string;
+  model: string;
+  createdAt: string;
+}
+
+/** An audio ad or voiceover made with ElevenLabs text to speech. */
+export interface Voiceover {
+  id: string;
+  assetId: string;
+  voiceId: string;
+  voiceName?: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface AdCampaign {
@@ -210,6 +260,10 @@ export interface AdCampaign {
     cta: string;
   };
   creative: Creative;
+  /** A 20-30 second audio ad (radio, streaming, on-hold), spoken words only. */
+  audio?: { title: string; script: string };
+  art?: Partial<Record<ArtSize, ArtAsset>>;
+  voiceovers?: Voiceover[];
 }
 
 export interface Task {
@@ -278,6 +332,152 @@ export interface Activity {
   agentId?: string;
 }
 
+// ── Store, orders and payments ────────────────────────────────
+
+export type BillingInterval = "month" | "year";
+export type PaymentProvider = "stripe" | "paypal" | "manual";
+export type OrderStatus = "pending" | "active" | "past_due" | "canceled";
+
+export interface OrderPayment {
+  at: string;
+  /** Dollars. */
+  amount: number;
+  ref?: string;
+}
+
+export interface FulfillmentStep {
+  id: string;
+  label: string;
+  status: "todo" | "done" | "error" | "skipped";
+  detail?: string;
+  at?: string;
+}
+
+export interface Order {
+  id: string;
+  provider: PaymentProvider;
+  /** A plan or product id from the catalog. */
+  offerId: string;
+  offerName: string;
+  interval: BillingInterval;
+  /** Recurring price per interval, in dollars. */
+  amount: number;
+  setupFee: number;
+  currency: string;
+  status: OrderStatus;
+  email?: string;
+  name?: string;
+  business?: string;
+  phone?: string;
+  website?: string;
+  notes?: string;
+  /** Stripe checkout session id or PayPal subscription id. */
+  providerRef?: string;
+  subscriptionId?: string;
+  customerId?: string;
+  leadId?: string;
+  payments: OrderPayment[];
+  fulfillment?: { status: "queued" | "running" | "done" | "error"; steps: FulfillmentStep[]; updatedAt: string };
+  createdAt: string;
+  updatedAt: string;
+  activatedAt?: string;
+  canceledAt?: string;
+  /** When autopilot drafted an "abandoned checkout" nudge. */
+  nudgedAt?: string;
+}
+
+/** Owner overrides for one catalog offer. */
+export interface PriceOverride {
+  monthly?: number;
+  setup?: number;
+  hidden?: boolean;
+}
+
+export type StoreCurrency = "usd" | "cad" | "gbp" | "eur" | "aud";
+
+export interface StoreSettings {
+  /** Public storefront switched on. */
+  enabled: boolean;
+  /** Prices on the store are in this currency (Stripe and PayPal charge in it). */
+  currency: StoreCurrency;
+  headline: string;
+  subheadline: string;
+  /** Name the AI sales assistant introduces itself with. */
+  assistantName: string;
+  /** Mention that products are built on ElevenLabs technology (plain text, no logos). */
+  showEngine: boolean;
+  /** Offer annual billing (10 months' price for 12). */
+  annual: boolean;
+  /** Waive setup fees when paying yearly. */
+  waiveSetupOnAnnual: boolean;
+  /** Extra minutes beyond what a plan includes, $ per minute (shown on the store). */
+  overagePerMinute: number;
+  prices: Record<string, PriceOverride>;
+  /** The sales assistant Rainmaker created or synced in ElevenLabs. */
+  salesAgent?: { agentId: string; toolIds: Record<string, string>; syncedAt: string };
+}
+
+export interface PaymentsState {
+  stripe: { webhookId?: string; webhookSecret?: string; webhookUrl?: string };
+  paypal: { webhookId?: string; webhookUrl?: string; products: Record<string, string>; plans: Record<string, string> };
+  /** Webhook event ids already handled (providers retry deliveries). */
+  seenEvents: string[];
+}
+
+// ── Autopilot ─────────────────────────────────────────────────
+
+export interface AutopilotConfig {
+  enabled: boolean;
+  /** Cities to prospect, in rotation, e.g. "Mississauga, ON". */
+  cities: string[];
+  /** Niche ids to prospect, in rotation. Empty = the agency's target niches. */
+  niches: string[];
+  /** New businesses to look at per run. */
+  leadsPerRun: number;
+  /** Only save businesses scoring at least this. */
+  minScore: number;
+  /** Personalized work (outreach, demo, ads) for at most this many new leads per run. */
+  personalizePerRun: number;
+  draftOutreach: boolean;
+  buildDemos: boolean;
+  buildAds: boolean;
+  makeArt: boolean;
+  followUps: boolean;
+  /** Send approved-quality emails without waiting for a human (email only, never texts or calls). */
+  autoSend: boolean;
+  dailySendCap: number;
+  fulfillOrders: boolean;
+  /** Email the owner a summary after each run. */
+  emailSummary: boolean;
+}
+
+export interface AutopilotLogLine {
+  kind: "prospect" | "outreach" | "demo" | "ads" | "art" | "followup" | "fulfill" | "send" | "info" | "error";
+  text: string;
+  leadId?: string;
+  orderId?: string;
+}
+
+export interface AutopilotRun {
+  id: string;
+  trigger: "cron" | "manual";
+  startedAt: string;
+  endedAt?: string;
+  status: "running" | "done" | "error";
+  lines: AutopilotLogLine[];
+  counts: { found: number; saved: number; drafted: number; demos: number; ads: number; sent: number; fulfilled: number };
+}
+
+export interface AutopilotState {
+  config: AutopilotConfig;
+  /** Position in the niche × city rotation. */
+  cursor: number;
+  /** A run holds this until it finishes, so two runs never overlap. */
+  lockUntil?: string;
+  sent: { day: string; count: number };
+  runs: AutopilotRun[];
+}
+
 export interface ManagedAgentRecord {
   id: string;
   version: number;
@@ -299,5 +499,9 @@ export interface Db {
   };
   /** Run ids someone asked to stop (works across server instances). */
   stopRequests?: string[];
+  orders: Order[];
+  store: StoreSettings;
+  payments: PaymentsState;
+  autopilot: AutopilotState;
   seeded: boolean;
 }

@@ -8,6 +8,7 @@ import { api, CopyButton, Drawer, useToast } from "@/components/client";
 import { shareOrCopy, useCanShare } from "@/components/pwa";
 import { topSignals } from "@/lib/prospecting/score";
 import { AuditDetails, SignalList } from "@/components/AuditDetails";
+import { SellPanel } from "./SellPanel";
 import { DynIcon, ScoreRing, TierBadge } from "@/components/ui";
 import { timeAgo, money } from "@/lib/format";
 import { STAGES, type AdCampaign, type Channel, type Draft, type Lead } from "@/lib/types";
@@ -247,6 +248,7 @@ export function LeadDrawer({
               </div>
               <SignalList signals={lead.signals} />
             </section>
+            <SellPanel lead={lead} onChange={(l) => onChange(l)} />
             {lead.audit && (
               <section>
                 <div className="section-title">Website check</div>

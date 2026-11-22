@@ -23,6 +23,9 @@ export function trimDb(db: Db) {
   if (db.runs.length > 40) db.runs = db.runs.slice(0, 40);
   for (const r of db.runs) if (r.events.length > 400) r.events = r.events.slice(-400);
   if (db.stopRequests && db.stopRequests.length > 50) db.stopRequests = db.stopRequests.slice(-50);
+  if (db.payments?.seenEvents && db.payments.seenEvents.length > 300) db.payments.seenEvents = db.payments.seenEvents.slice(-300);
+  if (db.autopilot?.runs && db.autopilot.runs.length > 30) db.autopilot.runs = db.autopilot.runs.slice(0, 30);
+  for (const r of db.autopilot?.runs ?? []) if (r.lines.length > 200) r.lines = r.lines.slice(-200);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

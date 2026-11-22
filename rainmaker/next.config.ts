@@ -20,8 +20,9 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          // Location is used by "near me" search; nothing else.
-          { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=()" },
+          // Location is used by "near me" search; the microphone by the store's
+          // voice assistant and prospect demo pages. Nothing else.
+          { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(self)" },
         ],
       },
       {

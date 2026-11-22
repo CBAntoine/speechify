@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, Clapperboard, Download, Share2, FileText, Image as ImageIcon, LayoutTemplate, LoaderCircle, Megaphone, Search,
+  Check, Clapperboard, Download, Share2, FileText, Image as ImageIcon, LayoutTemplate, LoaderCircle, Megaphone, Mic, Search,
   Sparkles, Target, Trash, Wand, X,
 } from "lucide-react";
 import { api, CopyButton, download, useToast } from "@/components/client";
@@ -12,12 +12,13 @@ import { campaignIssues, campaignText, googleAdsCsv, LIMITS } from "@/lib/ads/li
 import { timeAgo } from "@/lib/format";
 import type { AdCampaign, Creative } from "@/lib/types";
 import { CreativeSvg, downloadPng, sharePng, SIZES, type CreativeSize, type CreativeTemplate } from "./Creative";
+import { ArtControls, AudioTab } from "./Media";
 import { shareOrCopy, useCanShare } from "@/components/pwa";
 import { Counter, FeedPreview, SearchPreview } from "./Previews";
 
 type LeadLite = { id: string; name: string; niche: string; city?: string; website?: string };
 type NicheLite = { id: string; label: string; offers: string[]; booking: boolean };
-type Tab = "overview" | "meta" | "google" | "video" | "landing" | "creative";
+type Tab = "overview" | "meta" | "google" | "video" | "landing" | "creative" | "audio";
 
 const GOALS = ["Book more appointments", "Get more phone calls", "Get more quote requests", "Fill a promotion or event", "Get more online orders"];
 
@@ -27,12 +28,14 @@ export function AdStudio({
   campaigns: initialCampaigns,
   initial,
   claude,
+  elevenlabs = false,
 }: {
   leads: LeadLite[];
   niches: NicheLite[];
   campaigns: AdCampaign[];
   initial: { leadId?: string; business?: string; niche?: string; location?: string; website?: string; campaignId?: string };
   claude: boolean;
+  elevenlabs?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -74,6 +77,12 @@ export function AdStudio({
   function pickLead(id: string) {
     const l = leads.find((x) => x.id === id);
     setBrief((b) => (l ? { ...b, leadId: l.id, businessName: l.name, niche: l.niche, location: l.city ?? b.location, website: l.website ?? "" } : { ...b, leadId: "" }));
+  }
+
+  /** A campaign changed on the server (new art or voiceover): keep the list and the open one in sync. */
+  function updateCampaign(c: AdCampaign) {
+    setCampaigns((cs) => cs.map((x) => (x.id === c.id ? c : x)));
+    setCampaign(c);
   }
 
   function open(c: AdCampaign) {
@@ -335,6 +344,7 @@ export function AdStudio({
                     ["google", "Google search", Search],
                     ["video", "Short video", Clapperboard],
                     ["creative", "Creative", ImageIcon],
+                    ["audio", "Audio ad", Mic],
                     ["landing", "Landing page", LayoutTemplate],
                     ["overview", "Strategy", Target],
                   ] as const
@@ -563,10 +573,12 @@ export function AdStudio({
               </div>
             )}
 
+            {tab === "audio" && <AudioTab campaign={campaign} enabled={elevenlabs} onUpdate={updateCampaign} />}
+
             {tab === "creative" && cr && (
               <div className="grid-2 wide-left">
                 <div className="creative-wrap" style={{ maxWidth: size === "story" ? 360 : undefined, justifySelf: "center", width: "100%" }}>
-                  <CreativeSvg ref={svgRef} creative={cr} business={campaign.businessName} size={size} template={template} />
+                  <CreativeSvg ref={svgRef} creative={cr} business={campaign.businessName} size={size} template={template} art={campaign.art?.[size] ? `/api/assets/${campaign.art[size]!.assetId}` : undefined} />
                 </div>
                 <div className="card card-pad stack">
                   <div className="row wrap">
@@ -624,8 +636,9 @@ export function AdStudio({
                     </button>
                   </div>
                   <div className="faint small">
-                    <FileText size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Downloads at full size ({SIZES[size].w}×{SIZES[size].h}). Swap in a real photo of the business in your ad tool for best results.
+                    <FileText size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Downloads at full size ({SIZES[size].w}×{SIZES[size].h}).
                   </div>
+                  <ArtControls campaign={campaign} size={size} enabled={elevenlabs} onUpdate={updateCampaign} />
                 </div>
               </div>
             )}

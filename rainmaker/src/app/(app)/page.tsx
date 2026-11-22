@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, TrendingUp, UserPlus } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleAlert, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, Store, TrendingUp, UserPlus, Zap } from "lucide-react";
 import { InstallBanner } from "@/components/today/InstallBanner";
 import { QuickStart } from "@/components/today/QuickStart";
 import { AgentAvatar, Empty, PageHead, ScoreRing, Stat } from "@/components/ui";
@@ -7,6 +7,8 @@ import { AGENTS } from "@/lib/agents/roster";
 import { listRuns } from "@/lib/agents/runner";
 import { integrations } from "@/lib/config";
 import { dueLabel, greeting, money, timeAgo } from "@/lib/format";
+import { dollars } from "@/lib/catalog";
+import { salesStats } from "@/lib/payments/encode";
 import { NICHES, getNiche } from "@/lib/niches";
 import { readDb } from "@/lib/store";
 import { STAGES } from "@/lib/types";
@@ -42,7 +44,13 @@ export default async function Today() {
   const total = Math.max(1, byStage.reduce((a, s) => a + s.n, 0));
   const leadName = (id?: string) => leads.find((l) => l.id === id)?.name;
 
+  const sales = salesStats(db.orders);
+  const lastRun = db.autopilot.runs[0];
   const doNext: { href: string; icon: React.ReactNode; title: string; sub: string; tone: string }[] = [];
+  for (const o of db.orders.filter((x) => x.status === "past_due").slice(0, 2))
+    doNext.push({ href: "/sales", icon: <CircleAlert size={15} />, title: `Payment failed: ${o.business ?? o.email ?? "a client"}`, sub: `${o.offerName}. Check in before it cancels.`, tone: "var(--hot)" });
+  for (const o of db.orders.filter((x) => x.status === "active" && x.fulfillment?.status === "error").slice(0, 2))
+    doNext.push({ href: "/sales", icon: <CircleAlert size={15} />, title: `Finish onboarding ${o.business ?? o.email ?? "a client"}`, sub: "A setup step needs you", tone: "var(--warm)" });
   if (pending.length)
     doNext.push({ href: "/inbox", icon: <Inbox size={15} />, title: `Approve ${pending.length} message${pending.length > 1 ? "s" : ""}`, sub: "Your agents drafted them. Nothing goes out until you say so.", tone: "var(--hot)" });
   for (const t of dueSoon.slice(0, 3)) {
@@ -106,6 +114,40 @@ export default async function Today() {
         <Stat icon={<Flame size={15} />} label="Hot leads" value={hot.length} sub="New, score 70+" tone="hot" />
         <Stat icon={<Inbox size={15} />} label="Waiting on you" value={pending.length + dueSoon.length} sub={`${pending.length} drafts, ${dueSoon.length} tasks due`} tone="violet" />
       </div>
+
+      <section className="card" style={{ marginBottom: 18 }}>
+        <div className="card-head">
+          <h2>Selling</h2>
+          <div className="row" style={{ gap: 6 }}>
+            <Link href="/sell" className="btn ghost sm">
+              <Store size={14} /> Store
+            </Link>
+            <Link href="/autopilot" className="btn ghost sm">
+              <Zap size={14} /> Autopilot
+            </Link>
+          </div>
+        </div>
+        <div className="card-body grid-3" style={{ gap: 14 }}>
+          <Link href="/sales" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Store revenue</span>
+            <b style={{ fontSize: 20 }}>{dollars(sales.mrr, { currency: db.store.currency })}/mo</b>
+            <span className="muted small">
+              {sales.active} active client{sales.active === 1 ? "" : "s"}
+              {sales.pending ? ` · ${sales.pending} unfinished checkout${sales.pending === 1 ? "" : "s"}` : ""}
+            </span>
+          </Link>
+          <Link href="/sales" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Collected this month</span>
+            <b style={{ fontSize: 20 }}>{dollars(sales.revenueThisMonth, { currency: db.store.currency })}</b>
+            <span className="muted small">{sales.newThisMonth} new this month</span>
+          </Link>
+          <Link href="/autopilot" className="stack" style={{ gap: 2 }}>
+            <span className="faint small">Autopilot {db.autopilot.config.enabled ? "is on" : "is off"}</span>
+            <b style={{ fontSize: 20 }}>{lastRun ? `${lastRun.counts.saved} leads, ${lastRun.counts.drafted} drafts` : "Not run yet"}</b>
+            <span className="muted small">{lastRun ? `Last run ${timeAgo(lastRun.startedAt)}${lastRun.counts.demos ? ` · ${lastRun.counts.demos} demos` : ""}` : "Add cities and press Run now"}</span>
+          </Link>
+        </div>
+      </section>
 
       <div className="grid-2">
         <section className="card">

@@ -31,6 +31,7 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
           campaignId: one(sp.campaign),
         }}
         claude={integrations().claude}
+        elevenlabs={integrations().elevenlabs}
       />
     </div>
   );

@@ -129,3 +129,18 @@ export function RainMark({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+
+/** An on/off switch with a label and an optional hint underneath. */
+export function Switch({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; hint?: ReactNode; disabled?: boolean }) {
+  return (
+    <label className="toggle-row">
+      <span>
+        <b>{label}</b>
+        {hint && <small>{hint}</small>}
+      </span>
+      <span className="switch">
+        <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      </span>
+    </label>
+  );
+}

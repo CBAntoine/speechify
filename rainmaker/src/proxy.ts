@@ -13,6 +13,13 @@ export async function proxy(request: NextRequest) {
   if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value, password)) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   const url = request.nextUrl.clone();
+  // Visitors who aren't signed in see the sales storefront at the root
+  // address; the team signs in from its footer.
+  if (pathname === "/") {
+    url.pathname = "/store";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   url.pathname = "/login";
   url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
   return NextResponse.redirect(url);
