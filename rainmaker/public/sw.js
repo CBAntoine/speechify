@@ -3,7 +3,7 @@
 //   live data), with an offline screen when there's no connection.
 // - Hashed build assets (/_next/static) are cached so the app opens fast.
 
-const VERSION = "rm-v1";
+const VERSION = "rm-v2";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/icon.svg"];
 

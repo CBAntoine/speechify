@@ -1,5 +1,6 @@
 import "server-only";
 import { newId, readDb, update } from "./store";
+import { deleteAssets } from "./assets";
 import { seedDb } from "./seed";
 import { getNiche } from "./niches";
 import { domainOf } from "./net";
@@ -251,8 +252,22 @@ export async function saveCampaign(c: Omit<AdCampaign, "id" | "createdAt"> & { i
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
-  await update((db) => {
-    db.campaigns = db.campaigns.filter((c) => c.id !== id);
+  const removed = await update((db) => {
+    const c = db.campaigns.find((x) => x.id === id);
+    db.campaigns = db.campaigns.filter((x) => x.id !== id);
+    return c;
+  });
+  const assets = [...Object.values(removed?.art ?? {}).map((a) => a?.assetId), ...(removed?.voiceovers ?? []).map((v) => v.assetId)].filter((x): x is string => Boolean(x));
+  await deleteAssets(assets).catch(() => undefined);
+}
+
+/** Change a saved campaign in place (art, voiceovers, creative edits) without logging a new campaign. */
+export async function patchCampaign(id: string, fn: (c: AdCampaign) => void): Promise<AdCampaign> {
+  return update((db) => {
+    const c = db.campaigns.find((x) => x.id === id);
+    if (!c) throw new Error("Campaign not found");
+    fn(c);
+    return structuredClone(c);
   });
 }
 

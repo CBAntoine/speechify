@@ -23,6 +23,8 @@ export function newId(prefix: string): string {
 
 function migrate(raw: Partial<Db>): Db {
   const base = seedDb({ withSamples: false });
+  const payments = raw.payments;
+  const autopilot = raw.autopilot;
   return {
     ...base,
     ...raw,
@@ -35,6 +37,20 @@ function migrate(raw: Partial<Db>): Db {
     runs: raw.runs ?? [],
     activity: raw.activity ?? [],
     stopRequests: raw.stopRequests ?? [],
+    orders: raw.orders ?? [],
+    store: { ...base.store, ...(raw.store ?? {}), prices: { ...(raw.store?.prices ?? {}) } },
+    payments: {
+      stripe: { ...(payments?.stripe ?? {}) },
+      paypal: { products: {}, plans: {}, ...(payments?.paypal ?? {}) },
+      seenEvents: payments?.seenEvents ?? [],
+    },
+    autopilot: {
+      ...base.autopilot,
+      ...(autopilot ?? {}),
+      config: { ...base.autopilot.config, ...(autopilot?.config ?? {}) },
+      sent: autopilot?.sent ?? base.autopilot.sent,
+      runs: autopilot?.runs ?? [],
+    },
     version: 1,
   };
 }

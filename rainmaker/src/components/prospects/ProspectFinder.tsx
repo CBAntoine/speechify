@@ -147,6 +147,34 @@ export function ProspectFinder({
     }
   }, [initial.go, initial.location, search]);
 
+  // The copilot asks for a search while this screen is already open.
+  const queued = useRef(false);
+  const [asked, setAsked] = useState(0);
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const d = (e as CustomEvent<{ niche?: string; location?: string }>).detail ?? {};
+      const want = (d.niche ?? "").trim().toLowerCase();
+      if (want) {
+        const hit = niches.find((n) => n.id === want || n.label.toLowerCase() === want || n.plural.toLowerCase() === want);
+        setNiche(hit ? hit.id : "custom");
+        setCustom(hit ? "" : (d.niche ?? "").trim());
+      }
+      if (d.location?.trim()) {
+        setNear(null);
+        setLocation(d.location.trim());
+      }
+      queued.current = true;
+      setAsked((n) => n + 1);
+    };
+    window.addEventListener("rm:prospect-search", onAsk);
+    return () => window.removeEventListener("rm:prospect-search", onAsk);
+  }, [niches]);
+  useEffect(() => {
+    if (!queued.current) return;
+    queued.current = false;
+    void search();
+  }, [asked, niche, custom, location, search]);
+
   const shown = useMemo(() => {
     const list = result?.prospects ?? [];
     return list.filter((p) => filters.every((f) => FILTERS.find((x) => x.id === f)!.test(p)));

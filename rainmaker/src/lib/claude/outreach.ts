@@ -26,7 +26,7 @@ Rules for every message:
 - Open with one specific thing you observed about THIS business (from the findings you are given). Never invent an observation, a visit, a mutual friend or a compliment you can't back up.
 - Connect that observation to money or customers they are losing, in one sentence.
 - Offer one small, concrete next step (a 2-minute video, a free mockup, a quick audit), not a meeting. The call to action is a yes/no question.
-- Email: 60 to 120 words, plain text, no links in the first email except the agency's calendar link if provided, no images, no attachments. Subject line under 50 characters, lowercase is fine, no clickbait, no "Re:" or "Fwd:" tricks.
+- Email: 60 to 120 words, plain text, no links in the first email except the agency's calendar link or a demo link given under WHAT TO OFFER, no images, no attachments. Subject line under 50 characters, lowercase is fine, no clickbait, no "Re:" or "Fwd:" tricks.
 - End every email with the sender's name and agency, the agency's postal address if given, and a one-line opt-out ("Not interested? Reply 'no' and I won't follow up.").
 - Write follow-ups as replies in the same thread: day 3 (new angle or free asset), day 7 (short social proof or a question), day 14 (polite breakup). Each under 70 words.
 - SMS: under 300 characters, identify the sender, include "Reply STOP to opt out". DM: under 400 characters, casual.
@@ -35,7 +35,27 @@ Rules for every message:
 - Never use: "I hope this finds you well", "quick question", "touch base", "synergy", "game-changer", ALL CAPS or more than one exclamation mark.
 - Match the agency's voice. Sign with the agency owner's name if given.`;
 
-function prompt(lead: Lead, profile: AgencyProfile, focus: Channel): string {
+/** What the agency's store recommends for this lead, and a demo built for them. */
+export interface OutreachPitch {
+  offerName?: string;
+  offerPrice?: string;
+  reason?: string;
+  demoUrl?: string;
+}
+
+function pitchLines(p: OutreachPitch | undefined): string[] {
+  if (!p || (!p.offerName && !p.demoUrl)) return [];
+  return [
+    "",
+    "WHAT TO OFFER:",
+    p.offerName ? `- The service that fits best: ${p.offerName}${p.offerPrice ? ` (${p.offerPrice}; don't put prices in a first email)` : ""}${p.reason ? `. Why it fits: ${p.reason}` : ""}` : "",
+    p.demoUrl
+      ? `- We already built them a free demo: an AI receptionist trained on their own website. Link: ${p.demoUrl}. Make listening to it the small next step ("Want to hear how it would answer your calls?"). Put the link in the first email on its own line.`
+      : "",
+  ].filter((l) => l !== "");
+}
+
+function prompt(lead: Lead, profile: AgencyProfile, focus: Channel, pitch?: OutreachPitch): string {
   const niche = getNiche(lead.niche);
   const gaps = topSignals(lead.signals, 4);
   const lines = [
@@ -61,20 +81,21 @@ function prompt(lead: Lead, profile: AgencyProfile, focus: Channel): string {
     profile.mailingAddress ? `- Postal address: ${profile.mailingAddress}` : "- Postal address: none given (write [agency postal address] in the email footer)",
     `- Voice: ${profile.voice}`,
     niche ? `\nNICHE CONTEXT: their usual pain points are: ${niche.painPoints.join("; ")}.` : "",
+    ...pitchLines(pitch),
     "",
     `Write the full sequence. The ${focus === "email" ? "email" : focus === "sms" ? "SMS" : focus === "dm" ? "DM" : "call script"} is the one they will use first, so make it the strongest.`,
   ];
   return lines.filter((l) => l !== "").join("\n");
 }
 
-export async function generateOutreach(lead: Lead, profile: AgencyProfile, focus: Channel = "email"): Promise<OutreachContent> {
+export async function generateOutreach(lead: Lead, profile: AgencyProfile, focus: Channel = "email", pitch?: OutreachPitch): Promise<OutreachContent> {
   const res = await claude().beta.messages.parse({
     model: MODEL,
     max_tokens: 16000,
     ...FALLBACK,
     output_config: { effort: "medium", format: betaZodOutputFormat(OutreachSchema) },
     system: SYSTEM,
-    messages: [{ role: "user", content: prompt(lead, profile, focus) }],
+    messages: [{ role: "user", content: prompt(lead, profile, focus, pitch) }],
   });
   if (res.stop_reason === "refusal") throw new RefusalError("Claude declined to write this message. Edit the lead notes and try again.");
   if (!res.parsed_output) throw new Error("Claude's reply didn't match the outreach format. Try again.");
@@ -82,7 +103,7 @@ export async function generateOutreach(lead: Lead, profile: AgencyProfile, focus
 }
 
 /** A no-AI message built from the audit, for demo mode. */
-export function templateOutreach(lead: Lead, profile: AgencyProfile): OutreachContent {
+export function templateOutreach(lead: Lead, profile: AgencyProfile, pitch?: OutreachPitch): OutreachContent {
   const niche = getNiche(lead.niche);
   const top = topSignals(lead.signals, 1)[0];
   const hi = lead.contactName ? `Hi ${lead.contactName.split(" ")[0]},` : "Hi there,";
@@ -113,7 +134,10 @@ export function templateOutreach(lead: Lead, profile: AgencyProfile): OutreachCo
   const sender = profile.ownerName || profile.agencyName;
   const footer = `${sender}\n${profile.agencyName}${profile.mailingAddress ? `\n${profile.mailingAddress}` : "\n[agency postal address]"}\n\nNot interested? Reply "no" and I won't follow up.`;
   const fix = top?.pitch ? `We set up ${top.pitch.toLowerCase()} for ${niche?.plural ?? "local businesses"}.` : `We help ${niche?.plural ?? "local businesses"} turn searches into booked customers.`;
-  const body = `${hi}\n\n${observation} ${impact}\n\n${fix} Would it help if I sent a 2-minute video showing exactly what I'd change?\n\n${footer}`;
+  const ask = pitch?.demoUrl
+    ? `So I built a quick demo: an AI receptionist trained on ${site === "your site" ? "your business" : site} that answers calls 24/7. Want to hear how it would handle your callers? It takes 2 minutes:\n${pitch.demoUrl}`
+    : `${fix} Would it help if I sent a 2-minute video showing exactly what I'd change?`;
+  const body = `${hi}\n\n${observation} ${impact}\n\n${ask}\n\n${footer}`;
   return {
     subject: top ? `${lead.name}: ${top.label.toLowerCase()}`.slice(0, 50) : `idea for ${lead.name}`.slice(0, 50),
     body,

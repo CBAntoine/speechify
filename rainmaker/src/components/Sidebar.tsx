@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, ChevronRight, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, X } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
+import { openCopilot } from "./copilot/Copilot";
 import { useOverlay } from "./client";
 import { InstallButton, useInstall } from "./pwa";
 import { RainMark } from "./ui";
@@ -15,11 +16,20 @@ const NAV = [
   { href: "/inbox", label: "Inbox", short: "Inbox", icon: Inbox, badge: true },
   { href: "/ads", label: "Ad Studio", short: "Ads", icon: Megaphone },
   { href: "/agents", label: "Agents", short: "Agents", icon: Bot },
+  { href: "/autopilot", label: "Autopilot", short: "Autopilot", icon: Zap },
+];
+
+const SELL = [
+  { href: "/sales", label: "Sales", icon: CircleDollarSign },
+  { href: "/sell", label: "Store & pricing", icon: Store },
 ];
 
 const MORE = [
   { href: "/ads", label: "Ad Studio", sub: "Tailored ads for any business", icon: Megaphone },
   { href: "/agents", label: "Agents", sub: "Give a goal, watch it work", icon: Bot },
+  { href: "/autopilot", label: "Autopilot", sub: "Finds, pitches and onboards clients daily", icon: Zap },
+  { href: "/sales", label: "Sales", sub: "Orders, recurring revenue, onboarding", icon: CircleDollarSign },
+  { href: "/sell", label: "Store & pricing", sub: "Your sales page, prices and payments", icon: Store },
   { href: "/playbooks", label: "Playbooks", sub: "How agencies land clients", icon: BookOpen },
   { href: "/settings", label: "Settings", sub: "Your agency, keys, data", icon: Settings },
 ];
@@ -31,6 +41,9 @@ const TITLES: [string, string][] = [
   ["/ads", "Ad Studio"],
   ["/agents", "Agents"],
   ["/playbooks", "Playbooks"],
+  ["/autopilot", "Autopilot"],
+  ["/sales", "Sales"],
+  ["/sell", "Store & pricing"],
   ["/settings", "Settings"],
   ["/share", "Shared to Rainmaker"],
 ];
@@ -69,6 +82,9 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
         </Link>
         <span className="mobile-title truncate">{path === "/" ? "Rainmaker" : title}</span>
         <span className="spacer" />
+        <button type="button" className="copilot-launch-sm" onClick={openCopilot} aria-label="Open the copilot">
+          <span className="orb idle tone-sky" aria-hidden />
+        </button>
         <InstallButton className="btn sm primary" label="Install" />
         <span className={`dot ${claude ? "" : "off"}`} title={claude ? "Claude connected" : "Demo mode"} style={{ marginRight: 4 }} />
       </header>
@@ -81,11 +97,23 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
           </span>
           <span className="brand-name">Rainmaker</span>
         </Link>
+        <button type="button" className="copilot-launch" onClick={openCopilot} title="Tell the copilot what to do, by voice or text">
+          <span className="orb idle tone-sky" aria-hidden />
+          Copilot
+          <kbd aria-hidden>⌘K</kbd>
+        </button>
         {NAV.map((n) => (
           <Link key={n.href} href={n.href} className="nav-link" aria-current={active(n.href) ? "page" : undefined}>
             <n.icon size={17} aria-hidden />
             {n.label}
             {n.badge && inbox > 0 && <span className="count">{inbox}</span>}
+          </Link>
+        ))}
+        <div className="nav-label">Sell</div>
+        {SELL.map((n) => (
+          <Link key={n.href} href={n.href} className="nav-link" aria-current={active(n.href) ? "page" : undefined}>
+            <n.icon size={17} aria-hidden />
+            {n.label}
           </Link>
         ))}
         <div className="nav-label">Learn</div>

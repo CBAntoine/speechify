@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#2f49c4" />
+    <meta name="theme-color" content="#fdfcfc" />
     <title>Offline · Rainmaker</title>
     <style>
-      :root { --bg: #f5f5f2; --text: #191917; --muted: #55534d; --brand: #3e5fe0; }
-      @media (prefers-color-scheme: dark) { :root { --bg: #111110; --text: #eeeeec; --muted: #b5b3ad; --brand: #6e8bff; } }
+      :root { --bg: #fdfcfc; --text: #000000; --muted: #57534e; --brand: #000000; --on-brand: #ffffff; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #0b0b0b; --text: #f5f5f4; --muted: #b8b3ad; --brand: #ffffff; --on-brand: #000000; } }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--bg); color: var(--text);
         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
-      .mark { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 18px; display: grid; place-items: center; color: #fff;
-        background: linear-gradient(145deg, #5b7cfa, #3247c9 60%, #22308f); }
-      h1 { margin: 0 0 8px; font-size: 22px; }
+      .mark { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 18px; display: grid; place-items: center; color: var(--on-brand);
+        background: var(--brand); }
+      h1 { margin: 0 0 8px; font-size: 24px; font-weight: 500; letter-spacing: -0.02em; }
       p { margin: 0 auto 22px; max-width: 320px; color: var(--muted); }
-      button { height: 48px; padding: 0 24px; border: 0; border-radius: 12px; background: var(--brand); color: #fff; font: inherit; font-weight: 600; }
+      button { height: 48px; padding: 0 24px; border: 0; border-radius: 999px; background: var(--brand); color: var(--on-brand); font: inherit; font-weight: 500; }
     </style>
   </head>
   <body>

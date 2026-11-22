@@ -136,6 +136,47 @@ export interface AnalyzeInput {
 }
 
 /** Turn a page's HTML into audit facts. */
+function hex6(c: string): string | undefined {
+  const m = c.trim().toLowerCase().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (!m) return undefined;
+  const h = m[1];
+  return `#${h.length === 3 ? h.split("").map((x) => x + x).join("") : h}`;
+}
+
+/** Saturation-ish check: drop whites, blacks and greys, which say nothing about a brand. */
+function isBrandish(hex: string): boolean {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max - min >= 40 && max >= 50;
+}
+
+/**
+ * The site's brand colours: theme-color first, then the most used colourful
+ * hex values in its inline CSS. Used to make ad art and creative cards that
+ * match the business.
+ */
+export function brandColors(html: string, max = 3): string[] {
+  const out: string[] = [];
+  const add = (c?: string) => {
+    if (c && isBrandish(c) && !out.includes(c)) out.push(c);
+  };
+  add(hex6(firstMatch(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)["']/i, html) ?? ""));
+  add(hex6(firstMatch(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']theme-color["']/i, html) ?? ""));
+  add(hex6(firstMatch(/<meta[^>]+name=["']msapplication-TileColor["'][^>]+content=["']([^"']+)["']/i, html) ?? ""));
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") + [...html.matchAll(/style=["']([^"']+)["']/gi)].map((m) => m[1]).join(";");
+  const counts = new Map<string, number>();
+  for (const m of css.matchAll(/#(?:[0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+    const c = hex6(m[0]);
+    if (c && isBrandish(c)) counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  for (const [c] of [...counts].sort((a, b) => b[1] - a[1])) add(c);
+  return out.slice(0, max);
+}
+
 export function analyzeHtml(input: AnalyzeInput): AuditResult {
   const { html, url, finalUrl, status, responseMs } = input;
   const now = input.now ?? new Date();
@@ -209,5 +250,15 @@ export function analyzeHtml(input: AnalyzeInput): AuditResult {
     socials: detect(SOCIALS, html),
     emails,
     phones,
+    brandColors: brandColors(html),
+    ogImage: (() => {
+      const raw = firstMatch(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i, html) ?? firstMatch(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i, html);
+      if (!raw) return undefined;
+      try {
+        return new URL(decodeEntities(raw), target || undefined).href;
+      } catch {
+        return undefined;
+      }
+    })(),
   };
 }

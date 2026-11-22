@@ -24,7 +24,8 @@ import type { AgentId, ToolName } from "./roster";
 
 export interface ToolContext {
   runId: string;
-  agentId: AgentId;
+  /** Who acts: one of the agents, or the copilot on the owner's instruction. */
+  agentId: AgentId | "copilot";
   /** Prospects returned by find_businesses in this run, by key. */
   prospects: Map<string, Prospect>;
 }
