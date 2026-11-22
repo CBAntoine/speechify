@@ -2780,3 +2780,342 @@ details[open] > .niche-summary .chev {
 .table-scroll {
   overflow-x: auto;
 }
+
+/* ── Copilot (voice and chat agent that runs the app) ───────── */
+
+.copilot-launch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  margin: 0 0 10px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--ring);
+  transition: background 0.12s;
+}
+
+.copilot-launch:hover {
+  background: var(--sunken);
+}
+
+.copilot-launch .orb {
+  width: 26px;
+  height: 26px;
+}
+
+.copilot-launch kbd {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--sunken);
+  color: var(--text-3);
+  font: 500 11px var(--font-sans);
+}
+
+.copilot-launch-sm {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.copilot-launch-sm .orb {
+  width: 24px;
+  height: 24px;
+}
+
+.copilot-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  width: 410px;
+  height: min(700px, calc(100dvh - 40px));
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: cp-in 0.18s ease;
+}
+
+.cp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cp-head .orb {
+  width: 34px;
+  height: 34px;
+}
+
+.cp-head b {
+  display: block;
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.cp-head small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.cp-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cp-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: auto 0;
+  text-align: center;
+}
+
+.cp-intro .orb.lg {
+  width: 96px;
+  height: 96px;
+}
+
+.cp-intro p {
+  margin: 0;
+  max-width: 340px;
+  font-size: 14.5px;
+  color: var(--text-2);
+}
+
+.cp-suggest {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.cp-suggest button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sunken);
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cp-suggest button:hover {
+  background: color-mix(in srgb, var(--sunken) 65%, var(--line-strong));
+}
+
+.cp-suggest svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.cp-line {
+  display: flex;
+}
+
+.cp-line.user {
+  justify-content: flex-end;
+}
+
+.cp-line .say {
+  max-width: 86%;
+  padding: 9px 13px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.cp-line.user .say {
+  background: var(--brand);
+  color: var(--on-brand);
+  border-bottom-right-radius: 6px;
+}
+
+.cp-line.agent .say {
+  background: var(--sunken);
+  border-bottom-left-radius: 6px;
+}
+
+.cp-line.tool,
+.cp-line.system {
+  justify-content: center;
+}
+
+.cp-line.tool span,
+.cp-line.system span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.cp-line.system span {
+  background: transparent;
+  color: var(--text-3);
+}
+
+.cp-working i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: cp-dot 1s ease-in-out infinite;
+}
+
+.cp-working i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.cp-working i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.cp-notice {
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--warm-soft);
+  color: var(--warm);
+  font-size: 13px;
+}
+
+.cp-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.cp-foot .input {
+  flex: 1;
+  height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sunken);
+}
+
+.cp-foot .input:focus {
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+
+.cp-foot .btn.icon {
+  width: 42px;
+  height: 42px;
+}
+
+.cp-mic {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  cursor: pointer;
+}
+
+.cp-mic.live {
+  background: var(--brand);
+  color: var(--on-brand);
+  box-shadow: none;
+  animation: cp-breathe 2s ease-in-out infinite;
+}
+
+.cp-mic.muted {
+  background: var(--hot-soft);
+  color: var(--hot);
+  box-shadow: none;
+}
+
+/* What the copilot is pointing at, clicking or typing into. */
+.copilot-spot {
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 5px #6f8cff !important;
+  animation: cp-spot 0.9s ease-in-out 3;
+}
+
+@keyframes cp-spot {
+  50% {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 9px color-mix(in srgb, #6f8cff 35%, transparent) !important;
+  }
+}
+
+@keyframes cp-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes cp-dot {
+  50% {
+    opacity: 0.25;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes cp-breathe {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-spot,
+  .cp-working i,
+  .cp-mic.live {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .copilot-panel {
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: min(88dvh, 760px);
+    border-radius: 22px 22px 0 0;
+  }
+}

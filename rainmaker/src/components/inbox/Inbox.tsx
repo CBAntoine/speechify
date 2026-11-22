@@ -193,7 +193,7 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <h2 className="truncate">{sel.leadName ?? "Message"}</h2>
                   <div className="faint small">
-                    {CHANNEL[sel.channel].label} · written by {who(sel)?.name ?? "you"} {timeAgo(sel.createdAt)}
+                    {CHANNEL[sel.channel].label} · written by {who(sel)?.name ?? (sel.createdBy === "agent:copilot" ? "Copilot" : sel.createdBy === "agent:autopilot" ? "Autopilot" : "you")} {timeAgo(sel.createdAt)}
                   </div>
                 </div>
                 {sel.leadId && (

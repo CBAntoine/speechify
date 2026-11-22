@@ -21,6 +21,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         sub={`${open.length} open deals worth ${money(open.reduce((a, l) => a + (l.value ?? 0), 0))}/month. Open a card for its audit, outreach and ads.`}
       />
       <Board
+        key={lead ?? "board"}
         initialLeads={db.leads}
         drafts={db.drafts}
         campaigns={db.campaigns}

@@ -24,6 +24,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         }
       />
       <AgentConsole
+        key={[one(sp.agent), one(sp.goal)].join("|")}
         agents={AGENTS.map((a) => ({ id: a.id, name: a.name, role: a.role, description: a.description, icon: a.icon, color: a.color, presets: a.presets, tools: a.tools, system: a.system }))}
         runs={runs.map(({ events, ...r }) => ({ ...r, steps: events.filter((e) => e.kind === "tool_call").length }))}
         initialAgent={one(sp.agent)}

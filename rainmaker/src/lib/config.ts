@@ -33,6 +33,13 @@ export function resendEnabled(): boolean {
  */
 export const DEFAULT_SALES_AGENT_ID = "agent_2301m80gw6zvekktsm8d0sr9gwe3";
 
+/**
+ * The CRM copilot (voice and chat agent that drives the app), created in this
+ * agency's ElevenLabs workspace. Set ELEVENLABS_COPILOT_AGENT_ID to use a
+ * different one, or press "Sync copilot" in Settings to create one.
+ */
+export const DEFAULT_COPILOT_AGENT_ID = "agent_6701m80nkwe4ekh9nkkcjbtj81ns";
+
 export function elevenEnabled(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY);
 }

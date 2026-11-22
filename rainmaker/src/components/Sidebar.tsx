@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
+import { openCopilot } from "./copilot/Copilot";
 import { useOverlay } from "./client";
 import { InstallButton, useInstall } from "./pwa";
 import { RainMark } from "./ui";
@@ -81,6 +82,9 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
         </Link>
         <span className="mobile-title truncate">{path === "/" ? "Rainmaker" : title}</span>
         <span className="spacer" />
+        <button type="button" className="copilot-launch-sm" onClick={openCopilot} aria-label="Open the copilot">
+          <span className="orb idle tone-sky" aria-hidden />
+        </button>
         <InstallButton className="btn sm primary" label="Install" />
         <span className={`dot ${claude ? "" : "off"}`} title={claude ? "Claude connected" : "Demo mode"} style={{ marginRight: 4 }} />
       </header>
@@ -93,6 +97,11 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
           </span>
           <span className="brand-name">Rainmaker</span>
         </Link>
+        <button type="button" className="copilot-launch" onClick={openCopilot} title="Tell the copilot what to do, by voice or text">
+          <span className="orb idle tone-sky" aria-hidden />
+          Copilot
+          <kbd aria-hidden>⌘K</kbd>
+        </button>
         {NAV.map((n) => (
           <Link key={n.href} href={n.href} className="nav-link" aria-current={active(n.href) ? "page" : undefined}>
             <n.icon size={17} aria-hidden />

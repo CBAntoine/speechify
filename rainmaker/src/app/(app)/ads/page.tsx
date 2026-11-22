@@ -19,6 +19,7 @@ export default async function AdsPage({ searchParams }: { searchParams: Promise<
         sub="Tailored campaigns for any local business: strategy, Meta and Google ads, short-video scripts, landing copy and creative, checked against each platform's limits."
       />
       <AdStudio
+        key={[one(sp.campaign), one(sp.lead), one(sp.business)].join("|")}
         leads={db.leads.filter((l) => l.stage !== "lost").map((l) => ({ id: l.id, name: l.name, niche: l.niche, city: l.city, website: l.website }))}
         niches={NICHES.map((n) => ({ id: n.id, label: n.label, offers: n.offers, booking: n.booking }))}
         campaigns={db.campaigns}

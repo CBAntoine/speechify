@@ -503,5 +503,7 @@ export interface Db {
   store: StoreSettings;
   payments: PaymentsState;
   autopilot: AutopilotState;
+  /** The CRM copilot's ElevenLabs agent, once synced from this app. */
+  copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string };
   seeded: boolean;
 }

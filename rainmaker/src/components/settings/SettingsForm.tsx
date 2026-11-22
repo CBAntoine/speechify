@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
 import { api, useToast } from "@/components/client";
 import { InstallButton } from "@/components/pwa";
+import { CopilotConnection } from "./CopilotConnection";
 import type { AgencyProfile } from "@/lib/types";
 import type { Integrations } from "@/lib/config";
 
@@ -189,6 +190,7 @@ export function SettingsForm({
                 </div>
               </span>
             </div>
+            <CopilotConnection elevenlabs={i.elevenlabs} />
             <div className="list-item">
               <span className="icon-tile" style={{ background: "var(--violet-soft)", color: "var(--violet)" }}>
                 <Bot size={15} />

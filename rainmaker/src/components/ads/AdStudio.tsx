@@ -305,7 +305,9 @@ export function AdStudio({
                 <div style={{ minWidth: 0 }}>
                   <div className="row wrap" style={{ gap: 8, marginBottom: 4 }}>
                     {campaign.createdBy === "template" && <span className="badge warm">Template</span>}
-                    {campaign.createdBy.startsWith("agent:") && <span className="badge violet">By Ad Strategist</span>}
+                    {campaign.createdBy.startsWith("agent:") && (
+                      <span className="badge violet">{campaign.createdBy === "agent:copilot" ? "By Copilot" : campaign.createdBy === "agent:autopilot" ? "By Autopilot" : "By Ad Strategist"}</span>
+                    )}
                     {campaign.sample && <span className="badge warm">Sample</span>}
                     <span className="faint small">{timeAgo(campaign.createdAt)}</span>
                   </div>

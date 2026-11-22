@@ -7,6 +7,7 @@ A simpler, AI-first alternative to GoHighLevel for agencies that sell to local b
 3. **Make tailored ads.** Ad Studio writes a full campaign for any business: strategy, three Meta ads with creative, a Google search ad with 15 headlines, short-video scripts and landing-page copy, all checked against each platform's limits. With ElevenLabs it also paints custom ad art in the business's brand colours and records audio ads.
 4. **Sell every ElevenLabs product as your own service.** A public store (`/store`) sells 18 done-for-you services and 3 plans (AI receptionists, voice and chat agents, voiceovers, dubbing, podcasts, music, ad creative, transcription…) with monthly prices, setup fees and yearly billing. An ElevenLabs voice and chat assistant explains each product to visitors and opens checkout. Clients pay by card (Stripe) or PayPal, and subscriptions, renewals and cancellations flow back into the CRM.
 5. **Run itself.** Autopilot runs every day: it finds businesses, builds each one a demo AI receptionist from their own website, writes the pitch and a follow-up sequence, makes sample ads with custom art, follows up, and onboards new paying clients.
+6. **Do what you say.** The copilot (Ctrl+K, or Cmd+K on a Mac) is an ElevenLabs voice and chat agent that runs the app for you: tell it what to do and it opens screens, reads them, clicks, fills things in, finds clients, works your pipeline and writes ads. It knows every feature and what's happening in your account right now.
 
 It's built around what agencies complain about in GoHighLevel and around how agencies actually land clients. The research, with sources, is in [docs/research.md](docs/research.md). How the store is priced, with costs, margins and ElevenLabs' terms, is in [docs/pricing.md](docs/pricing.md).
 
@@ -36,7 +37,7 @@ Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outr
 | `RESEND_API_KEY` + `RESEND_FROM` | Send approved emails from the Inbox, from your own verified domain. Without them, "Open in my email" fills in your own mail app. |
 | `APP_PASSWORD` | Puts the whole app behind a sign-in page. **Set it before you deploy anywhere public.** |
 | `DATABASE_URL` | Postgres for cloud hosting (required on Vercel). Without it, data goes to a local JSON file. |
-| `ELEVENLABS_API_KEY` | The store's AI sales assistant (voice and chat), demo receptionists for prospects, receptionists for paying clients, ad voiceovers and custom ad art. |
+| `ELEVENLABS_API_KEY` | The copilot, the store's AI sales assistant (voice and chat), demo receptionists for prospects, receptionists for paying clients, ad voiceovers and custom ad art. |
 | `STRIPE_SECRET_KEY` | Card payments and subscriptions in the store. A `sk_test_` key puts the store in test mode. |
 | `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` | PayPal subscriptions in the store (`PAYPAL_MODE=live` when you're ready; sandbox by default). |
 | `SITE_URL` | Your public address, for checkout return links, webhooks and links in Autopilot's emails. Vercel's domain is used if empty. |
@@ -161,6 +162,21 @@ Once a day (Vercel Cron calls `/api/cron/autopilot` at 13:17 UTC with your `CRON
 
 Everything waits in your Inbox for approval unless you turn on auto-send. Auto-send is email only. It needs Resend and your postal address in Settings, only sends emails that include that address and an opt-out line and have no `[placeholders]` left, and stops at your daily cap. Autopilot never calls or texts anyone.
 
+## The copilot
+
+Open it from **Copilot** at the top of the sidebar, the orb in the phone's top bar, or Ctrl+K (Cmd+K on a Mac). Press the mic and talk, or type. It stays open while it moves you between screens, so one conversation can cover several jobs: "Find 20 dentists in Toronto that need a website, save the best five and draft an email to the top one."
+
+**What it can do**
+- **Drive the screen:** open any screen (a lead, a campaign, a search, an agent goal), read what's on it, click buttons, tabs and switches, type into fields, pick from dropdowns, and point at things when you ask where something is.
+- **Work the CRM directly:** find businesses, audit websites, save leads, update stages and notes, draft messages for your approval, write ad campaigns, add tasks, research the web and start the Claude agents. These are the same tools, rules and validation the agents use: messages become drafts, nothing is sent on its own.
+- **Know the software and your account:** a built-in guide covers every screen, button and workflow (`src/lib/copilot/guide.ts`), and a live snapshot covers your pipeline, inbox, tasks, Autopilot, store, prices, sales and which keys are connected.
+
+**What it won't do without you:** it asks before anything that sends, deletes or discards, cancels a subscription, changes prices, charges money or turns on auto-send, and those clicks are refused unless it has your yes. It never types passwords or API keys. It acts as you, through the app's own sign-in-protected endpoints, so it can't do anything you couldn't.
+
+**How it works:** an ElevenLabs agent (Claude Sonnet 5.5 inside) with 19 tools that run in your browser. Screen tools act on the page; CRM tools call `/api/copilot/tool`; the snapshot comes from `/api/copilot/state`. The agent is private: your signed-in browser gets a one-conversation token from `/api/copilot/session`. The agent is already built in this agency's ElevenLabs workspace (`agent_6701m80nkwe4ekh9nkkcjbtj81ns`), and six tests (checks the live state, opens the pipeline, searches with the right niche and city, opens the prices screen, refuses API keys, asks before cancelling) passed 12 of 12 runs. They're attached to the agent, so you can rerun them in ElevenLabs.
+- Its prompt and tools are in `src/lib/copilot/spec.ts`. **Settings → Connections → Copilot → Sync copilot** pushes them to ElevenLabs, or creates the copilot if your key belongs to another workspace.
+- Without `ELEVENLABS_API_KEY` it still opens screens, answers how-to questions from the guide and points at things on the screen.
+
 ## Use it on your Android phone
 
 Rainmaker installs on Android as an app: Chrome adds it to your home screen and app drawer, and it opens full screen like a normal app. Your phone needs to reach it over the internet, so you host it once (free tiers work). You can do every step below from your phone's browser.
@@ -240,7 +256,7 @@ Reporting is basic. Data lives in a single JSON file. Pair Rainmaker with the to
 
 ```bash
 npm run typecheck
-npm test          # 77 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes, the store catalog and margins, yearly pricing and price overrides, Stripe form encoding and webhook signatures, sales stats, onboarding plans, Autopilot's targeting, follow-up timing and auto-send rules, and which pages are public
+npm test          # 82 unit tests: website audit, scoring, ad limits/CSV, OpenStreetMap search (Nominatim and Overpass), city licence data, the crawler (robots.txt, contacts, website finding), Claude research parsing, provinces/states and place parsing, niches, seed data, playbook sources, concurrent storage writes, the store catalog and margins, yearly pricing and price overrides, Stripe form encoding and webhook signatures, sales stats, onboarding plans, Autopilot's targeting, follow-up timing and auto-send rules, the copilot's screen matching, guide and live snapshot, and which pages are public
 npm run build
 ```
 
@@ -252,6 +268,8 @@ src/app/store/           the public store: home, product pages, thanks, terms, p
 src/app/demo/            a prospect's private demo receptionist
 src/components/          UI (Sidebar, ProspectFinder, Board + LeadDrawer, Inbox, AdStudio + Creative, AgentConsole, …)
 src/components/store/    store UI: the AI assistant (ElevenLabs React SDK), checkout, plan and product cards
+src/components/copilot/  the copilot panel and its screen tools (read, click, fill, point)
+src/lib/copilot/         the copilot's prompt and tools, guide, screen map and live snapshot
 src/lib/catalog.ts       what the store sells: plans, products, prices, unit costs, margins, recommendations
 src/lib/payments/        Stripe and PayPal (REST, no SDKs), orders, webhooks, onboarding after payment
 src/lib/elevenlabs/      agents (sales assistant, receptionists, demos), text to speech, image art

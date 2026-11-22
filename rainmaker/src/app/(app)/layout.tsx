@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
+import { Copilot } from "@/components/copilot/Copilot";
 import { integrations } from "@/lib/config";
 import { readDb, storageInfo } from "@/lib/store";
 
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         )}
         {children}
       </main>
+      <Copilot ownerName={db.profile.ownerName} agencyName={db.profile.agencyName} voice={i.elevenlabs} />
     </div>
   );
 }
