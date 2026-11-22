@@ -6,6 +6,8 @@ import { outcomeToFinding } from "./audit.ts";
 import { performNetworkAction, undoNetworkAction } from "../net/scan.ts";
 import { recheckDependencies, refreshDependencyFindings } from "../software/deps.ts";
 import { refreshAndroidFindings, verifyAndroid } from "../android/scan.ts";
+import { refreshRemoteFindings, remoteHostFor, verifyRemote } from "../remote/scan.ts";
+import { isRemote } from "../remote/ssh.ts";
 import { clearHostCache } from "./cache.ts";
 import type { StateStore } from "./state.ts";
 import { rollbackActions, Tx } from "./tx.ts";
@@ -25,8 +27,21 @@ function fixFor(findings: Finding[]): { fix: Fix; params: Record<string, unknown
   return { fix, params: all.length > 1 ? fix.merge!(all) : all[0] };
 }
 
-export async function planFix(host: Host, findings: Finding[]): Promise<FixPlan> {
+/** The machine a fix runs on: this one, or another computer reached over SSH. */
+async function hostFor(host: Host, findings: Finding[]): Promise<Host> {
+  const target = findings[0]?.target;
+  if (!target?.startsWith("ssh:")) return host;
+  if (!findings.every((f) => f.target === target)) throw new FixError("Fix one computer at a time.");
+  try {
+    return await remoteHostFor(host, target);
+  } catch (err) {
+    throw new FixError(errorMessage(err));
+  }
+}
+
+export async function planFix(local: Host, findings: Finding[]): Promise<FixPlan> {
   const { fix, params } = fixFor(findings);
+  const host = await hostFor(local, findings);
   const ctx = { host, params };
   let preconditions: Precondition[] = [];
   let warnings: string[] = [];
@@ -46,7 +61,11 @@ export async function planFix(host: Host, findings: Finding[]): Promise<FixPlan>
   const failed = preconditions.find((p) => !p.ok);
   if (!blockedReason && failed) blockedReason = failed.message;
   if (!blockedReason && fix.needsRoot && !host.isRoot) {
-    blockedReason = host.platform === "win32" ? "This fix needs administrator rights. Open the terminal with \"Run as administrator\" and run Bulwark again." : "This fix needs admin rights. Run Bulwark with sudo to apply it.";
+    blockedReason = isRemote(host)
+      ? `This fix needs admin rights on ${host.remote.label}. Connect as root, or as a user whose sudo doesn't ask for a password.`
+      : host.platform === "win32"
+        ? "This fix needs administrator rights. Open the terminal with \"Run as administrator\" and run Bulwark again."
+        : "This fix needs admin rights. Run Bulwark with sudo to apply it.";
   }
   return {
     findingId: findings.map((f) => f.id).join(","),
@@ -74,6 +93,10 @@ function subjectOf(f: Finding): string | undefined {
  */
 export async function refreshFindings(host: Host, findings: Finding[]): Promise<Finding[]> {
   clearHostCache(host);
+  if (findings.length && findings[0].target.startsWith("ssh:")) {
+    const rh = await hostFor(host, findings);
+    return isRemote(rh) ? refreshRemoteFindings(rh, findings) : findings;
+  }
   if (findings.length && findings.every((f) => f.checkId === "deps.vulnerable")) return refreshDependencyFindings(host, findings);
   if (findings.length && findings.every((f) => f.target.startsWith("adb:"))) return refreshAndroidFindings(host, findings);
   const results = new Map<string, CheckOutcome[]>();
@@ -118,10 +141,11 @@ async function verify(host: Host, findings: Finding[]): Promise<{ status: Status
   return { status: "pass", summary: findings.some((f) => f.target === "local") ? "Checked again: the problem is gone." : "Checked again with the device: the change took effect." };
 }
 
-export async function applyFix(host: Host, state: StateStore, findings: Finding[]): Promise<ChangeRecord> {
+export async function applyFix(local: Host, state: StateStore, findings: Finding[]): Promise<ChangeRecord> {
   const { fix, params } = fixFor(findings);
-  const plan = await planFix(host, findings);
+  const plan = await planFix(local, findings);
   if (!plan.canApply) throw new FixError(plan.blockedReason ?? "This fix can't be applied.");
+  const host = await hostFor(local, findings);
   const ctx = { host, params };
   const change: ChangeRecord = {
     id: `${stamp()}-${fix.id.replace(/[^\w.-]/g, "-")}-${randomId(2)}`,
@@ -154,20 +178,34 @@ export async function applyFix(host: Host, state: StateStore, findings: Finding[
   }
   change.actions = tx.actions;
   change.log = tx.log;
-  change.verification = findings.every((f) => f.target.startsWith("adb:")) ? await verifyAndroid(host, findings, fix.id) : await verify(host, findings);
+  change.verification = isRemote(host)
+    ? await verifyRemote(host, findings)
+    : findings.every((f) => f.target.startsWith("adb:"))
+      ? await verifyAndroid(host, findings, fix.id)
+      : await verify(host, findings);
   await state.saveChange(change);
   return change;
 }
 
-export async function rollbackChange(host: Host, state: StateStore, changeId: string, opts: { force?: boolean } = {}): Promise<ChangeRecord> {
+export async function rollbackChange(local: Host, state: StateStore, changeId: string, opts: { force?: boolean } = {}): Promise<ChangeRecord> {
   const change = await state.getChange(changeId);
   if (!change) throw new FixError(`No change with the id ${changeId}.`);
   if (change.status !== "applied") throw new FixError(`That change is ${change.status === "rolled-back" ? "already undone" : "not in effect"}.`);
   if (!change.reversible) throw new FixError("This change (installing updates) can't be undone automatically.");
+  // A change made over SSH is undone on that computer.
+  let host = local;
+  if (change.target.startsWith("ssh:")) {
+    try {
+      host = await remoteHostFor(local, change.target);
+    } catch (err) {
+      throw new FixError(errorMessage(err));
+    }
+  }
   const fix = FIXES.get(change.fixId);
-  if (fix?.needsRoot && !host.isRoot) throw new FixError("Undoing this needs admin rights. Run Bulwark with sudo.");
-  // Undo newer changes to the same files first, or we'd restore stale copies.
-  const newer = (await state.listChanges()).filter((c) => c.status === "applied" && c.id > change.id && c.actions.some((a) => "path" in a && change.actions.some((b) => "path" in b && b.path === a.path)));
+  if (fix?.needsRoot && !host.isRoot) throw new FixError(isRemote(host) ? `Undoing this needs admin rights on ${host.remote.label}.` : "Undoing this needs admin rights. Run Bulwark with sudo.");
+  // Undo newer changes to the same files (on the same machine) first, or we'd restore stale copies.
+  const sameMachine = (c: ChangeRecord) => (c.target.startsWith("ssh:") ? c.target === change.target : !change.target.startsWith("ssh:"));
+  const newer = (await state.listChanges()).filter((c) => c.status === "applied" && c.id > change.id && sameMachine(c) && c.actions.some((a) => "path" in a && change.actions.some((b) => "path" in b && b.path === a.path)));
   if (newer.length && !opts.force) throw new FixError(`Undo the newer change "${newer[0].title}" (${newer[0].id}) first; it touched the same files.`);
   const r = await rollbackActions(host, change.actions, { force: opts.force, networkUndo: (a) => undoNetworkAction(a) });
   change.log.push(`Undo started ${new Date().toISOString()}`, ...r.log, ...r.errors.map((e) => `Undo problem: ${e}`));

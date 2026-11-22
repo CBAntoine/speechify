@@ -6,6 +6,7 @@ import { probeAdb, probeMongo, probeMqtt, probeRdp, probeSmb, probeVnc } from ".
 import { probeHttp } from "./services/http.ts";
 import { probeSsh } from "./services/ssh.ts";
 import { exposureProbe, probeFtp, probeMemcached, probeMysql, probePostgres, probeRedis, probeRtsp, probeTelnet } from "./services/text.ts";
+import { probeKasa } from "./services/home.ts";
 import { probeRoku, probeSamsungTv } from "./services/tv.ts";
 import { tcpProbe } from "./tcp.ts";
 import type { NetIssue, Probe } from "./types.ts";
@@ -67,6 +68,7 @@ export const PORT_PROBES: Record<number, Probe> = {
   9100: exposed("jetdirect", "Raw printing port is open", "low", "Anyone on the network can send print jobs and printer commands (PJL) straight to the printer, bypassing any print server.", ["If the printer has a setting for \"raw port 9100\" or \"JetDirect\", turn it off and print over IPP instead."]),
   9200: http,
   9443: https,
+  9999: probeKasa,
   11211: probeMemcached,
   27017: probeMongo,
   32400: http,

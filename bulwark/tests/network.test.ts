@@ -201,6 +201,14 @@ test("every pretend device is found and recognised", () => {
   assert.equal(kinds[lan.ips.printer], "Printer");
   assert.equal(kinds[lan.ips.tvbox], "Android device");
   assert.equal(kinds[lan.ips.hub], "Smart home device");
+  assert.equal(kinds[lan.ips.shelly], "Smart home device");
+  assert.equal(kinds[lan.ips.kasa], "Smart home device");
+  const pc = result.devices.find((d) => d.ip === lan.ips.pc);
+  assert.equal(pc?.kind, "Computer");
+  assert.equal(pc?.name, "FAMILY-PC", "Windows names itself in the first step of an SMB login");
+  assert.equal(pc?.os, "Windows 10");
+  assert.equal(result.devices.find((d) => d.ip === lan.ips.kasa)?.name, "Space heater");
+  assert.ok(result.devices.every((d) => d.isSelf || d.advice?.length), "every device comes with advice");
   // On loopback every address answers with a reset, so 127.0.0.19 shows up; it just has nothing to report.
   assert.deepEqual(ids("127.0.0.19"), []);
   assert.equal(result.devices.find((d) => d.ip === lan.ips.router)?.name, "HomeHub 3000");
@@ -211,7 +219,12 @@ test("each device's holes are found", () => {
   assert.ok(ids(lan.ips.nas).includes("smb.v1"));
   assert.ok(ids(lan.ips.nas).includes("redis.no-auth") && ids(lan.ips.nas).includes("redis.version"));
   assert.ok(ids(lan.ips.nas).includes("mysql.exposed") && ids(lan.ips.nas).includes("mysql.version"));
-  assert.deepEqual(ids(lan.ips.pc), ["rdp.no-nla"], "SMB without v1 is fine");
+  assert.deepEqual(ids(lan.ips.pc).sort(), ["rdp.no-nla", "windows.unsupported"], "SMB without v1 is fine, but Windows 10 is past its end");
+  const win = result.findings.find((f) => f.checkId === "windows.unsupported")!;
+  assert.match(win.summary, /FAMILY-PC runs Windows 10 \(build 19045\), which stopped getting security fixes in October 2025/);
+  assert.ok(ids(lan.ips.hub).includes("homeassistant.not-set-up"));
+  assert.deepEqual(ids(lan.ips.shelly), ["shelly.no-password"]);
+  assert.deepEqual(ids(lan.ips.kasa), ["kasa.open-control"]);
   assert.ok(ids(lan.ips.tvbox).includes("adb.open"));
   assert.ok(ids(lan.ips.hub).includes("mqtt.anonymous") && ids(lan.ips.hub).includes("vnc.no-auth"));
   assert.ok(ids(lan.ips.printer).includes("jetdirect.exposed"));

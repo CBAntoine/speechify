@@ -4,10 +4,14 @@ import * as os from "node:os";
 import { scanNetwork, type NetScanOptions } from "../net/scan.ts";
 import { scanCode } from "../software/deps.ts";
 import { scanAndroid } from "../android/scan.ts";
+import { applyInventory } from "../net/inventory.ts";
+import { scanRemote } from "../remote/scan.ts";
+import { parseSshTarget } from "../remote/ssh.ts";
+import type { StateStore } from "./state.ts";
 import { auditLocal } from "./audit.ts";
 import { describeOs } from "./host.ts";
 import { score, sortFindings } from "./score.ts";
-import type { DeviceInfo, Host, Scan } from "./types.ts";
+import type { DeviceInfo, Host, RemoteScan, Scan } from "./types.ts";
 import { stamp } from "./util.ts";
 import { VERSION } from "../version.ts";
 
@@ -36,6 +40,8 @@ export async function runScan(
     code?: { roots: string[]; cacheDir?: string };
     /** Android phones and TVs connected over adb. */
     android?: boolean;
+    /** Other computers to check over SSH (ssh:user@host), using open connections or keys. */
+    remote?: string[];
     network?: Omit<NetScanOptions, "onProgress">;
     onProgress?: (p: ScanProgress) => void;
   },
@@ -69,6 +75,10 @@ export async function runScan(
       scan.scores.local = score(scan.local.findings);
     }
   }
+  for (const id of opts.remote ?? []) {
+    const t = parseSshTarget(id);
+    if (t) mergeRemote(scan, await scanRemote(host, t, { onProgress: (p) => opts.onProgress?.(p) }));
+  }
   if (opts.network) {
     const net = await scanNetwork(host, { ...opts.network, onProgress: (p) => opts.onProgress?.(p) });
     net.findings = sortFindings(net.findings);
@@ -79,6 +89,19 @@ export async function runScan(
   return scan;
 }
 
+/** Adds one computer's SSH results to a scan, replacing earlier ones for the same computer. */
+export function mergeRemote(scan: Scan, r: RemoteScan): void {
+  scan.remote = [...(scan.remote ?? []).filter((x) => x.target !== r.target), r];
+  if (r.error) delete scan.scores.devices[r.target];
+  else scan.scores.devices[r.target] = score(r.findings);
+}
+
+/** Saves a scan, after noting its devices in the inventory (which flags new ones). */
+export async function recordScan(state: StateStore, scan: Scan): Promise<void> {
+  if (scan.network?.devices.length) await state.saveInventory(applyInventory(scan, await state.inventory()));
+  await state.saveScan(scan);
+}
+
 export function allFindings(scan: Scan) {
-  return [...(scan.local?.findings ?? []), ...(scan.code?.findings ?? []), ...(scan.android?.findings ?? []), ...(scan.network?.findings ?? [])];
+  return [...(scan.local?.findings ?? []), ...(scan.code?.findings ?? []), ...(scan.android?.findings ?? []), ...(scan.remote ?? []).flatMap((r) => r.findings), ...(scan.network?.findings ?? [])];
 }

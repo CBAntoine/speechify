@@ -113,9 +113,23 @@ export function parseArp(platform: string, text: string): Map<string, string> {
   return out;
 }
 
+/** `ip neigh` output: "192.168.1.1 dev wlan0 lladdr aa:bb:cc:dd:ee:ff REACHABLE". */
+export function parseIpNeigh(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of text.matchAll(/^(\d+\.\d+\.\d+\.\d+)\s.*?\blladdr\s+([0-9a-f:]{17})\b(.*)$/gim)) {
+    if (!/\b(FAILED|INCOMPLETE)\b/.test(m[3]) && m[2] !== "00:00:00:00:00:00") out.set(m[1], normMac(m[2]));
+  }
+  return out;
+}
+
 export async function arpTable(host: Host): Promise<Map<string, string>> {
-  // Android 10+ hides the ARP table from apps, so this is often empty there; the TCP sweep still works.
-  if (host.platform === "linux" || host.platform === "android") return parseArp("linux", (await host.readFile("/proc/net/arp")) ?? "");
+  if (host.platform === "linux" || host.platform === "android") {
+    const arp = parseArp("linux", (await host.readFile("/proc/net/arp")) ?? "");
+    if (arp.size) return arp;
+    // Android 10+ hides /proc/net/arp from apps; `ip neigh` sometimes still answers.
+    const r = await host.exec("ip", ["neigh", "show"]);
+    return r.code === 0 ? parseIpNeigh(r.stdout) : arp;
+  }
   const r = await host.exec("arp", host.platform === "darwin" ? ["-an"] : ["-a"]);
   return parseArp(host.platform, r.stdout);
 }

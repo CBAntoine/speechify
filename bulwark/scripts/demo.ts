@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHost } from "../src/core/host.ts";
 import { runScan } from "../src/core/scan.ts";
+import { applyInventory } from "../src/net/inventory.ts";
 import { StateStore } from "../src/core/state.ts";
 import { startServer } from "../src/server.ts";
 import { startFakeLan } from "../tests/helpers/fake-lan.ts";
@@ -64,5 +65,17 @@ const scan = await runScan(host, {
   network: { targets, authorized: false, confirmedOwnership: true, noMulticast: true, extraSsdp },
   android,
 });
+// Pretend the household's devices were all seen before, except the smart plug, which "just joined",
+// so the dashboard shows how a new device is flagged.
+await fs.rm(path.join(home, "devices.json"), { force: true });
+const inventory = applyInventory(scan, {});
+for (const d of inventory[scan.network!.networkId!] ?? []) {
+  if (d.lastIp === lan.ips.kasa) {
+    d.baseline = undefined;
+  } else d.firstSeen = new Date(Date.now() - 30 * 86_400_000).toISOString();
+}
+scan.network!.findings = scan.network!.findings.filter((f) => f.checkId !== "inventory.new-device");
+applyInventory(scan, inventory);
+await state.saveInventory(inventory);
 await state.saveScan(scan);
 await startServer({ host, state, port: Number(process.env.PORT) || 7078, bind: "127.0.0.1", demo: { targets, extraSsdp, codeRoots: [projects], android } });

@@ -54,12 +54,23 @@ export function markdownReport(scan: Scan, changes: ChangeRecord[] = []): string
     }
     for (const n of scan.android.notes) out.push(`> ${n}`, "");
   }
+  if (scan.remote?.length) {
+    out.push("## Computers checked over SSH", "");
+    for (const r of scan.remote) {
+      if (r.error) {
+        out.push(`### ${r.label}`, "", `Couldn't be checked: ${r.error}`, "");
+        continue;
+      }
+      out.push(...section(`${r.device?.hostname ?? r.address} (${r.label}, ${r.device?.os ?? "?"}): ${scan.scores.devices[r.target] ?? 100}/100`, r.findings));
+      for (const n of r.notes) out.push(`> ${n}`, "");
+    }
+  }
   if (scan.network) {
     out.push(`## Network: ${scan.network.devices.length} devices`, "", `Scanned: ${scan.network.targets.join(", ")}`, "");
     for (const d of scan.network.devices) {
       const fs = scan.network.findings.filter((f) => f.target === d.ip);
-      const name = [d.name, d.model].filter(Boolean).join(" · ");
-      out.push(...section(`${d.ip} — ${d.kind}${name ? ` (${name})` : ""}: ${scan.scores.devices[d.ip] ?? 100}/100`, fs));
+      const name = [d.label ?? d.name, d.model, d.os, d.vendor].filter(Boolean).join(" · ");
+      out.push(...section(`${d.ip} — ${d.kind}${name ? ` (${name})` : ""}${d.isNew ? " — new" : ""}: ${scan.scores.devices[d.ip] ?? 100}/100`, fs));
     }
     for (const n of scan.network.notes) out.push(`> ${n}`, "");
   }

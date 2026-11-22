@@ -4,6 +4,7 @@
 
 import { matchSoftware } from "../fingerprints.ts";
 import { Conversation, exchange } from "../tcp.ts";
+import { smbNtlmInfo, windowsFromNtlm, windowsIssue } from "./ntlm.ts";
 import type { NetIssue, ProbeResult } from "../types.ts";
 
 // ── SMB ──
@@ -59,7 +60,24 @@ export async function probeSmb(ip: string, port: number): Promise<ProbeResult | 
       cves: ["CVE-2017-0144"],
     });
   }
-  return { service: { port, proto: "tcp", name: "smb", notes: smb1Accepted(resp) ? ["SMBv1 on"] : [] }, issues };
+  // The first step of an SMB login names the Windows version and the computer (no password involved).
+  const ntlm = await smbNtlmInfo(ip, port);
+  const win = ntlm ? windowsFromNtlm(ntlm) : null;
+  const unsupported = win && ntlm ? windowsIssue(win, ntlm) : null;
+  if (unsupported) issues.push(unsupported);
+  return {
+    service: {
+      port,
+      proto: "tcp",
+      name: "smb",
+      product: win?.name,
+      version: ntlm && win ? `${ntlm.major}.${ntlm.minor}.${ntlm.build}` : undefined,
+      deviceName: ntlm?.computer,
+      os: win?.name,
+      notes: smb1Accepted(resp) ? ["SMBv1 on"] : [],
+    },
+    issues,
+  };
 }
 
 // ── RDP ──

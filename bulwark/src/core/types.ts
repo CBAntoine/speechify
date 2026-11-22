@@ -288,6 +288,10 @@ export interface ServiceInfo {
   title?: string;
   tls?: { protocol?: string; selfSigned?: boolean; expired?: boolean; validTo?: string; subject?: string; legacy?: boolean };
   notes?: string[];
+  /** The name the device gave itself through this service ("DESKTOP-4F2K", "Kitchen plug"). */
+  deviceName?: string;
+  /** The operating system this service revealed ("Windows 10"). */
+  os?: string;
 }
 
 export interface NetDevice {
@@ -299,17 +303,30 @@ export interface NetDevice {
   hostnames: string[];
   name?: string;
   model?: string;
+  /** Operating system, when the device gives it away (Windows build over SMB, macOS over Bonjour). */
+  os?: string;
   kind: string;
   isGateway: boolean;
   isSelf: boolean;
   services: ServiceInfo[];
   mdnsServices: string[];
+  /** What to do about this kind of device, beyond any findings. */
+  advice?: string[];
+  /** Inventory: how Bulwark recognises it across scans, when it first saw it, and what the person said about it. */
+  key?: string;
+  firstSeen?: string;
+  label?: string;
+  mine?: boolean;
+  /** Joined after the network's first scan and nobody has said it's theirs yet. */
+  isNew?: boolean;
   upnp?: { friendlyName?: string; manufacturer?: string; model?: string; igd: boolean; externalIp?: string };
 }
 
 export interface NetworkScan {
   targets: string[];
   confirmedOwnership: boolean;
+  /** Which network this was (the router's hardware address when known), for the device inventory. */
+  networkId?: string;
   devices: NetDevice[];
   findings: Finding[];
   notes: string[];
@@ -369,6 +386,21 @@ export interface AndroidScan {
   durationMs: number;
 }
 
+/** Another computer on the network, checked over SSH with this one's checks. */
+export interface RemoteScan {
+  /** ssh:user@host */
+  target: string;
+  /** user@host */
+  label: string;
+  address: string;
+  device?: DeviceInfo;
+  findings: Finding[];
+  notes: string[];
+  /** Why it couldn't be checked. */
+  error?: string;
+  durationMs: number;
+}
+
 export interface Scan {
   id: string;
   startedAt: string;
@@ -379,5 +411,6 @@ export interface Scan {
   code?: CodeScan;
   android?: AndroidScan;
   network?: NetworkScan;
+  remote?: RemoteScan[];
   scores: { local?: number; code?: number; devices: Record<string, number> };
 }

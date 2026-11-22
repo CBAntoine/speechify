@@ -62,6 +62,24 @@ export const sensitiveFiles: Check = {
 
 const PATH_DIRS = ["/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/usr/lib/systemd/system", "/lib/systemd/system"];
 
+const CRITICAL_ETC = /^\/etc\/(cron|systemd|init\.d|sudoers|profile|rc|ld\.so)/;
+
+/**
+ * One `find` per area instead of a look at every file: much quicker, which matters most when the
+ * machine is another computer reached over SSH. Null if find isn't there (then each file is checked).
+ */
+async function findCandidates(host: Host): Promise<string[] | null> {
+  const run = async (args: string[]) => {
+    const r = await host.exec("find", args, { timeoutMs: 120_000 });
+    // find exits 1 when some folders can't be read or don't exist, and still lists what it found.
+    return r.code === 0 || (r.code === 1 && !/not found|unknown predicate|invalid/i.test(r.stderr)) ? r.stdout.split("\n").filter((l) => l.startsWith("/")) : null;
+  };
+  const etc = await run(["/etc", "-xdev", "-maxdepth", "6", "-perm", "-0002", "!", "-type", "l", "-print"]);
+  if (!etc) return null;
+  const bins = await run([...PATH_DIRS, "-maxdepth", "1", "-perm", "-0002", "!", "-type", "l", "-print"]);
+  return bins ? [...etc, ...bins] : null;
+}
+
 /** Finds world-writable files and folders that root relies on. Skips symlinks and sticky folders like /tmp. */
 export async function findWorldWritable(host: Host, limit = 200): Promise<{ path: string; mode: number; critical: boolean }[]> {
   const out: { path: string; mode: number; critical: boolean }[] = [];
@@ -72,12 +90,17 @@ export async function findWorldWritable(host: Host, limit = 200): Promise<{ path
     if (st.mode & 0o002 && !(st.isDir && st.mode & 0o1000)) out.push({ path: p, mode: st.mode, critical });
     return st;
   };
+  const candidates = await findCandidates(host);
+  if (candidates) {
+    for (const p of [...new Set(candidates)].slice(0, limit)) await consider(p, !p.startsWith("/etc/") || CRITICAL_ETC.test(p));
+    return out;
+  }
   const walk = async (dir: string, depth: number) => {
     if (out.length >= limit || visited > 25_000) return;
     for (const name of (await host.readDir(dir)) ?? []) {
       visited++;
       const p = `${dir}/${name}`;
-      const st = await consider(p, /^\/etc\/(cron|systemd|init\.d|sudoers|profile|rc|ld\.so)/.test(p));
+      const st = await consider(p, CRITICAL_ETC.test(p));
       if (st?.isDir && depth < 6) await walk(p, depth + 1);
       if (out.length >= limit) return;
     }

@@ -3,10 +3,16 @@
 import type { Finding, Fix, Host, NetDevice, NetworkScan, Severity, UpnpMapping } from "../core/types.ts";
 import { mapLimit, uniq } from "../core/util.ts";
 import { allLocalAddresses, arpTable, defaultGateway, isRandomMac, localNetworks } from "./local.ts";
+import { adviceFor } from "./advice.ts";
+import { mergeMdns, mdnsUnicastSweep, nbnsSweep, pingSweep, type NetbiosInfo } from "./discover.ts";
+import { appleModel, macosFromDarwin } from "./identify.ts";
 import { mdnsDiscover, type MdnsDevice } from "./mdns.ts";
+import { vendorOf, type Vendor } from "./oui.ts";
 import { PING_PORTS, probeHost, type HostProbe } from "./probe.ts";
 import { byIp, isCgnat, isPrivate, resolveTargets } from "./scope.ts";
 import { fetchDescription, ssdpDiscover, type SsdpReply, type UpnpDescription } from "./ssdp.ts";
+import { qnapCheck } from "./services/home.ts";
+import { MACOS, supportStatus } from "../software/installed.ts";
 import { tcpProbe } from "./tcp.ts";
 import type { NetIssue } from "./types.ts";
 import { addMapping, deleteMapping, externalIp, listMappings, WAN_SERVICES } from "./upnp.ts";
@@ -70,7 +76,7 @@ function forwardIssue(m: UpnpMapping, ext: string | undefined, control: { contro
   };
 }
 
-function classify(d: NetDevice, probe: HostProbe | undefined, mdns: MdnsDevice | undefined, upnp: UpnpDescription | undefined): string {
+export function classify(d: NetDevice, probe: HostProbe | undefined, mdns: MdnsDevice | undefined, upnp: UpnpDescription | undefined, hints: { vendor?: Vendor; apple?: { kind: string }; netbios?: NetbiosInfo } = {}): string {
   const ports = new Set(probe?.open ?? []);
   const svc = new Set(mdns ? [...mdns.services] : []);
   const text = [d.name, d.model, upnp?.deviceType, upnp?.manufacturer, ...(probe?.services.map((s) => `${s.title ?? ""} ${s.banner ?? ""}`) ?? [])].join(" ").toLowerCase();
@@ -81,11 +87,16 @@ function classify(d: NetDevice, probe: HostProbe | undefined, mdns: MdnsDevice |
   if (has(/_googlecast|_androidtvremote|_amzn-wplay/) || ports.has(8060) || probe?.services.some((s) => s.name === "samsung-tv" || s.name === "roku-ecp") || /mediarenderer|chromecast|roku|bravia|webos|tizen|fire ?tv|\[tv\]|smart ?tv|android ?tv|google ?tv/.test(text)) return "TV or streaming device";
   if (has(/_raop|_spotify-connect|_sonos/) && !has(/_companion-link|_device-info/)) return "Speaker";
   if (has(/_hap\.|_homekit|_matter|_esphomelib|_hue/) || ports.has(1883) || ports.has(8123) || /home assistant|homey|hubitat|smartthings|openhab|zigbee/.test(text)) return "Smart home device";
+  if (hints.apple) return hints.apple.kind;
   if (ports.has(62078) || /iphone|ipad/.test(text)) return "Phone or tablet";
   if (/diskstation|synology|qnap|truenas|nas\b|readynas|wd ?my ?cloud/.test(text) || (ports.has(5000) && ports.has(445))) return "NAS";
   if (ports.has(5555)) return "Android device";
-  if (ports.has(3389) || ports.has(445) || ports.has(22) || has(/_ssh|_smb|_workstation|_device-info|_companion-link|_afpovertcp/)) return "Computer";
+  if (ports.has(9999) || probe?.services.some((s) => ["kasa", "shelly", "tasmota", "hue"].includes(s.name))) return "Smart home device";
+  if (hints.vendor?.kind && hints.vendor.kind !== "Computer") return hints.vendor.kind;
+  if (ports.has(3389) || ports.has(445) || ports.has(22) || hints.netbios || has(/_ssh|_smb|_workstation|_device-info|_companion-link|_afpovertcp/)) return "Computer";
+  if (hints.vendor?.kind) return hints.vendor.kind;
   if (d.randomMac && !ports.size) return "Phone or laptop";
+  if (has(/_apple-mobdev2|_rdlink/)) return "Phone or tablet";
   return "Device";
 }
 
@@ -100,8 +111,32 @@ function titleModel(probe: HostProbe | undefined): string | undefined {
   return undefined;
 }
 
-function nameFor(mdns: MdnsDevice | undefined, upnp: UpnpDescription | undefined, hostnames: string[]): string | undefined {
-  return mdns?.txt.get("fn") ?? upnp?.friendlyName ?? [...(mdns?.instances ?? [])][0] ?? [...(mdns?.hostnames ?? [])][0] ?? hostnames[0];
+function nameFor(mdns: MdnsDevice | undefined, upnp: UpnpDescription | undefined, hostnames: string[], probe?: HostProbe): string | undefined {
+  const given = probe?.services.find((s) => s.deviceName)?.deviceName;
+  return mdns?.txt.get("fn") ?? upnp?.friendlyName ?? given ?? [...(mdns?.instances ?? [])][0] ?? [...(mdns?.hostnames ?? [])][0] ?? hostnames[0];
+}
+
+
+/** A Mac that announces an unsupported macOS (Bonjour's osxvers is the Darwin version). */
+function macosIssue(darwin: string | undefined): { os: string; issue?: NetIssue } | undefined {
+  const v = darwin ? macosFromDarwin(Number(darwin)) : undefined;
+  if (!v) return undefined;
+  const eol = MACOS[v] ?? (v.startsWith("10.") ? "2021-09-01" : undefined);
+  const os = `macOS ${v}`;
+  if (!eol || supportStatus(eol) !== "ended") return { os };
+  return {
+    os,
+    issue: {
+      checkId: "macos.unsupported",
+      title: "This Mac runs a macOS that no longer gets security updates",
+      severity: "high",
+      confidence: "likely",
+      summary: `The Mac announces ${os}. Apple patches only the newest three versions, and stopped patching this one around ${new Date(Date.parse(eol)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}.`,
+      why: "Apple fixes actively exploited holes in macOS every few weeks. A Mac left on an old version keeps them open.",
+      steps: ["On the Mac: System Settings → General → Software Update → install the newest macOS it offers.", "If the Mac is too old for a supported macOS, use it offline or replace it. Bulwark can check it in detail if you run it on the Mac."],
+      evidence: [`Bonjour osxvers=${darwin}`],
+    },
+  };
 }
 
 function toFinding(ip: string, port: number | undefined, i: NetIssue): Finding {
@@ -149,15 +184,24 @@ export async function scanNetwork(host: Host, opts: NetScanOptions): Promise<Net
 
   progress({ phase: "discover", done: 0, total: inScope.size, message: "Looking for devices" });
   let swept = 0;
-  const [up, mdns, ssdp] = await Promise.all([
-    sweep([...inScope], () => progress({ phase: "discover", done: ++swept, total: inScope.size, message: "Looking for devices" })),
+  const all = [...inScope];
+  // Several ways of asking, because each kind of device answers a different one: phones answer
+  // ping, Apple devices Bonjour, Windows PCs NetBIOS, routers and TVs UPnP, servers TCP.
+  const [up, pinged, mdnsMulti, mdnsUni, netbios, ssdp] = await Promise.all([
+    sweep(all, () => progress({ phase: "discover", done: ++swept, total: inScope.size, message: "Looking for devices" })),
+    pingSweep(host, all),
     opts.noMulticast ? Promise.resolve(new Map<string, MdnsDevice>()) : mdnsDiscover(ifaceAddrs),
+    mdnsUnicastSweep(all),
+    nbnsSweep(all),
     opts.noMulticast ? Promise.resolve([] as SsdpReply[]) : ssdpDiscover(ifaceAddrs),
   ]);
+  const mdns = mergeMdns(mdnsMulti, mdnsUni);
   ssdp.push(...(opts.extraSsdp ?? []));
   const arp = await arpTable(host);
   const live = new Set<string>();
   for (const ip of up) live.add(ip);
+  for (const ip of pinged) live.add(ip);
+  for (const ip of netbios.keys()) live.add(ip);
   for (const ip of arp.keys()) if (inScope.has(ip)) live.add(ip);
   for (const ip of mdns.keys()) if (inScope.has(ip)) live.add(ip);
   for (const r of ssdp) if (inScope.has(r.ip)) live.add(r.ip);
@@ -237,15 +281,23 @@ export async function scanNetwork(host: Host, opts: NetScanOptions): Promise<Net
     const p = probes.get(ip);
     const m = mdns.get(ip);
     const u = descByIp.get(ip);
-    const hostnames = uniq([...(m?.hostnames ?? []), ...(rdns.get(ip) ? [rdns.get(ip)!] : [])]);
-    const mac = arp.get(ip);
+    const nb = netbios.get(ip);
+    const hostnames = uniq([...(m?.hostnames ?? []), ...(rdns.get(ip) ? [rdns.get(ip)!] : []), ...(nb?.name ? [nb.name] : [])]);
+    const mac = arp.get(ip) ?? nb?.mac;
+    const vendor = vendorOf(mac);
+    const appleCode = m?.txt.get("model") ?? m?.txt.get("rpmd") ?? m?.txt.get("am");
+    const apple = appleModel(appleCode);
+    const mac_os = apple?.kind === "Computer" || !apple ? macosIssue(m?.txt.get("osxvers")) : undefined;
+    const smbOs = p?.services.find((s) => s.os)?.os;
     const dev: NetDevice = {
       ip,
       mac,
       randomMac: mac ? isRandomMac(mac) : undefined,
+      vendor: vendor?.vendor ?? (apple || mac_os ? "Apple" : undefined),
       hostnames,
-      name: nameFor(m, u, hostnames),
-      model: m?.txt.get("model") ?? m?.txt.get("md") ?? m?.txt.get("ty") ?? m?.txt.get("am") ?? (u ? [u.modelName, u.modelNumber].filter(Boolean).join(" ") || undefined : undefined) ?? titleModel(p),
+      name: nameFor(m, u, hostnames, p),
+      model: (apple ? `${apple.name} (${appleCode})` : undefined) ?? m?.txt.get("md") ?? m?.txt.get("ty") ?? m?.txt.get("model") ?? (u ? [u.modelName, u.modelNumber].filter(Boolean).join(" ") || undefined : undefined) ?? p?.services.find((s) => s.product && ["kasa", "shelly", "tasmota", "hue", "qnap"].includes(s.name))?.product ?? titleModel(p),
+      os: mac_os?.os ?? smbOs,
       kind: "Device",
       isGateway: ip === gateway,
       isSelf: self.has(ip),
@@ -253,8 +305,30 @@ export async function scanNetwork(host: Host, opts: NetScanOptions): Promise<Net
       mdnsServices: [...(m?.services ?? [])].map((s) => s.replace(/^_/, "").replace(/\._(tcp|udp)$/, "")),
       upnp: upnpInfo.get(ip),
     };
-    dev.kind = dev.isSelf ? "This device" : classify(dev, p, m, u);
+    dev.kind = dev.isSelf ? "This device" : classify(dev, p, m, u, { vendor, apple, netbios: nb });
+    dev.advice = adviceFor(dev);
     devices.push(dev);
+    // A Mac or NAS can answer SMB like an old Windows would; only trust the Windows reading on Windows-looking devices.
+    const notWindows = !!apple || !!mac_os || dev.vendor === "Apple" || ["NAS", "Printer"].includes(dev.kind) || /synology|qnap|western digital/i.test(dev.vendor ?? "");
+    if (p && notWindows) {
+      p.issues = p.issues.filter((i) => i.checkId !== "windows.unsupported");
+      for (const s of p.services) if (s.os) {
+        delete s.os;
+        if (s.name === "smb") delete s.product;
+      }
+      if (dev.os === smbOs) dev.os = mac_os?.os;
+    }
+    if (mac_os?.issue && !dev.isSelf) findings.push(toFinding(ip, undefined, mac_os.issue));
+    // QNAP boxes say which firmware they run on their login service.
+    if ((dev.vendor === "QNAP" || /qnap/i.test(`${dev.model ?? ""} ${dev.name ?? ""}`)) && !p?.services.some((s) => s.name === "qnap")) {
+      for (const port of [8080, 443, 80].filter((x) => p?.open.includes(x))) {
+        const q = await qnapCheck(ip, port, port === 443).catch(() => null);
+        if (!q) continue;
+        for (const i of q.issues) findings.push(toFinding(ip, port, i));
+        dev.model ??= q.product;
+        break;
+      }
+    }
     for (const i of p?.issues ?? []) {
       const f = toFinding(ip, i.port, i);
       if (dev.isSelf) f.remedy!.steps.unshift("This is the computer running Bulwark. Its own checks (under \"This device\") cover this service and can fix it there.");

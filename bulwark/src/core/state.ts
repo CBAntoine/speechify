@@ -3,6 +3,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { Inventory } from "../net/inventory.ts";
 import type { ChangeRecord, Platform, Scan } from "./types.ts";
 import { randomId } from "./util.ts";
 
@@ -119,6 +120,17 @@ export class StateStore {
     const t = randomId(24);
     await fs.writeFile(file, t + "\n", { mode: 0o600 });
     return t;
+  }
+
+  // ── devices seen on each network ──
+
+  async inventory(): Promise<Inventory> {
+    return (await this.readJson<Inventory>(path.join(this.dir, "devices.json"))) ?? {};
+  }
+
+  async saveInventory(inv: Inventory): Promise<void> {
+    await this.ensure();
+    await this.writeJson(path.join(this.dir, "devices.json"), inv);
   }
 
   // ── networks the person said are theirs ──

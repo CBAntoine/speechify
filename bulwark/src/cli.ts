@@ -8,7 +8,10 @@ import { CHECKS, FIXES } from "./checks/index.ts";
 import { applyFix, FixError, planFix, refreshFindings, rollbackChange, safeBatches } from "./core/fixer.ts";
 import { createHost } from "./core/host.ts";
 import { markdownReport } from "./core/report.ts";
-import { allFindings, runScan } from "./core/scan.ts";
+import { allFindings, mergeRemote, recordScan, runScan } from "./core/scan.ts";
+import { scanRemote } from "./remote/scan.ts";
+import { parseSshTarget, targetLabel, useStateDir } from "./remote/ssh.ts";
+import { labelDevice } from "./net/inventory.ts";
 import { counts, grade } from "./core/score.ts";
 import { defaultStateDir, StateStore } from "./core/state.ts";
 import type { ChangeRecord, Finding, FixPlan, Host, Scan, Severity } from "./core/types.ts";
@@ -88,6 +91,11 @@ ${bold("Usage")}
   bulwark scan --network          …and the other devices on your network
   bulwark scan --target 192.168.1.0/24 [--target 10.0.0.5]
                                   Check specific addresses (yours, or with permission)
+  bulwark ssh <user>@<address>    Check another computer (Linux, Mac) over SSH; its fixes then
+                                  work like this one's: bulwark fix <number>
+  bulwark devices                 Every device on your network, and which ones are new
+  bulwark devices name <ip> <name>
+                                  Name a device, and mark it as yours
   bulwark scan --android          Check the Android phones and TVs connected over adb
   bulwark android connect <ip>    Connect a phone or TV that has network/wireless debugging on
   bulwark android pair <ip:port> <code>
@@ -163,8 +171,9 @@ export function numbered(scan: Scan): Finding[] {
   const local = scan.local?.findings ?? [];
   const code = scan.code ? scan.code.projects.flatMap((p) => scan.code!.findings.filter((f) => inProject(f, p.path))) : [];
   const android = scan.android ? scan.android.devices.flatMap((d) => scan.android!.findings.filter((f) => f.target === `adb:${d.serial}`)) : [];
+  const remote = (scan.remote ?? []).flatMap((r) => r.findings);
   const net = scan.network ? scan.network.devices.flatMap((d) => scan.network!.findings.filter((f) => f.target === d.ip)) : [];
-  return [...local.filter((f) => !isSoftware(f)), ...local.filter(isSoftware), ...code, ...android, ...net].filter((f) => f.status === "fail");
+  return [...local.filter((f) => !isSoftware(f)), ...local.filter(isSoftware), ...code, ...android, ...remote, ...net].filter((f) => f.status === "fail");
 }
 
 async function latestScan(state: StateStore): Promise<Scan | null> {
@@ -232,15 +241,28 @@ function printScan(scan: Scan): void {
     }
     for (const note of and.notes) console.log(yellow(`  ! ${wrap(note, 4)}`));
   }
+  for (const r of scan.remote ?? []) {
+    if (r.error) {
+      console.log(`\n${bold(r.label)} ${dim("(over SSH)")}  ${red("couldn't be checked")}`);
+      console.log(`    ${wrap(r.error, 4)}`);
+      continue;
+    }
+    const fails = r.findings.filter((f) => f.status === "fail");
+    console.log(`\n${bold(r.device?.hostname ?? r.address)} ${dim(`(over SSH as ${r.label}) · ${r.device?.os ?? ""}`)}  ${fails.length ? scoreText(scan.scores.devices[r.target] ?? 100) : green("no problems found")}`);
+    for (const f of fails) printFinding(f, ++n);
+    const passed = r.findings.filter((f) => f.status === "pass").length;
+    if (passed) console.log(`    ${green("✓")} ${passed} checks passed`);
+    for (const note of r.notes) console.log(yellow(`  ! ${wrap(note, 4)}`));
+  }
   if (scan.network) {
     const net = scan.network;
     console.log(`\n${bold("Network")}  ${net.targets.join(", ")} · ${net.devices.length} device${net.devices.length === 1 ? "" : "s"} · ${(net.durationMs / 1000).toFixed(1)}s`);
     for (const dev of net.devices) {
       const fs = net.findings.filter((f) => f.target === dev.ip);
-      const name = [dev.name, dev.model].filter(Boolean).join(" · ");
+      const name = [dev.label ?? dev.name, dev.model, dev.os, dev.vendor && !`${dev.name} ${dev.model}`.includes(dev.vendor) ? dev.vendor : ""].filter(Boolean).join(" · ");
       const ports = dev.services.map((s) => `${s.port}/${s.name}`).join(" ");
       const sc = scan.scores.devices[dev.ip] ?? 100;
-      console.log(`\n  ${bold(dev.ip.padEnd(15))} ${dev.kind}${name ? dim(` · ${name}`) : ""}  ${fs.length ? scoreText(sc) : green("no problems found")}`);
+      console.log(`\n  ${bold(dev.ip.padEnd(15))} ${dev.kind}${name ? dim(` · ${name}`) : ""}${dev.isNew ? ` ${yellow("[new]")}` : ""}  ${fs.length ? scoreText(sc) : green("no problems found")}`);
       if (ports) console.log(dim(`                  open: ${ports}`));
       for (const f of fs) printFinding(f, ++n);
     }
@@ -358,7 +380,7 @@ async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
     },
   });
   if (tty) process.stdout.write("\r\x1b[2K");
-  await state.saveScan(scan);
+  await recordScan(state, scan);
   if (a.flags.json) console.log(JSON.stringify(scan, null, 2));
   else printScan(scan);
 }
@@ -520,6 +542,50 @@ ${bold("Checking a phone or TV over adb")}
   When you're done, apply "Turn off debugging on the device" (or switch it off in Developer options).
 `;
 
+async function cmdSsh(host: Host, state: StateStore, a: Args): Promise<void> {
+  const t = parseSshTarget(a.rest[0] ?? "");
+  if (!t) throw new FixError("Say which computer and user: bulwark ssh <user>@<address> (for example pi@192.168.1.40, or root@nas.local:2222).");
+  console.log(dim(`Connecting to ${targetLabel(t)}. ssh may ask for the password; Bulwark doesn't see or keep it.`));
+  const r = await scanRemote(host, t, { interactive: !!process.stdin.isTTY });
+  if (r.error) throw new FixError(r.error);
+  // The results join the last scan, so the numbers work with bulwark fix.
+  const scan = (await latestScan(state)) ?? (await runScan(host, { local: false }));
+  mergeRemote(scan, r);
+  scan.finishedAt = new Date().toISOString();
+  await state.saveScan(scan);
+  printScan(scan);
+}
+
+async function cmdDevices(state: StateStore, a: Args): Promise<void> {
+  const scan = await latestScan(state);
+  const net = scan?.network;
+  if (!net) throw new FixError("No network scan yet. Run bulwark scan --network first.");
+  const [sub, target, ...words] = a.rest;
+  if (sub === "name" || sub === "mine") {
+    const dev = net.devices.find((d) => d.ip === target || d.key === target || d.mac === target);
+    if (!dev?.key || !net.networkId) throw new FixError(`No device ${target ?? ""} in the last network scan. Use its IP address, as bulwark devices lists it.`);
+    const label = words.join(" ").trim();
+    const inv = await state.inventory();
+    labelDevice(inv, scan, net.networkId, dev.key, { label: sub === "name" ? label : undefined, mine: true });
+    await state.saveInventory(inv);
+    await state.saveScan(scan!);
+    console.log(green(`✓ ${dev.ip} is now known${label ? ` as "${label}"` : ""}. It won't be flagged as new again.`));
+    return;
+  }
+  const inv = (await state.inventory())[net.networkId ?? ""] ?? [];
+  console.log(`\n${bold("Devices on this network")}  ${dim(`${net.devices.length} in the last scan · ${inv.length} seen since ${inv.length ? new Date(inv.map((d) => d.firstSeen).sort()[0]).toLocaleDateString() : "now"}`)}\n`);
+  for (const d of [...net.devices].sort((x, y) => x.ip.localeCompare(y.ip, undefined, { numeric: true }))) {
+    const what = [d.label ?? d.name, d.model, d.vendor].filter(Boolean).join(" · ");
+    console.log(`  ${bold(d.ip.padEnd(15))} ${d.kind.padEnd(22)} ${what}${d.isNew ? ` ${yellow("[new]")}` : ""}${d.mine ? dim(" [known]") : ""}`);
+  }
+  const gone = inv.filter((r) => !net.devices.some((d) => d.key === r.key));
+  if (gone.length) {
+    console.log(dim(`\n  Not seen in the last scan:`));
+    for (const r of gone.slice(0, 30)) console.log(dim(`    ${(r.label ?? r.name ?? r.vendor ?? r.key).slice(0, 40).padEnd(40)} last seen ${new Date(r.lastSeen).toLocaleDateString()} at ${r.lastIp}`));
+  }
+  console.log(dim(`\nName a device (and stop it being flagged as new): bulwark devices name <ip> <name>`));
+}
+
 async function cmdReport(state: StateStore, a: Args): Promise<void> {
   const scan = a.rest[0] ? await state.getScan(a.rest[0]) : await latestScan(state);
   if (!scan) throw new FixError("No scan yet. Run bulwark scan first.");
@@ -540,6 +606,7 @@ export async function main(argv: string[]): Promise<void> {
   const host = await createHost();
   if (a.flags.sudo && !host.isRoot) reexecWithSudo(argv);
   const state = new StateStore(typeof a.flags["state-dir"] === "string" ? a.flags["state-dir"] : defaultStateDir(host.platform, host.isRoot));
+  useStateDir(state.dir);
   try {
     switch (a.cmd) {
       case "scan":
@@ -563,6 +630,12 @@ export async function main(argv: string[]): Promise<void> {
         break;
       case "report":
         await cmdReport(state, a);
+        break;
+      case "devices":
+        await cmdDevices(state, a);
+        break;
+      case "ssh":
+        await cmdSsh(host, state, a);
         break;
       case "serve":
       case "dashboard": {

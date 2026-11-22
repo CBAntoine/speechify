@@ -5,6 +5,7 @@ import * as tls from "node:tls";
 import type { ServiceInfo } from "../../core/types.ts";
 import { matchSoftware, parseServerHeader } from "../fingerprints.ts";
 import { httpGet, type HttpResponse } from "../tcp.ts";
+import { homeApiChecks } from "./home.ts";
 import type { NetIssue, ProbeResult } from "../types.ts";
 
 export function pageTitle(body: string): string | undefined {
@@ -106,7 +107,9 @@ export async function tlsDetails(ip: string, port: number): Promise<ServiceInfo[
   return info;
 }
 
-async function apiChecks(ip: string, port: number, useTls: boolean, root: HttpResponse): Promise<{ name?: string; product?: string; version?: string; issues: NetIssue[] }> {
+async function apiChecks(ip: string, port: number, useTls: boolean, root: HttpResponse): Promise<{ name?: string; product?: string; version?: string; deviceName?: string; issues: NetIssue[] }> {
+  const home = await homeApiChecks(ip, port, useTls, root);
+  if (home) return home;
   const issues: NetIssue[] = [];
   const body = root.body.trim();
   // Elasticsearch / OpenSearch
@@ -189,6 +192,7 @@ export async function probeHttp(ip: string, port: number, opts: { tls?: boolean 
     service.name = api.name;
     service.product = api.product;
     service.version = api.version;
+    service.deviceName = api.deviceName;
   }
 
   if (!useTls) {

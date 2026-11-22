@@ -17,10 +17,13 @@ import { isSelfSerial } from "./android/scan.ts";
 import { FIXES } from "./checks/index.ts";
 import { applyFix, FixError, planFix, refreshFindings, rollbackChange, safeBatches } from "./core/fixer.ts";
 import { markdownReport } from "./core/report.ts";
-import { allFindings, deviceInfo, runScan, type ScanProgress } from "./core/scan.ts";
+import { allFindings, deviceInfo, mergeRemote, recordScan, runScan, type ScanProgress } from "./core/scan.ts";
+import { scanRemote } from "./remote/scan.ts";
+import { findSsh, parseSshTarget, SSH_INSTALL_HINT, targetLabel, useStateDir } from "./remote/ssh.ts";
 import type { StateStore } from "./core/state.ts";
 import type { ChangeRecord, Finding, Host, Scan } from "./core/types.ts";
 import { errorMessage, randomId } from "./core/util.ts";
+import { labelDevice } from "./net/inventory.ts";
 import { arpTable, defaultGateway, localNetworks } from "./net/local.ts";
 import { defaultTargets } from "./net/scan.ts";
 import { defaultCodeRoots } from "./software/deps.ts";
@@ -44,7 +47,7 @@ const SECURITY_HEADERS = {
 
 interface Job {
   id: string;
-  kind: "scan" | "fix" | "fix-all" | "rollback";
+  kind: "scan" | "fix" | "fix-all" | "rollback" | "remote";
   status: "running" | "done" | "error";
   progress?: ScanProgress;
   result?: unknown;
@@ -158,6 +161,7 @@ export function allowedHosts(bind: string, port: number, lan: string[] = []): Se
 export function createApp(opts: ServerOptions & { token: string; loginCode?: LoginCode; lanAddresses?: string[] }) {
   const { host, state, token } = opts;
   const hosts = allowedHosts(opts.bind, opts.port, opts.lanAddresses);
+  useStateDir(state.dir);
   const jobs = new Map<string, Job>();
   let running: Job | null = null;
 
@@ -234,12 +238,46 @@ export function createApp(opts: ServerOptions & { token: string; loginCode?: Log
         network: { targets: def.targets, skipped: def.skipped, confirmed: opts.demo ? def.targets : def.targets.filter((_, i) => known.includes(keys[i])) },
         code: { defaultRoots: opts.demo ? opts.demo.codeRoots ?? [] : await defaultCodeRoots(host) },
         android: { adb: opts.demo ? !!opts.demo.android : !!(await findAdb(host)), hint: ADB_INSTALL_HINT },
+        ssh: { available: !opts.demo && !!(await findSsh(host)), hint: SSH_INSTALL_HINT },
         rootFixes: [...FIXES.values()].filter((f) => f.needsRoot).map((f) => f.id),
         job: running ? { id: running.id, kind: running.kind } : null,
       };
     },
     "GET /api/scans": async () =>
       (await state.listScans()).map((s) => ({ id: s.id, startedAt: s.startedAt, scores: s.scores, local: !!s.local, devices: s.network?.devices.length ?? 0, android: s.android?.devices.length ?? 0 })),
+    "POST /api/devices/label": async (req) => {
+      const body = await readJson(req);
+      if (typeof body.key !== "string" || body.key.length > 200) throw new HttpError(400, "Say which device.");
+      if (body.label !== undefined && (typeof body.label !== "string" || body.label.length > 80)) throw new HttpError(400, "Names can be up to 80 characters.");
+      const scan = await latest();
+      const network = scan.network?.networkId;
+      if (!network) throw new HttpError(409, "Scan your network first.", "no-network");
+      const inv = await state.inventory();
+      if (!labelDevice(inv, scan, network, body.key, { label: body.label as string | undefined, mine: body.mine === undefined ? undefined : body.mine === true })) throw new HttpError(404, "That device isn't in the last scan.");
+      await state.saveInventory(inv);
+      await state.saveScan(scan);
+      return { ok: true };
+    },
+    "POST /api/ssh/check": async (req) => {
+      if (opts.demo) throw new HttpError(400, "The demo has no computers to log in to. Run Bulwark for real to check computers over SSH.");
+      const body = await readJson(req);
+      const t = typeof body.target === "string" ? parseSshTarget(body.target) : null;
+      if (!t) throw new HttpError(400, "Enter the user and address, like pi@192.168.1.40.");
+      const password = typeof body.password === "string" && body.password ? body.password.slice(0, 1024) : undefined;
+      // The dashboard's traffic isn't encrypted; a password may only come from this device itself.
+      if (password && !/^(127\.|::1$|::ffff:127\.)/.test(req.socket.remoteAddress ?? "")) {
+        throw new HttpError(400, "For safety, passwords can only be typed on the device running Bulwark, not over the network. Use a key, or enter it there.");
+      }
+      const job = startJob("remote", async (j) => {
+        const r = await scanRemote(host, t, { password, onProgress: (p) => (j.progress = p) });
+        if (r.error) throw new Error(r.error);
+        const scan = (await state.latestScan()) ?? (await runScan(host, { local: false }));
+        mergeRemote(scan, r);
+        await state.saveScan(scan);
+        return { target: r.target, label: targetLabel(t) };
+      });
+      return { jobId: job.id };
+    },
     "GET /api/android": async () => {
       const adb = await findAdb(host);
       if (!adb) return { adb: false, hint: ADB_INSTALL_HINT, devices: [] };
@@ -267,7 +305,7 @@ export function createApp(opts: ServerOptions & { token: string; loginCode?: Log
             android: !!demo.android,
             onProgress: (p) => (j.progress = p),
           });
-          await state.saveScan(scan);
+          await recordScan(state, scan);
           return { scanId: scan.id };
         });
         return { jobId: job.id };
@@ -298,10 +336,11 @@ export function createApp(opts: ServerOptions & { token: string; loginCode?: Log
         code = { roots, cacheDir: path.join(state.dir, "osv-cache") };
       }
       const android = body.android === true;
-      if (!local && !network && !code && !android) throw new HttpError(400, "Choose what to scan.");
+      const remote = body.remote === true ? ((await state.latestScan())?.remote ?? []).map((r) => r.target) : [];
+      if (!local && !network && !code && !android && !remote.length) throw new HttpError(400, "Choose what to scan.");
       const job = startJob("scan", async (j) => {
-        const scan = await runScan(host, { local, code, network, android, onProgress: (p) => (j.progress = p) });
-        await state.saveScan(scan);
+        const scan = await runScan(host, { local, code, network, android, remote, onProgress: (p) => (j.progress = p) });
+        await recordScan(state, scan);
         return { scanId: scan.id };
       });
       return { jobId: job.id };

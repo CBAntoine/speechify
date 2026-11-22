@@ -72,8 +72,9 @@ const ICON = {
   device: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/>'),
   code: svg('<path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-11Z"/><path d="m10 11-2 2 2 2M14 11l2 2-2 2"/>'),
   package: svg('<path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9L12 3Z"/><path d="m3.5 7.5 8.5 4.5 8.5-4.5M12 12v9"/>'),
+  gamepad: svg('<path d="M7.5 8h9a4.5 4.5 0 0 1 4.3 5.8l-1 3.3a2.2 2.2 0 0 1-3.8.8L14.4 16H9.6L8 17.9a2.2 2.2 0 0 1-3.8-.8l-1-3.3A4.5 4.5 0 0 1 7.5 8Z"/><path d="M8 11v3M6.5 12.5h3M15.5 12h.01M17.5 13.5h.01"/>'),
 };
-const KIND_ICON = { Router: "router", Computer: "computer", "This device": "computer", "Phone or tablet": "phone", "Phone or laptop": "phone", "Android device": "phone", Camera: "camera", Printer: "printer", "TV or streaming device": "tv", Speaker: "speaker", NAS: "nas", "Smart home device": "home" };
+const KIND_ICON = { Router: "router", Computer: "computer", "This device": "computer", "Phone or tablet": "phone", "Phone or laptop": "phone", "Android device": "phone", Camera: "camera", Printer: "printer", "TV or streaming device": "tv", Speaker: "speaker", NAS: "nas", "Smart home device": "home", "Game console": "gamepad" };
 
 // ── derived data ──
 
@@ -84,7 +85,9 @@ const softwareFindings = () => localFindings().filter((f) => f.category === "Sof
 const codeFindings = () => (scan() && scan().code ? scan().code.findings : []);
 const netFindings = () => (scan() && scan().network ? scan().network.findings : []);
 const androidFindings = () => (scan() && scan().android ? scan().android.findings : []);
-const everyFinding = () => [...localFindings(), ...codeFindings(), ...androidFindings(), ...netFindings()];
+const remoteScans = () => (scan() && scan().remote ? scan().remote : []);
+const remoteFindings = () => remoteScans().reduce((all, r) => all.concat(r.findings), []);
+const everyFinding = () => [...localFindings(), ...codeFindings(), ...androidFindings(), ...remoteFindings(), ...netFindings()];
 const isAndroid = () => S.data.device.platform === "android";
 const failing = (list) => list.filter((f) => f.status === "fail");
 
@@ -328,19 +331,74 @@ function worst(list) {
 function deviceCard(d, list) {
   const c = counts(list);
   const open = S.device === d.ip;
-  const title = d.name || (d.isSelf ? "This device" : d.kind);
-  const sub = [d.ip, d.model || (d.name ? d.kind : ""), d.mac ? d.mac.toUpperCase() : ""].filter(Boolean).join(" · ");
+  const title = d.label || d.name || (d.isSelf ? "This device" : d.model || (d.vendor ? `${d.vendor} ${d.kind.toLowerCase()}` : d.kind));
+  const named = !!(d.label || d.name);
+  const sub = [d.ip, named ? d.model || d.kind : d.model ? d.kind : "", d.os, d.vendor && !title.includes(d.vendor) && !(d.model || "").includes(d.vendor) ? d.vendor : ""].filter(Boolean).join(" · ");
   const chips = d.services.slice(0, 10).map((s) => `<span class="chip">${s.port} ${esc(s.name)}</span>`).join("");
   return `<button class="device" data-action="device" data-ip="${esc(d.ip)}" aria-expanded="${open}">
     <div class="device-top"><div class="device-icon">${ICON[KIND_ICON[d.kind] || "device"]}</div>
-      <div class="sr-wrap"><div class="device-name">${esc(title)}${d.isGateway ? ` <span class="pill pill-muted">router</span>` : ""}</div><div class="device-sub">${esc(sub)}</div></div></div>
+      <div class="sr-wrap"><div class="device-name">${esc(title)}${d.isGateway ? ` <span class="pill pill-muted">router</span>` : ""}${d.isNew ? ` <span class="pill pill-warn">New</span>` : ""}</div><div class="device-sub">${esc(sub)}</div></div></div>
     <div class="counts">${countRow(c)}</div>
     ${chips ? `<div class="chips">${chips}</div>` : ""}
   </button>`;
 }
 
+/** What an SSH check found inside a computer, or the offer to look. */
+function remoteResult(r) {
+  if (r.error) return `<div class="callout callout-bad"><b>Couldn't check ${esc(r.label)}.</b> ${esc(r.error)}</div>`;
+  const fs = failing(r.findings).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+  const passed = r.findings.filter((f) => f.status === "pass");
+  return `<p class="hint">${esc([r.device && r.device.os, `checked as ${r.label}`, r.device && !r.device.isRoot ? "without admin rights" : ""].filter(Boolean).join(" · "))}</p>
+    ${fs.length ? findingList(fs) : `<div class="empty">No problems found inside ${esc(r.device ? r.device.hostname : r.address)}.</div>`}
+    ${passed.length ? `<div class="passed passed-gap">${passed.map((f) => `<span>${ICON.check}${esc(f.summary)}</span>`).join("")}</div>` : ""}
+    ${r.notes.length ? `<div class="notes">${r.notes.map((n) => `<p>${esc(n)}</p>`).join("")}</div>` : ""}`;
+}
+
+function insideComputer(d) {
+  if (d.isSelf || S.data.demo) return "";
+  const r = remoteScans().find((x) => x.address === d.ip);
+  const sshOpen = d.services.some((s) => s.port === 22);
+  if (!r && !(sshOpen && ["Computer", "NAS", "Device", "Router"].includes(d.kind))) return "";
+  const button = `<button class="btn" data-action="ssh-dialog" data-address="${esc(d.ip)}" data-user="${esc(r ? r.label.split("@")[0] : "")}" ${S.job ? "disabled" : ""}>${ICON.computer} ${r ? "Check again over SSH" : "Check inside it over SSH"}</button>`;
+  if (!r) return `<div class="about"><h4 class="group-title">Inside this computer</h4><p class="hint">It accepts SSH logins. If it's yours and runs Linux or macOS, Bulwark can log in with your account and run the same checks and fixes as on this computer.</p><div class="actions">${button}</div></div>`;
+  return `<div class="about"><h4 class="group-title">Inside this computer (over SSH)</h4>${remoteResult(r)}<div class="actions">${button}</div></div>`;
+}
+
+/** Naming a device, saying it's yours, and what to do about its kind. */
+function aboutDevice(d) {
+  if (d.isSelf) return "";
+  const facts = [
+    d.mac ? `Hardware address ${d.mac.toUpperCase()}${d.randomMac ? " (private, made up by the device)" : ""}` : "",
+    d.firstSeen ? `First seen ${new Date(d.firstSeen).toLocaleDateString()}` : "",
+    d.hostnames && d.hostnames.length ? `Also known as ${d.hostnames.slice(0, 3).join(", ")}` : "",
+  ].filter(Boolean);
+  const naming = d.key
+    ? `<div class="field row name-row"><input type="text" name="device-label" data-key="${esc(d.key)}" value="${esc(d.label || "")}" placeholder="${esc(d.name || "Name this device")}" aria-label="Name for ${esc(d.ip)}" maxlength="80" autocomplete="off">
+        <button class="btn" data-action="device-save" data-key="${esc(d.key)}">Save name</button>
+        ${d.mine ? `<span class="pill pill-ok">${ICON.check} Yours</span>` : `<button class="btn ${d.isNew ? "btn-primary" : ""}" data-action="device-mine" data-key="${esc(d.key)}">${ICON.check} It's mine</button>`}</div>`
+    : "";
+  const advice = d.advice && d.advice.length ? `<h4 class="group-title">What you can do</h4><ul class="advice">${d.advice.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : "";
+  return `<div class="about">${naming}${facts.length ? `<p class="hint">${facts.map(esc).join(" · ")}</p>` : ""}${advice}</div>`;
+}
+
+async function saveDevice(key, change) {
+  try {
+    await api("/api/devices/label", Object.assign({ key }, change));
+    await refresh();
+    toast(change.mine ? "Marked as yours. It won't be flagged as new again." : "Saved.", "ok");
+  } catch (err) {
+    toast(err.message, "bad");
+  }
+}
+
 function networkTab() {
   const s = scan();
+  const orphans = remoteScans().filter((r) => !(s.network && s.network.devices.some((d) => d.ip === r.address)));
+  const extra = orphans.length ? `<div class="group-title">Computers checked over SSH</div>${orphans.map((r) => `<div class="about"><h4 class="group-title">${esc(r.device ? r.device.hostname : r.address)} · ${esc(r.address)}</h4>${remoteResult(r)}<div class="actions"><button class="btn" data-action="ssh-dialog" data-address="${esc(r.address)}" data-user="${esc(r.label.split("@")[0])}">${ICON.computer} Check again</button></div></div>`).join("")}` : "";
+  return networkDevices(s) + extra;
+}
+
+function networkDevices(s) {
   if (!s.network) {
     return `<div class="empty"><h3>Check the other devices on your network</h3>
       <p>Bulwark looks for devices on your network and checks each one for open doors: Telnet, unencrypted logins, old firmware with known vulnerabilities, databases without passwords, and port forwards your router opened by itself.</p>
@@ -355,7 +413,7 @@ function networkTab() {
     html += deviceCard(d, byIp(d.ip));
     if (S.device === d.ip) {
       const fs = failing(byIp(d.ip)).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
-      html += `<div class="device-detail">${fs.length ? findingList(fs) : `<div class="empty">No problems found on ${esc(d.ip)}.</div>`}</div>`;
+      html += `<div class="device-detail">${fs.length ? findingList(fs) : `<div class="empty">No problems found on ${esc(d.ip)}.</div>`}${insideComputer(d)}${aboutDevice(d)}</div>`;
     }
   }
   html += `</div>`;
@@ -517,7 +575,7 @@ function renderProgress() {
   }
   const p = S.job.progress;
   const pct = p && p.total > 1 ? Math.round((p.done / p.total) * 100) : null;
-  const label = { scan: "Scanning", fix: "Applying the fix", "fix-all": "Applying fixes", rollback: "Undoing", connect: "Connecting" }[S.job.kind] || "Working";
+  const label = { scan: "Scanning", fix: "Applying the fix", "fix-all": "Applying fixes", rollback: "Undoing", connect: "Connecting", remote: "Checking over SSH" }[S.job.kind] || "Working";
   el.innerHTML = `<div class="msg"><span class="spin"></span>${esc(p && p.message ? p.message : label + "…")}</div><div class="bar ${pct === null ? "indeterminate" : ""}"><i></i></div>`;
   if (pct !== null) el.querySelector(".bar > i").style.width = `${pct}%`;
 }
@@ -621,6 +679,7 @@ function renderModal() {
       <div class="field"><label><input type="checkbox" name="code" ${m.code ? "checked" : ""}><span><b>Code projects</b><div class="hint">Finds projects in a folder and checks their dependencies for known vulnerabilities.</div></span></label></div>
       ${m.code ? `<div class="sub-field"><div class="field"><input type="text" name="codeRoots" value="${esc(or(m.codeRoots, S.data.code.defaultRoots.join(", ")))}" placeholder="~/code" aria-label="Folders to look in" spellcheck="false">
         <div class="hint">Package names and versions are looked up on osv.dev. Nothing else leaves this computer.</div></div></div>` : ""}
+      ${remoteScans().length ? `<div class="field"><label><input type="checkbox" name="remote" ${m.remote ? "checked" : ""}><span><b>Computers checked over SSH</b><div class="hint">${esc(remoteScans().map((r) => r.label).join(", "))}, again (with the connection still open, or your SSH key).</div></span></label></div>` : ""}
       <div class="field"><label><input type="checkbox" name="network" ${m.network ? "checked" : ""}><span><b>Other devices on my network</b><div class="hint">Finds devices and checks each one's open services. Doesn't log in or try passwords. About a minute.</div></span></label></div>
       ${m.network ? `<div class="sub-field">
         <div class="field"><input type="text" name="targets" value="${esc(targets)}" placeholder="192.168.1.0/24" aria-label="Addresses to scan" spellcheck="false">
@@ -629,8 +688,18 @@ function renderModal() {
         ${publicTyped ? `<div class="field"><label><input type="checkbox" name="authorized" ${m.authorized ? "checked" : ""}><span>Some of these are public internet addresses. I own them or have written permission to test them.</span></label></div>` : ""}
       </div>` : ""}
       ${m.error ? `<div class="callout callout-bad">${esc(m.error)}</div>` : ""}`;
-    const ready = (m.local || m.network || m.code || (m.android && adb)) && (!m.network || !needsConfirm || m.own) && (!publicTyped || m.authorized);
+    const ready = (m.local || m.network || m.code || m.remote || (m.android && adb)) && (!m.network || !needsConfirm || m.own) && (!publicTyped || m.authorized);
     root.innerHTML = modalFrame("Scan", body, `<button class="btn" data-action="close">Cancel</button><button class="btn btn-primary" data-action="scan-start" ${ready ? "" : "disabled"}>${ICON.scan} Start scan</button>`);
+  } else if (m.type === "ssh") {
+    const remote = !/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+    const body = `<p>Bulwark logs in to <b>${esc(m.address)}</b> with an account of yours and runs the same checks as on this computer. Fixes are shown before they're applied, and can be undone, as usual. It works with Linux and macOS (turn on Remote Login on a Mac).</p>
+      ${S.data.ssh.available ? "" : `<div class="callout callout-warn">${esc(S.data.ssh.hint)}</div>`}
+      <div class="field"><label class="stack"><span>User name on that computer</span><input type="text" name="ssh-user" value="${esc(m.user || "")}" placeholder="pi" autocomplete="username" spellcheck="false"></label>
+        <div class="hint">Admin rights there are needed for most fixes: use root, or a user whose sudo doesn't ask for a password.</div></div>
+      <div class="field"><label class="stack"><span>Password (leave empty to use your SSH key)</span><input type="password" name="ssh-password" autocomplete="current-password" ${remote ? "disabled" : ""}></label>
+        <div class="hint">${remote ? "Passwords can only be typed on the device running Bulwark, because this connection isn't encrypted." : "Used once to open the connection, then forgotten. Bulwark never stores it."}</div></div>
+      ${m.error ? `<div class="callout callout-bad">${esc(m.error)}</div>` : ""}`;
+    root.innerHTML = modalFrame("Check a computer over SSH", body, `<button class="btn" data-action="close">Cancel</button><button class="btn btn-primary" data-action="ssh-start" ${S.data.ssh.available ? "" : "disabled"}>${ICON.computer} Log in and check</button>`);
   } else if (m.type === "android") {
     root.innerHTML = modalFrame("Connect a phone or TV", androidConnectBody(m), androidConnectFoot(m), true);
   } else if (m.type === "plan") {
@@ -820,7 +889,35 @@ async function applyPlan() {
 function scanModal(extra) {
   const s = scan();
   const had = (k) => !!(s && s[k]);
-  return Object.assign({ type: "scan", local: true, code: had("code"), network: had("network"), android: had("android") }, extra || {});
+  return Object.assign({ type: "scan", local: true, code: had("code"), network: had("network"), android: had("android"), remote: !!(s && s.remote && s.remote.length) }, extra || {});
+}
+
+async function sshCheck() {
+  const m = S.modal;
+  const user = (document.querySelector('input[name="ssh-user"]') || {}).value || "";
+  const pw = document.querySelector('input[name="ssh-password"]');
+  const password = pw && !pw.disabled ? pw.value : "";
+  if (!user.trim()) {
+    m.error = "Enter the user name to log in as.";
+    renderModal();
+    return;
+  }
+  try {
+    const { jobId } = await api("/api/ssh/check", { target: `${user.trim()}@${m.address}`, password: password || undefined });
+    if (pw) pw.value = "";
+    S.modal = null;
+    const j = await watchJob(jobId, "remote");
+    if (j.status === "error") throw new Error(j.error);
+    S.tab = "network";
+    S.device = m.address;
+    await refresh();
+    const r = remoteScans().find((x) => x.address === m.address);
+    const n = r ? failing(r.findings).length : 0;
+    toast(n ? `Checked ${j.result.label}: ${plural(n, "problem")} found.` : `Checked ${j.result.label}: no problems found.`, n ? "" : "ok");
+  } catch (err) {
+    S.modal = Object.assign({}, m, { user, error: err.message });
+    renderModal();
+  }
 }
 
 async function startScan() {
@@ -829,7 +926,7 @@ async function startScan() {
   try {
     const codeRoots = m.code ? or(m.codeRoots, S.data.code.defaultRoots.join(", ")).split(",").map((r) => r.trim()).filter(Boolean) : undefined;
     const android = !!m.android && S.data.android.adb;
-    const { jobId } = await api("/api/scan", { local: !!m.local, code: !!m.code, codeRoots, android, network: !!m.network, targets: m.targets === undefined ? undefined : targets, confirmOwnership: !!m.own, authorized: !!m.authorized });
+    const { jobId } = await api("/api/scan", { local: !!m.local, code: !!m.code, codeRoots, android, remote: !!m.remote, network: !!m.network, targets: m.targets === undefined ? undefined : targets, confirmOwnership: !!m.own, authorized: !!m.authorized });
     S.modal = null;
     const j = await watchJob(jobId, "scan");
     if (j.status === "error") throw new Error(j.error);
@@ -929,6 +1026,21 @@ document.addEventListener("click", (e) => {
     case "android-connect":
       openAndroid(el.dataset.kind);
       break;
+    case "device-save": {
+      const input = document.querySelector(`input[name="device-label"][data-key="${CSS.escape(el.dataset.key)}"]`);
+      saveDevice(el.dataset.key, { label: input ? input.value : "", mine: true });
+      break;
+    }
+    case "device-mine":
+      saveDevice(el.dataset.key, { mine: true });
+      break;
+    case "ssh-dialog":
+      S.modal = { type: "ssh", address: el.dataset.address, user: el.dataset.user || "" };
+      renderModal();
+      break;
+    case "ssh-start":
+      sshCheck();
+      break;
     case "android-kind":
       S.modal.kind = el.dataset.kind;
       S.modal.result = null;
@@ -1005,7 +1117,7 @@ document.addEventListener("input", (e) => {
     }
     return;
   }
-  if (["local", "code", "network", "android", "own", "authorized"].includes(t.name)) {
+  if (["local", "code", "network", "android", "remote", "own", "authorized"].includes(t.name)) {
     m[t.name] = t.checked;
     renderModal();
   }
@@ -1022,6 +1134,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   const name = e.target && e.target.name;
   if (name === "login-code") login();
+  else if (name === "device-label") saveDevice(e.target.dataset.key, { label: e.target.value, mine: true });
+  else if (name === "ssh-user" || name === "ssh-password") sshCheck();
   else if (S.modal && S.modal.type === "android" && name === "address") androidAction("connect");
   else if (S.modal && S.modal.type === "android" && (name === "code" || name === "pairAddress")) androidAction("pair");
 });

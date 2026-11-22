@@ -43,6 +43,59 @@ function httpServer(ip: string, port: number, handler: (req: http.IncomingMessag
   });
 }
 
+/**
+ * A Windows file share as far as the first step of a login: SMBv1 refused, SMB2 negotiated, and an
+ * NTLM challenge naming the Windows build and the computer.
+ */
+function windowsSmb(build: number, computer: string): (s: net.Socket) => void {
+  const frame = (b: Buffer) => Buffer.concat([Buffer.from([0, (b.length >> 16) & 0xff, (b.length >> 8) & 0xff, b.length & 0xff]), b]);
+  const smb2 = (command: number, status: number, body: Buffer) => {
+    const h = Buffer.alloc(64);
+    h.writeUInt32BE(0xfe534d42, 0);
+    h.writeUInt16LE(64, 4);
+    h.writeUInt32LE(status, 8);
+    h.writeUInt16LE(command, 12);
+    return frame(Buffer.concat([h, body]));
+  };
+  const av = (id: number, text: string) => {
+    const v = Buffer.from(text, "utf16le");
+    const h = Buffer.alloc(4);
+    h.writeUInt16LE(id, 0);
+    h.writeUInt16LE(v.length, 2);
+    return Buffer.concat([h, v]);
+  };
+  const info = Buffer.concat([av(2, "WORKGROUP"), av(1, computer), av(3, computer.toLowerCase()), Buffer.alloc(4)]);
+  const challenge = Buffer.alloc(56);
+  challenge.write("NTLMSSP\0", 0, "latin1");
+  challenge.writeUInt32LE(2, 8);
+  challenge.writeUInt32LE(0xe28a8215, 20); // includes "version present"
+  challenge.writeUInt16LE(info.length, 40);
+  challenge.writeUInt16LE(info.length, 42);
+  challenge.writeUInt32LE(56, 44);
+  challenge[48] = 10;
+  challenge[49] = 0;
+  challenge.writeUInt16LE(build, 50);
+  challenge[55] = 15;
+  return (s) =>
+    s.on("data", (d: Buffer) => {
+      if (d.length < 8) return;
+      if (d.readUInt32BE(4) === 0xff534d42) return void s.destroy(); // SMBv1: refused
+      const command = d.readUInt16LE(4 + 12);
+      if (command === 0) s.write(smb2(0, 0, Buffer.alloc(65)));
+      else s.write(smb2(1, 0xc0000016, Buffer.concat([Buffer.alloc(8), challenge, info])));
+    });
+}
+
+/** TP-Link Kasa's local protocol: a 4-byte length, then JSON scrambled with a running XOR. */
+function kasaReply(text: string): Buffer {
+  const data = Buffer.from(text);
+  const out = Buffer.alloc(4 + data.length);
+  out.writeUInt32BE(data.length, 0);
+  let key = 171;
+  for (let i = 0; i < data.length; i++) out[4 + i] = key = data[i] ^ key;
+  return out;
+}
+
 const page = (title: string, extra = "") => `<!doctype html><html><head><title>${title}</title></head><body>${extra}</body></html>`;
 
 export async function startFakeLan(): Promise<FakeLan> {
@@ -55,6 +108,8 @@ export async function startFakeLan(): Promise<FakeLan> {
     hub: "127.0.0.16",
     printer: "127.0.0.17",
     docker: "127.0.0.18",
+    shelly: "127.0.0.20",
+    kasa: "127.0.0.21",
   };
 
   // ── Router: plain-HTTP admin login, UPnP with two port forwards ──
@@ -173,7 +228,7 @@ export async function startFakeLan(): Promise<FakeLan> {
   await tcp(ips.pc, 3389, (s) =>
     s.once("data", () => s.end(Buffer.from([0x03, 0x00, 0x00, 0x13, 0x0e, 0xd0, 0x00, 0x00, 0x12, 0x34, 0x00, 0x02, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]))),
   );
-  await tcp(ips.pc, 445, (s) => s.once("data", () => s.destroy()));
+  await tcp(ips.pc, 445, windowsSmb(19045, "FAMILY-PC"));
   await tcp(ips.pc, 139, () => {});
 
   // ── Android TV box: open ADB, Chromecast-style HTTP ──
@@ -198,7 +253,21 @@ export async function startFakeLan(): Promise<FakeLan> {
     s.write("RFB 003.008\n");
     s.once("data", () => s.write(Buffer.from([0x01, 0x01])));
   });
-  await httpServer(ips.hub, 8123, () => ({ body: page("Home Assistant") }));
+  await httpServer(ips.hub, 8123, (req) =>
+    req.url === "/api/onboarding"
+      ? { headers: { "Content-Type": "application/json" }, body: `[{"step":"user","done":false},{"step":"core_config","done":false}]` }
+      : { body: page("Home Assistant") },
+  );
+
+  // ── Smart plugs: a Shelly with no password, an old TP-Link Kasa ──
+  await httpServer(ips.shelly, 80, (req) =>
+    req.url === "/shelly"
+      ? { headers: { "Content-Type": "application/json" }, body: `{"type":"SHPLG-S","mac":"C45BBE001122","auth":false,"fw":"20230913-114008/v1.14.0-gcb84623","num_outputs":1}` }
+      : { body: page("Shelly Plug S", `<div id="app">Shelly</div>`) },
+  );
+  await tcp(ips.kasa, 9999, (s) =>
+    s.once("data", () => s.end(kasaReply(`{"system":{"get_sysinfo":{"sw_ver":"1.5.4 Build 180815 Rel.121440","hw_ver":"2.0","model":"HS100(UK)","alias":"Space heater","mac":"50:C7:BF:00:11:22","relay_state":0}}}`))),
+  );
 
   // ── Printer: raw port 9100, web page without a login ──
   await tcp(ips.printer, 9100, () => {});
