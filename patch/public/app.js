@@ -1,6 +1,6 @@
 // Patch dashboard. Plain ES modules, no build step.
 import { icon } from "./icons.js";
-import { createVoice } from "./voice.js";
+import { createVoice, creditsSummary, TOP_UP } from "./voice.js";
 import { createTvApps } from "./tvapps.js";
 
 const BOOT = JSON.parse(document.getElementById("boot").textContent || "{}");
@@ -652,7 +652,7 @@ function closeOverlays() {
   $("#drawer").setAttribute("aria-hidden", "true");
   $("#modal").classList.remove("is-open");
   $("#modal").setAttribute("aria-hidden", "true");
-  $("#scrim").classList.remove("is-open");
+  $("#scrim").classList.remove("is-open", "for-modal");
 }
 
 const btn = (id, act, label, extra = "", value) => `<button class="btn btn--sm ${extra}" data-act="${act}" data-id="${id}"${value != null ? ` data-value="${esc(value)}"` : ""}>${label}</button>`;
@@ -966,7 +966,8 @@ function openModal(title, body, { wide } = {}) {
   m.innerHTML = `<div class="modal__head"><h2 id="modalTitle">${title}</h2><button class="btn btn--ghost icon-btn" data-ui="close" aria-label="Close">${icon("close", 18)}</button></div><div class="modal__body">${body}</div>`;
   m.classList.add("is-open");
   m.setAttribute("aria-hidden", "false");
-  $("#scrim").classList.add("is-open");
+  // "for-modal": on phones the window and its shade go over the voice panel, not under it.
+  $("#scrim").classList.add("is-open", "for-modal");
 }
 
 let confirmResolve = null;
@@ -1068,6 +1069,7 @@ async function openSettings(focus) {
         <div class="row"><input name="elevenlabsApiKey" type="password" autocomplete="off" placeholder="${s.elevenlabs.hasKey ? `Saved (${esc(s.elevenlabs.keyHint)}). Paste a new one to replace it` : "sk_…"}" ${s.elevenlabs.fromEnv ? "disabled" : ""}><button class="btn btn--voice">Save & test</button></div>
         <small>Create one at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer">elevenlabs.io → Developers → API keys</a> with the <b>ElevenLabs Agents</b> permission (Write). It's stored only on ${HERE} and is used to start each conversation.${s.elevenlabs.fromEnv ? " It's currently set by the ELEVENLABS_API_KEY environment variable." : ""}</small>
         <div class="check" id="elCheck"></div>
+        <div class="check" id="elCredits" hidden></div>
       </label>
       <details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Advanced</summary>
         <label class="field" style="margin-top:10px"><span>Agent ID</span><input name="agentId" value="${s.elevenlabs.customAgent ? esc(s.elevenlabs.agentId) : ""}" placeholder="${esc(s.elevenlabs.agentId)} (built-in)"><small>Leave empty to use the Patch agent that ships with this app.</small></label>
@@ -1116,6 +1118,19 @@ ${BOOT.phone ? "" : `<label class="field" style="grid-template-columns:auto 1fr;
   const target = focus === "ha" ? 'input[name="haUrl"]' : focus === "el" ? 'input[name="elevenlabsApiKey"]' : focus === "claude" ? 'input[name="anthropicApiKey"]' : null;
   if (target) $(target, $("#modal"))?.focus();
   if (focus === "about") $("#aboutPatch")?.scrollIntoView({ block: "center" });
+  // How much of the month's ElevenLabs credits is left (ElevenLabs stops conversations at zero).
+  if (s.elevenlabs.hasKey) {
+    api("GET", "/api/voice/credits")
+      .then((c) => {
+        const el = $("#elCredits");
+        const line = creditsSummary(c);
+        if (!el || !line) return;
+        el.hidden = false;
+        el.className = `check ${c.left > 0 ? "check--ok" : "check--bad"}`;
+        el.innerHTML = `${esc(line)}${c.left > 0 ? "" : ` <a href="${TOP_UP}" target="_blank" rel="noopener noreferrer">Add credits (elevenlabs.io → Developers → Top Up)</a>`}`;
+      })
+      .catch(() => {});
+  }
 }
 
 async function saveSettings(form) {
@@ -1269,6 +1284,7 @@ document.addEventListener("click", async (e) => {
     }
     else if (what === "open") {
       $("#modal").classList.remove("is-open");
+      $("#scrim").classList.remove("for-modal");
       openDevice(ui.dataset.id);
     } else if (what === "diagnose") showDiagnosis(ui.dataset.id);
     else if (what === "hide") {

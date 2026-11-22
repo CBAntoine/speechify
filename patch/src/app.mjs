@@ -75,14 +75,16 @@ function send(res, status, body, headers = {}) {
   res.end(data);
 }
 
-export async function voiceSession(creds, mode) {
+const ELEVENLABS = "https://api.elevenlabs.io";
+
+export async function voiceSession(creds, mode, base = ELEVENLABS) {
   const apiKey = creds.apiKey;
   const agentId = creds.agentId || DEFAULT_AGENT_ID;
   if (!apiKey) return { ok: false, error: "nokey", message: "Add your ElevenLabs API key in Settings, then I can talk." };
   const endpoint = mode === "text" ? "get-signed-url" : "token";
   let res;
   try {
-    res = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/${endpoint}?agent_id=${encodeURIComponent(agentId)}`, { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(12_000) });
+    res = await fetch(`${base}/v1/convai/conversation/${endpoint}?agent_id=${encodeURIComponent(agentId)}`, { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(12_000) });
   } catch {
     return { ok: false, error: "network", message: "Couldn't reach ElevenLabs. Check this computer's internet connection." };
   }
@@ -96,6 +98,37 @@ export async function voiceSession(creds, mode) {
   if (mode === "text" && data.signed_url) return { ok: true, auth: { signedUrl: data.signed_url } };
   if (data.token) return { ok: true, auth: { conversationToken: data.token } };
   return { ok: false, error: "upstream", message: "Unexpected answer from ElevenLabs." };
+}
+
+/**
+ * The ElevenLabs account's credits for this month. When they're used up, ElevenLabs still hands out
+ * a session but won't start the conversation, and all it says is "The AI agent you are trying to
+ * reach is not available". So Patch asks, to tell the person what's wrong and when they come back.
+ */
+export async function voiceCredits(creds, base = ELEVENLABS) {
+  if (!creds.apiKey) return { ok: false, error: "nokey" };
+  let res;
+  try {
+    res = await fetch(`${base}/v1/user/subscription`, { headers: { "xi-api-key": creds.apiKey }, signal: AbortSignal.timeout(8000) });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+  // A key can be limited to some parts of ElevenLabs; then Patch just can't see the balance.
+  if (res.status === 401 || res.status === 403) return { ok: false, error: "permission" };
+  if (!res.ok) return { ok: false, error: "upstream" };
+  const d = await res.json().catch(() => null);
+  const used = Number(d?.character_count);
+  const limit = Number(d?.character_limit);
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return { ok: false, error: "upstream" };
+  const reset = Number(d.next_character_count_reset_unix);
+  return {
+    ok: true,
+    used,
+    limit,
+    left: Math.max(0, limit - used),
+    renews: Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000).toISOString() : null,
+    plan: typeof d.tier === "string" ? d.tier : null,
+  };
 }
 
 /** A one-unit YouTube Data API call that tells a working key from a wrong or switched-off one. */
@@ -243,7 +276,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     if (typeof b.elevenlabsApiKey === "string") {
       const key = b.elevenlabsApiKey.trim();
       if (key) {
-        const probe = await voiceSession({ apiKey: key, agentId: (b.agentId ?? store.data.elevenlabs.agentId) || "" }, "voice");
+        const probe = await voiceSession({ apiKey: key, agentId: (b.agentId ?? store.data.elevenlabs.agentId) || "" }, "voice", overrides.elevenlabsBase);
         checks.elevenlabs = probe.ok ? { ok: true, message: "Key works. You can talk to Patch now." } : { ok: probe.error === "network", message: probe.message };
         if (probe.ok || probe.error === "network" || probe.error === "agent") store.data.elevenlabs.apiKey = key;
       } else store.data.elevenlabs.apiKey = "";
@@ -367,7 +400,8 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     }],
     ["GET", /^\/api\/settings$/, async () => redactedSettings()],
     ["POST", /^\/api\/settings$/, async (b) => saveSettings(b)],
-    ["POST", /^\/api\/voice\/session$/, async (b) => voiceSession(store.elevenlabs, b.mode === "text" ? "text" : "voice")],
+    ["POST", /^\/api\/voice\/session$/, async (b) => voiceSession(store.elevenlabs, b.mode === "text" ? "text" : "voice", overrides.elevenlabsBase)],
+    ["GET", /^\/api\/voice\/credits$/, async () => voiceCredits(store.elevenlabs, overrides.elevenlabsBase)],
     // The TV app maker.
     ["GET", /^\/api\/tvapps$/, async () => ({ apps: tvapps.list(), kinds: tvapps.kinds() })],
     ["POST", /^\/api\/tvapps$/, async (b) => tvChanged(await tvapps.create(b))],

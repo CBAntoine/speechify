@@ -2690,6 +2690,13 @@ details summary {
     visibility: visible;
     transition: transform 0.3s var(--ease);
   }
+  /* Settings and other windows open over the voice panel (closing them goes back to it). */
+  .modal {
+    z-index: 75;
+  }
+  .scrim.for-modal {
+    z-index: 72;
+  }
   .voice__close {
     display: inline-flex;
   }
@@ -3130,7 +3137,8 @@ details summary {
   box-shadow: 0 0 0 2px var(--text);
 }
 
-.check {
+/* The TV app maker's tick boxes (not the result lines under Settings' keys, which are div.check). */
+label.check {
   display: flex;
   align-items: center;
   gap: 8px;

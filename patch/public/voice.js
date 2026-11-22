@@ -32,7 +32,35 @@ export function friendlyError(msg, phone = !!globalThis.window?.PatchAndroid) {
   if (/NotFound|no.*device|Requested device not found/i.test(m)) return "No microphone found. You can still type to Patch.";
   if (/secure context|getUserMedia/i.test(m)) return "Your browser only allows the microphone on this computer (localhost). On other devices, type instead.";
   if (/401|403|auth/i.test(m)) return "ElevenLabs didn't accept the session. Check your API key in Settings.";
+  if (REFUSED.test(m)) return "ElevenLabs wouldn't start the conversation. The usual reason is that the ElevenLabs account's credits for this month are used up.";
   return m.length < 160 ? m : "Couldn't reach the voice service. Check the internet connection and try again.";
+}
+
+// When the ElevenLabs account's credits for the month are used up, ElevenLabs still hands out a
+// session, then won't start the conversation, and all it says is this.
+const REFUSED = /trying to reach is not available|quota/i;
+// Where ElevenLabs sells extra credits ("Top Up", from $5), used once the month's are gone.
+export const TOP_UP = "https://elevenlabs.io/app/developers";
+const num = (n) => Number(n).toLocaleString("en-US");
+const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+
+/** What to tell the person when ElevenLabs won't start a conversation, given the account's credits. */
+export function refusalMessage(credits, reason = "") {
+  if (credits?.ok && credits.left <= 0) {
+    return `Your ElevenLabs credits for this month are used up (${num(credits.used)} of ${num(credits.limit)}), so ElevenLabs won't start a conversation.${credits.renews ? ` They renew on ${day(credits.renews)}.` : ""} To talk to Patch before then, add credits on elevenlabs.io (Developers, then Top Up). The rest of Patch works as usual.`;
+  }
+  const said = String(reason || "").replace(/^Server error:\s*/i, "").trim();
+  const why = said && said.length < 160 ? ` (ElevenLabs said: “${said}”)` : "";
+  if (credits?.ok) return `ElevenLabs ended the conversation as it started${why}. Your credits are fine (${num(credits.left)} left this month), so try again in a minute.`;
+  return `ElevenLabs wouldn't start the conversation${why}. The usual reason is that the account's credits for this month are used up: you can see them at elevenlabs.io, under Subscription.`;
+}
+
+/** One line about the month's credits, for Settings. */
+export function creditsSummary(c) {
+  if (!c?.ok) return null;
+  const renew = c.renews ? ` They renew on ${day(c.renews)}.` : "";
+  if (c.left <= 0) return `Your ElevenLabs credits for this month are used up (${num(c.used)} of ${num(c.limit)}), so Patch can't talk or chat until they renew, unless you add credits.${renew}`;
+  return `ElevenLabs credits this month: ${num(c.left)} of ${num(c.limit)} left.${renew}`;
 }
 
 export function createVoice(ui) {
@@ -135,13 +163,36 @@ export function createVoice(ui) {
   }
 
   // settings adds a button that opens Settings: true at the ElevenLabs key, or the name of a part of it.
-  function notice(text, { settings = false, button = "Open settings" } = {}) {
+  function notice(text, { settings = false, button = "Open settings", link = null } = {}) {
     if (!text) {
       els.notice.hidden = true;
       return;
     }
     els.notice.hidden = false;
-    els.notice.innerHTML = `${ui.esc(text)}${settings ? `<br><button class="btn btn--sm btn--voice" data-ui="settings" data-focus="${ui.esc(settings === true ? "el" : settings)}">${ui.esc(button)}</button>` : ""}`;
+    els.notice.innerHTML = `${ui.esc(text)}${settings ? `<br><button class="btn btn--sm btn--voice" data-ui="settings" data-focus="${ui.esc(settings === true ? "el" : settings)}">${ui.esc(button)}</button>` : ""}${link ? `<br><a class="btn btn--sm btn--voice" href="${ui.esc(link.href)}" target="_blank" rel="noopener noreferrer">${ui.esc(link.label)}</a>` : ""}`;
+  }
+
+  // ── when ElevenLabs won't start a conversation ──
+  // It connects, then ends at once (or never connects), and says only that the assistant "is not
+  // available". Most often the month's credits are used up, so Patch looks, and says which.
+  let startedAt = 0;
+  let agentSpoke = false;
+  let refusal = null;
+  let creditsAt = 0;
+
+  async function explainRefusal(reason = "") {
+    const credits = await ui.api("GET", "/api/voice/credits").catch(() => null);
+    const usedUp = !!(credits?.ok && credits.left <= 0);
+    notice(refusalMessage(credits, reason), usedUp ? { link: { href: TOP_UP, label: "Add credits on ElevenLabs" } } : {});
+  }
+
+  /** Now and then, as a conversation starts: a word when the month's credits are running low. */
+  async function lowCredits() {
+    if (Date.now() - creditsAt < 30 * 60_000) return;
+    creditsAt = Date.now();
+    const c = await ui.api("GET", "/api/voice/credits").catch(() => null);
+    if (!c?.ok || c.left <= 0 || c.left > c.limit * 0.1) return;
+    add("system", `ElevenLabs credits are running low: ${num(c.left)} of ${num(c.limit)} left this month${c.renews ? `, until they renew on ${day(c.renews)}` : ""}. Talking uses a few hundred a minute.`);
   }
 
   // ── controls & status ──
@@ -529,6 +580,9 @@ export function createVoice(ui) {
     if (status !== "idle") return;
     notice(null);
     status = "connecting";
+    startedAt = 0;
+    agentSpoke = false;
+    refusal = null;
     render();
     try {
       await loadSdk();
@@ -554,9 +608,11 @@ export function createVoice(ui) {
         },
         onConnect: () => {
           status = "connected";
+          startedAt = Date.now();
           if (nextMode === "voice") window.PatchAndroid?.voiceStarted?.();
           render();
           add("system", nextMode === "voice" ? "Connected. Start talking." : "Connected.");
+          lowCredits();
           sendContext();
           lastIds = ui.state.devices.map((d) => d.id).sort().join();
           if (pendingText) {
@@ -567,7 +623,10 @@ export function createVoice(ui) {
           }
           animate();
         },
-        onDisconnect: () => {
+        onDisconnect: (details) => {
+          // Ended by ElevenLabs within seconds of connecting, before the assistant said a word:
+          // it didn't start the conversation at all.
+          const refused = refusal != null || (!!startedAt && Date.now() - startedAt < 8000 && !agentSpoke && details?.reason !== "user");
           window.PatchAndroid?.voiceStopped?.();
           status = "idle";
           conv = null;
@@ -575,8 +634,9 @@ export function createVoice(ui) {
           speaking = false;
           muted = false;
           pending.clear();
-          add("system", "Conversation ended.");
+          add("system", refused ? "ElevenLabs didn't start the conversation." : "Conversation ended.");
           render();
+          if (refused) explainRefusal(refusal ?? details?.message ?? details?.closeReason ?? "");
         },
         onMessage: ({ message, role }) => {
           if (!message?.trim()) return;
@@ -586,14 +646,19 @@ export function createVoice(ui) {
             const last = els.log.lastElementChild;
             if (last?.classList.contains("msg--user") && last.textContent === message) return;
             add("user", message);
-          } else add("agent", message);
+          } else {
+            agentSpoke = true;
+            add("agent", message);
+          }
         },
         onModeChange: ({ mode: m }) => {
           speaking = m === "speaking";
           render();
         },
-        onError: (msg) => {
+        onError: (msg, ctx) => {
           console.warn("[patch voice]", msg);
+          // The words come before the conversation ends; the end then says what they meant.
+          if (ctx?.code === 3000 || REFUSED.test(String(msg))) refusal = String(msg);
           notice(friendlyError(msg), MISSING_TOOL.test(String(msg)) ? { settings: "about", button: "How to update Patch" } : {});
         },
       });
@@ -601,7 +666,11 @@ export function createVoice(ui) {
       status = "idle";
       conv = null;
       render();
-      notice(friendlyError(err?.message || err));
+      const m = String(err?.message || err);
+      if (REFUSED.test(m)) {
+        add("system", "ElevenLabs didn't start the conversation.");
+        explainRefusal(m);
+      } else notice(friendlyError(m));
     }
   }
 
