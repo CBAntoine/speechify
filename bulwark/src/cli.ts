@@ -15,6 +15,7 @@ import type { ChangeRecord, Finding, FixPlan, Host, Scan, Severity } from "./cor
 import { arpTable, defaultGateway } from "./net/local.ts";
 import { defaultTargets } from "./net/scan.ts";
 import { displayPath } from "./software/deps.ts";
+import { ADB_INSTALL_HINT, adbConnect, adbDevices, adbPair, findAdb } from "./android/adb.ts";
 import { VERSION } from "./version.ts";
 
 // ── output ──
@@ -55,7 +56,7 @@ interface Args {
   code: string[] | null;
 }
 
-const BOOL = new Set(["network", "network-only", "local", "authorized", "yes", "json", "dry-run", "all-safe", "force", "last", "help", "version", "sudo", "lan"]);
+const BOOL = new Set(["network", "network-only", "local", "authorized", "yes", "json", "dry-run", "all-safe", "force", "last", "help", "version", "sudo", "lan", "open", "android"]);
 
 export function parseArgs(argv: string[]): Args {
   const out: Args = { cmd: "", rest: [], flags: {}, targets: [], code: null };
@@ -87,6 +88,10 @@ ${bold("Usage")}
   bulwark scan --network          …and the other devices on your network
   bulwark scan --target 192.168.1.0/24 [--target 10.0.0.5]
                                   Check specific addresses (yours, or with permission)
+  bulwark scan --android          Check the Android phones and TVs connected over adb
+  bulwark android connect <ip>    Connect a phone or TV that has network/wireless debugging on
+  bulwark android pair <ip:port> <code>
+                                  Pair with Android 11+ wireless debugging first
   bulwark scan --code [folder]    Check the code projects in a folder (default: this one) for
                                   dependencies with known vulnerabilities (looked up on osv.dev)
   bulwark fix <number|id>…        Review and apply a fix from the last scan
@@ -96,7 +101,8 @@ ${bold("Usage")}
   bulwark report [--format md|json]
                                   The last scan as Markdown or JSON
   bulwark checks                  Everything Bulwark checks for
-  bulwark serve [--port 7077]     Open the dashboard in your browser
+  bulwark serve [--port 7077]     Start the dashboard (--open opens it in the browser, --lan lets
+                                  a TV or tablet on your Wi-Fi open it too)
 
 ${bold("Options")}
   --sudo          Run with admin rights (re-runs this command with sudo)
@@ -131,6 +137,10 @@ function sudoUserStateDir(): string | null {
 }
 
 function reexecWithSudo(argv: string[]): never {
+  if (process.platform === "android") {
+    console.error("Android apps can't get admin rights. Bulwark checks what it can from Termux, and changes phone or TV settings over ADB: see bulwark android --help.");
+    process.exit(1);
+  }
   if (process.platform === "win32") {
     console.error("On Windows, open the terminal with \"Run as administrator\" and run Bulwark again.");
     process.exit(1);
@@ -152,8 +162,9 @@ const inProject = (f: Finding, dir: string) => f.id.startsWith(`deps.vulnerable@
 export function numbered(scan: Scan): Finding[] {
   const local = scan.local?.findings ?? [];
   const code = scan.code ? scan.code.projects.flatMap((p) => scan.code!.findings.filter((f) => inProject(f, p.path))) : [];
+  const android = scan.android ? scan.android.devices.flatMap((d) => scan.android!.findings.filter((f) => f.target === `adb:${d.serial}`)) : [];
   const net = scan.network ? scan.network.devices.flatMap((d) => scan.network!.findings.filter((f) => f.target === d.ip)) : [];
-  return [...local.filter((f) => !isSoftware(f)), ...local.filter(isSoftware), ...code, ...net].filter((f) => f.status === "fail");
+  return [...local.filter((f) => !isSoftware(f)), ...local.filter(isSoftware), ...code, ...android, ...net].filter((f) => f.status === "fail");
 }
 
 async function latestScan(state: StateStore): Promise<Scan | null> {
@@ -208,6 +219,18 @@ function printScan(scan: Scan): void {
       for (const f of fs) printFinding(f, ++n);
     }
     for (const note of code.notes) console.log(yellow(`  ! ${wrap(note, 4)}`));
+  }
+  if (scan.android) {
+    const and = scan.android;
+    console.log(`\n${bold("Phones and TVs (over adb)")}  ${and.devices.length} connected`);
+    for (const d of and.devices) {
+      const fs = and.findings.filter((f) => f.target === `adb:${d.serial}`);
+      const title = `${d.name}${d.name !== d.model ? ` · ${d.model}` : ""}`;
+      const sc = scan.scores.devices[`adb:${d.serial}`] ?? 100;
+      console.log(`\n  ${bold(title)}  ${dim(`${d.self ? "this phone" : d.serial} · ${d.fireOS ? "Fire OS" : "Android"} ${d.android}${d.patch ? ` · patches ${d.patch}` : ""}`)}  ${fs.some((f) => f.status === "fail") ? scoreText(sc) : green("no problems found")}`);
+      for (const f of fs.filter((f) => f.status === "fail")) printFinding(f, ++n);
+    }
+    for (const note of and.notes) console.log(yellow(`  ! ${wrap(note, 4)}`));
   }
   if (scan.network) {
     const net = scan.network;
@@ -286,7 +309,7 @@ async function networkKey(host: Host, cidr: string): Promise<string> {
 async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
   const wantNetwork = !!a.flags.network || !!a.flags["network-only"] || a.targets.length > 0;
   // --code or --target on their own mean "just that"; add --local to include this device too.
-  const local = !a.flags["network-only"] && !((a.targets.length || a.code) && !a.flags.local);
+  const local = !a.flags["network-only"] && !((a.targets.length || a.code || a.flags.android) && !a.flags.local);
   const codeRoots = a.code ? (a.code.length ? a.code.map((c) => path.resolve(c)) : [process.cwd()]) : undefined;
   if (codeRoots) console.log(dim(`Package names and versions from ${codeRoots.map(displayPath).join(", ")} are looked up on osv.dev; nothing else is sent.`));
   let network: Parameters<typeof runScan>[1]["network"];
@@ -322,11 +345,13 @@ async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
       }
     }
   }
-  if (!local && !network && !codeRoots) return;
+  const android = !!a.flags.android;
+  if (!local && !network && !codeRoots && !android) return;
   const tty = process.stdout.isTTY && !a.flags.json;
   const scan = await runScan(host, {
     local,
     code: codeRoots ? { roots: codeRoots, cacheDir: path.join(state.dir, "osv-cache") } : undefined,
+    android,
     network,
     onProgress: (p) => {
       if (tty) process.stdout.write(`\r\x1b[2K${dim(`${p.message ?? p.phase} ${p.total > 1 ? `(${p.done}/${p.total})` : ""}`)}`);
@@ -442,7 +467,7 @@ function cmdChecks(): void {
   for (const [cat, list] of byCat) {
     console.log(bold(`\n${cat}`));
     for (const c of list) {
-      const plat = c.platforms.map((p) => ({ linux: "Linux", darwin: "macOS", win32: "Windows" })[p]).join(", ");
+      const plat = c.platforms.map((p) => ({ linux: "Linux", darwin: "macOS", win32: "Windows", android: "Android" })[p]).join(", ");
       console.log(`  ${sevLabel(c.severity)} ${c.title} ${dim(`(${plat})`)}`);
     }
   }
@@ -457,6 +482,43 @@ function cmdChecks(): void {
   console.log("  NuGet and Gradle lockfiles is checked against OSV.dev. Fixes use each project's own tool (npm audit fix,");
   console.log("  poetry update, uv lock, cargo update, go get, bundle lock, composer update) or edit requirements.txt pins.");
 }
+
+async function cmdAndroid(host: Host, a: Args): Promise<void> {
+  const [sub, ...rest] = a.rest;
+  const adb = await findAdb(host);
+  if (!adb) throw new FixError(`adb isn't installed. ${ADB_INSTALL_HINT}`);
+  if (sub === "connect" && rest[0]) {
+    const r = await adbConnect(host, adb, rest[0]);
+    console.log(r.ok ? green(`✓ ${r.message}`) : red(r.message));
+    if (r.ok) console.log(dim("Then: bulwark scan --android"));
+    return;
+  }
+  if (sub === "pair" && rest[0] && rest[1]) {
+    const r = await adbPair(host, adb, rest[0], rest[1]);
+    console.log(r.ok ? green(`✓ ${r.message}`) : red(r.message));
+    return;
+  }
+  if (sub === "devices" || !sub) {
+    const list = await adbDevices(host, adb);
+    if (!list.length) console.log("No phone or TV is connected.");
+    for (const d of list) console.log(`${bold(d.serial)}  ${d.state === "device" ? green("ready") : yellow(d.state === "unauthorized" ? "waiting for you to tap Allow on the device" : d.state)}${d.model ? dim(`  ${d.model}`) : ""}`);
+    if (!sub) console.log(ANDROID_HELP);
+    return;
+  }
+  console.log(ANDROID_HELP);
+}
+
+const ANDROID_HELP = `
+${bold("Checking a phone or TV over adb")}
+  TV (Android TV, Google TV, Fire TV): turn on Developer options and "Network debugging" (or
+  "ADB debugging"), then:           bulwark android connect <the TV's IP address>
+  Phone (Android 11+): Developer options → Wireless debugging → "Pair device with pairing code", then:
+                                    bulwark android pair <IP:pairing port> <6-digit code>
+                                    bulwark android connect <IP:port shown on the Wireless debugging screen>
+  Bulwark on the phone itself (Termux): the same, using 127.0.0.1 as the address.
+  Then:                             bulwark scan --android
+  When you're done, apply "Turn off debugging on the device" (or switch it off in Developer options).
+`;
 
 async function cmdReport(state: StateStore, a: Args): Promise<void> {
   const scan = a.rest[0] ? await state.getScan(a.rest[0]) : await latestScan(state);
@@ -496,13 +558,23 @@ export async function main(argv: string[]): Promise<void> {
       case "checks":
         cmdChecks();
         break;
+      case "android":
+        await cmdAndroid(host, a);
+        break;
       case "report":
         await cmdReport(state, a);
         break;
       case "serve":
       case "dashboard": {
         const { startServer } = await import("./server.ts");
-        await startServer({ host, state, port: Number(a.flags.port) || 7077, bind: typeof a.flags.host === "string" ? a.flags.host : "127.0.0.1" });
+        await startServer({
+          host,
+          state,
+          port: Number(a.flags.port) || 7077,
+          bind: typeof a.flags.host === "string" ? a.flags.host : "127.0.0.1",
+          lan: !!a.flags.lan,
+          open: !!a.flags.open,
+        });
         break;
       }
       default:

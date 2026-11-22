@@ -1,8 +1,8 @@
 {
   "name": "bulwark",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Finds security holes in your devices and software and fixes them: audits this computer and its installed software, checks code projects' dependencies against OSV.dev, checks the other devices on your network, and applies reversible fixes.",
+  "description": "Finds security holes in your devices and software and fixes them: audits this computer and its installed software, checks code projects' dependencies against OSV.dev, checks Android phones and TVs, checks the other devices on your network, and applies reversible fixes.",
   "type": "module",
   "bin": {
     "bulwark": "bin/bulwark.mjs"

@@ -3,6 +3,7 @@
 import * as os from "node:os";
 import { scanNetwork, type NetScanOptions } from "../net/scan.ts";
 import { scanCode } from "../software/deps.ts";
+import { scanAndroid } from "../android/scan.ts";
 import { auditLocal } from "./audit.ts";
 import { describeOs } from "./host.ts";
 import { score, sortFindings } from "./score.ts";
@@ -33,6 +34,8 @@ export async function runScan(
     local: boolean;
     /** Code projects under these folders. */
     code?: { roots: string[]; cacheDir?: string };
+    /** Android phones and TVs connected over adb. */
+    android?: boolean;
     network?: Omit<NetScanOptions, "onProgress">;
     onProgress?: (p: ScanProgress) => void;
   },
@@ -56,6 +59,16 @@ export async function runScan(
     scan.code = await scanCode(host, opts.code.roots, { cacheDir: opts.code.cacheDir, onProgress: (p) => opts.onProgress?.(p) });
     scan.scores.code = score(scan.code.findings);
   }
+  if (opts.android) {
+    scan.android = await scanAndroid(host, { onProgress: (p) => opts.onProgress?.(p) });
+    scan.android.findings = sortFindings(scan.android.findings);
+    for (const d of scan.android.devices) scan.scores.devices[`adb:${d.serial}`] = score(scan.android.findings.filter((f) => f.target === `adb:${d.serial}`));
+    // When Bulwark reached its own phone over adb, those results replace the less complete ones from Termux.
+    if (scan.local && scan.android.devices.some((d) => d.self)) {
+      scan.local.findings = scan.local.findings.filter((f) => !f.checkId.startsWith("android.") || f.checkId === "android.termux-packages");
+      scan.scores.local = score(scan.local.findings);
+    }
+  }
   if (opts.network) {
     const net = await scanNetwork(host, { ...opts.network, onProgress: (p) => opts.onProgress?.(p) });
     net.findings = sortFindings(net.findings);
@@ -67,5 +80,5 @@ export async function runScan(
 }
 
 export function allFindings(scan: Scan) {
-  return [...(scan.local?.findings ?? []), ...(scan.code?.findings ?? []), ...(scan.network?.findings ?? [])];
+  return [...(scan.local?.findings ?? []), ...(scan.code?.findings ?? []), ...(scan.android?.findings ?? []), ...(scan.network?.findings ?? [])];
 }

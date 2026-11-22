@@ -78,7 +78,7 @@ function classify(d: NetDevice, probe: HostProbe | undefined, mdns: MdnsDevice |
   if (d.isGateway || /internetgatewaydevice/.test(text)) return "Router";
   if (has(/_ipps?\.|_printer\.|_pdl-datastream/) || ports.has(9100) || /printer|laserjet|officejet|epson|brother|canon/.test(text)) return "Printer";
   if (ports.has(554) || ports.has(34567) || ports.has(37777) || /camera|ipcam|nvr|dvr|hikvision|dahua|reolink|amcrest/.test(text)) return "Camera";
-  if (has(/_googlecast|_androidtvremote|_amzn-wplay/) || /mediarenderer|chromecast|roku|bravia|webos|tizen|fire ?tv/.test(text)) return "TV or streaming device";
+  if (has(/_googlecast|_androidtvremote|_amzn-wplay/) || ports.has(8060) || probe?.services.some((s) => s.name === "samsung-tv" || s.name === "roku-ecp") || /mediarenderer|chromecast|roku|bravia|webos|tizen|fire ?tv|\[tv\]|smart ?tv|android ?tv|google ?tv/.test(text)) return "TV or streaming device";
   if (has(/_raop|_spotify-connect|_sonos/) && !has(/_companion-link|_device-info/)) return "Speaker";
   if (has(/_hap\.|_homekit|_matter|_esphomelib|_hue/) || ports.has(1883) || ports.has(8123) || /home assistant|homey|hubitat|smartthings|openhab|zigbee/.test(text)) return "Smart home device";
   if (ports.has(62078) || /iphone|ipad/.test(text)) return "Phone or tablet";

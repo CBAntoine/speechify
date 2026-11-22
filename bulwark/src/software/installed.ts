@@ -206,7 +206,7 @@ export const runtimesCheck: Check = {
   title: "A programming runtime no longer gets security fixes",
   category: "Software",
   severity: "medium",
-  platforms: ["linux", "darwin", "win32"],
+  platforms: ["linux", "darwin", "win32", "android"],
   why: "Apps and scripts run with the runtime's bugs. Once a version's support ends, its security holes stay open.",
   async run(host): Promise<CheckOutcome[]> {
     const out: CheckOutcome[] = [];
@@ -552,7 +552,7 @@ export const knownVulnerableCheck: Check = {
   title: "A version with a known, exploited flaw is installed",
   category: "Software",
   severity: "high",
-  platforms: ["linux", "darwin", "win32"],
+  platforms: ["linux", "darwin", "win32", "android"],
   why: "These versions have flaws attackers actively use, and the fixed versions are out.",
   async run(host): Promise<CheckOutcome[]> {
     const out: CheckOutcome[] = [];

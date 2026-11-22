@@ -209,7 +209,11 @@ export async function probeAdb(ip: string, port: number): Promise<ProbeResult | 
       severity: "critical",
       summary: "The device accepts ADB connections without approval, which gives a full shell.",
       why: "Bots look for open ADB ports (5555) to install crypto miners and spread to other devices.",
-      steps: ["On the device: Settings → Developer options → turn off \"ADB over network\" / \"Wireless debugging\" (or run adb usb).", "On TV boxes that don't offer the setting, contact the maker or replace the box."],
+      steps: [
+        "On the device: Settings → Developer options → turn off \"ADB over network\" / \"Wireless debugging\" (or run adb usb).",
+        `Or let Bulwark check the device and turn it off for you: bulwark android connect ${ip}, then bulwark scan --android.`,
+        "On TV boxes that don't offer the setting, contact the maker or replace the box.",
+      ],
       evidence: banner ? [banner.slice(0, 200)] : [],
     });
   } else if (cmd === 0x48545541) {

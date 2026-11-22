@@ -1,34 +1,11 @@
 // Runs the local checks and turns their outcomes into findings.
 
 import { checksFor } from "../checks/index.ts";
+import { outcomeToFinding } from "./finding.ts";
 import type { Check, CheckOutcome, Finding, Host } from "./types.ts";
 import { errorMessage, mapLimit } from "./util.ts";
 
-export function outcomeToFinding(check: Check, o: CheckOutcome, target = "local"): Finding {
-  const id = o.subject ? `${check.id}:${o.subject}` : check.id;
-  const failing = o.status === "fail";
-  return {
-    id,
-    checkId: check.id,
-    target,
-    title: o.title ?? check.title,
-    category: check.category,
-    severity: failing ? o.severity ?? check.severity : "info",
-    status: o.status,
-    confidence: o.confidence ?? "confirmed",
-    summary: o.summary,
-    why: check.why,
-    evidence: o.evidence ?? [],
-    remedy: failing
-      ? {
-          auto: o.auto ? { fixId: o.auto.fixId, params: o.auto.params ?? {} } : undefined,
-          steps: o.steps ?? check.steps ?? [],
-        }
-      : undefined,
-    references: check.references ?? [],
-    cves: o.cves ?? [],
-  };
-}
+export { outcomeToFinding };
 
 export async function runCheck(check: Check, host: Host): Promise<Finding[]> {
   try {

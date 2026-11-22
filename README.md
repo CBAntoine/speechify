@@ -1,6 +1,6 @@
 # GTA 6 Secrets Map: the talking map of Leonida
 
-> **Also in this repo: [Bulwark](bulwark/README.md)**, in `bulwark/`. It finds security holes in your devices and software and fixes them: it audits the computer it runs on and its installed software, checks your code projects' dependencies for known vulnerabilities, checks the other devices on your network (router, cameras, NAS, TVs), and applies fixes you can review first and undo later. No dependencies; run it with `cd bulwark && ./bulwark scan`.
+> **Also in this repo: [Bulwark](bulwark/README.md)**, in `bulwark/`. It finds security holes in your devices and software and fixes them: it audits the computer it runs on and its installed software, checks your code projects' dependencies for known vulnerabilities, checks and fixes Android phones and TVs (it runs on the phone itself, in Termux), checks the other devices on your network (router, cameras, NAS, TVs), and applies fixes you can review first and undo later. No dependencies; run it with `cd bulwark && ./bulwark scan`.
 
 > **Also in this repo: [Rainmaker](rainmaker/README.md)**, a separate app in `rainmaker/`. It's an AI-first agency CRM (a simpler GoHighLevel alternative) that finds local-business clients, runs your pipeline with Claude agents and builds tailored ads. It has its own `package.json`; run it with `cd rainmaker && npm install && npm run dev`.
 

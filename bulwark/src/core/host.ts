@@ -18,6 +18,8 @@ function toStat(s: import("node:fs").Stats): FileStat {
 }
 
 const SBIN_DIRS = ["/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/opt/homebrew/bin", "/opt/homebrew/sbin"];
+// On Android (Termux), getprop, ip and friends live in /system/bin, which Termux leaves off PATH.
+const ANDROID_DIRS = process.platform === "android" ? ["/system/bin"] : [];
 
 /** Folders where per-user tools live (pipx, cargo, go, npm prefixes, Homebrew). */
 export function userToolDirs(home: string | undefined): string[] {
@@ -37,7 +39,7 @@ export function run(cmd: string, args: string[], opts: ExecOptions = {}): Promis
       // Non-root shells often lack sbin directories, where most admin tools live, and sudo's PATH
       // often lacks the folder of the Node that runs Bulwark (and its npm).
       const parts = (env.PATH ?? "").split(":").filter(Boolean);
-      const extra = [...SBIN_DIRS, path.dirname(process.execPath), "/usr/local/go/bin", ...userToolDirs(opts.runAs?.home ?? env.HOME)];
+      const extra = [...SBIN_DIRS, ...ANDROID_DIRS, path.dirname(process.execPath), "/usr/local/go/bin", ...userToolDirs(opts.runAs?.home ?? env.HOME)];
       for (const d of extra) if (!parts.includes(d)) parts.push(d);
       env.PATH = parts.join(":");
       if (switchUser && opts.runAs) {
@@ -90,7 +92,7 @@ export async function isWindowsAdmin(): Promise<boolean> {
 
 /** The real machine this process runs on. */
 export async function createHost(): Promise<Host> {
-  const platform = process.platform as Platform;
+  const platform: Platform = process.platform === "android" ? "android" : (process.platform as Platform);
   const isRoot = platform === "win32" ? await isWindowsAdmin() : detectRoot();
   const whichCache = new Map<string, string | null>();
 
@@ -142,7 +144,7 @@ export async function createHost(): Promise<Host> {
         const r = await run("where", [cmd], { timeoutMs: 5000 });
         found = r.code === 0 ? r.stdout.split(/\r?\n/)[0].trim() || null : null;
       } else {
-        const dirs = [...(process.env.PATH ?? "").split(":"), ...SBIN_DIRS];
+        const dirs = [...(process.env.PATH ?? "").split(":"), ...SBIN_DIRS, ...ANDROID_DIRS];
         for (const d of dirs) {
           if (!d) continue;
           const candidate = path.join(d, cmd);
@@ -193,6 +195,12 @@ export async function describeOs(host: Host): Promise<string> {
   if (host.platform === "darwin") {
     const r = await host.exec("sw_vers", ["-productVersion"]);
     return r.code === 0 ? `macOS ${r.stdout.trim()}` : "macOS";
+  }
+  if (host.platform === "android") {
+    const prop = async (k: string) => (await host.exec("getprop", [k])).stdout.trim();
+    const [release, maker, model] = await Promise.all([prop("ro.build.version.release"), prop("ro.product.manufacturer"), prop("ro.product.model")]);
+    const device = [maker && !model.toLowerCase().startsWith(maker.toLowerCase()) ? maker : "", model].filter(Boolean).join(" ");
+    return `Android ${release || "?"}${device ? ` (${device})` : ""}`;
   }
   const r = await host.exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"]);
   return r.code === 0 && r.stdout.trim() ? r.stdout.trim() : `Windows ${os.release()}`;

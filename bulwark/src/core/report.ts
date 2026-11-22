@@ -45,6 +45,15 @@ export function markdownReport(scan: Scan, changes: ChangeRecord[] = []): string
       out.push(...section(`${p.path} (${p.files.join(", ")}, ${p.packages} packages)`, fs));
     }
   }
+  if (scan.android) {
+    out.push(`## Phones and TVs (over ADB): ${scan.android.devices.length} checked`, "");
+    for (const d of scan.android.devices) {
+      const fs = scan.android.findings.filter((f) => f.target === `adb:${d.serial}`);
+      const os = d.fireOS ? `Fire OS (Android ${d.android})` : `Android ${d.android}`;
+      out.push(...section(`${d.name}${d.self ? " (this phone)" : ""} — ${[d.manufacturer, d.model].filter(Boolean).join(" ")}, ${os}${d.patch ? `, patches ${d.patch}` : ""}: ${scan.scores.devices[`adb:${d.serial}`] ?? 100}/100`, fs));
+    }
+    for (const n of scan.android.notes) out.push(`> ${n}`, "");
+  }
   if (scan.network) {
     out.push(`## Network: ${scan.network.devices.length} devices`, "", `Scanned: ${scan.network.targets.join(", ")}`, "");
     for (const d of scan.network.devices) {

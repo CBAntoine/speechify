@@ -6,6 +6,7 @@ import { probeAdb, probeMongo, probeMqtt, probeRdp, probeSmb, probeVnc } from ".
 import { probeHttp } from "./services/http.ts";
 import { probeSsh } from "./services/ssh.ts";
 import { exposureProbe, probeFtp, probeMemcached, probeMysql, probePostgres, probeRedis, probeRtsp, probeTelnet } from "./services/text.ts";
+import { probeRoku, probeSamsungTv } from "./services/tv.ts";
 import { tcpProbe } from "./tcp.ts";
 import type { NetIssue, Probe } from "./types.ts";
 
@@ -54,6 +55,8 @@ export const PORT_PROBES: Record<number, Probe> = {
   5984: http,
   6379: probeRedis,
   8000: http,
+  8001: probeSamsungTv,
+  8060: probeRoku,
   8008: http,
   8080: http,
   8081: http,

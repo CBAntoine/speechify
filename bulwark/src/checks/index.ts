@@ -15,6 +15,7 @@ import { winChecks, winFixes } from "./windows.ts";
 import { upnpDeleteFix } from "../net/scan.ts";
 import { depFixes } from "../software/deps.ts";
 import { installedChecks, updateFixes } from "../software/installed.ts";
+import { androidFixes, localAndroidChecks, termuxPackages } from "../android/checks.ts";
 
 export const CHECKS: Check[] = [
   // Linux
@@ -39,6 +40,9 @@ export const CHECKS: Check[] = [
   // Everywhere
   wifiSecurity,
   ...installedChecks,
+  // Android (when Bulwark runs in Termux on a phone or TV)
+  ...localAndroidChecks,
+  termuxPackages,
 ];
 
 const LOCAL_FIXES: Fix[] = [
@@ -61,6 +65,8 @@ const LOCAL_FIXES: Fix[] = [
   // Code projects and installed software
   ...depFixes,
   ...updateFixes,
+  // Android phones and TVs, over adb
+  ...androidFixes,
 ];
 
 export const FIXES = new Map<string, Fix>(LOCAL_FIXES.map((f) => [f.id, f]));

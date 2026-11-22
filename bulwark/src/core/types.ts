@@ -3,7 +3,7 @@
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
 
-export type Platform = "linux" | "darwin" | "win32";
+export type Platform = "linux" | "darwin" | "win32" | "android";
 
 /** fail = a problem was found. pass = checked and fine. skipped = didn't apply or couldn't run. */
 export type Status = "fail" | "pass" | "error" | "skipped";
@@ -346,6 +346,29 @@ export interface CodeScan {
   durationMs: number;
 }
 
+export interface AndroidDevice {
+  serial: string;
+  /** The phone Bulwark runs on, reached through wireless debugging on 127.0.0.1. */
+  self: boolean;
+  name: string;
+  model: string;
+  manufacturer: string;
+  android: string;
+  sdk: number;
+  patch?: string;
+  kind: "phone" | "tablet" | "tv";
+  fireOS: boolean;
+}
+
+export interface AndroidScan {
+  /** Whether adb was found at all. */
+  adb: boolean;
+  devices: AndroidDevice[];
+  findings: Finding[];
+  notes: string[];
+  durationMs: number;
+}
+
 export interface Scan {
   id: string;
   startedAt: string;
@@ -354,6 +377,7 @@ export interface Scan {
   device: DeviceInfo;
   local?: { findings: Finding[]; durationMs: number };
   code?: CodeScan;
+  android?: AndroidScan;
   network?: NetworkScan;
   scores: { local?: number; code?: number; devices: Record<string, number> };
 }

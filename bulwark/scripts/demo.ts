@@ -1,5 +1,5 @@
-// `npm run demo`: a pretend home network and two pretend code projects on this computer,
-// scanned and shown in the dashboard. Nothing outside this machine is changed.
+// `npm run demo`: a pretend home network, two pretend code projects and a pretend Android TV on
+// this computer, scanned and shown in the dashboard. Nothing outside this machine is changed.
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -37,6 +37,20 @@ await fs.writeFile(
 );
 await fs.writeFile(path.join(projects, "inventory-api", "requirements.txt"), "flask==2.2.2\nrequests==2.19.0  # HTTP client\nurllib3==1.26.4\n");
 
+// A pretend Android TV, reached through a stand-in for adb. BULWARK_ADB makes Bulwark use it and
+// never a real adb, so real phones and TVs stay out of the demo.
+let android = false;
+if (process.platform !== "win32") {
+  const bin = path.join(home, "bin");
+  await fs.mkdir(bin, { recursive: true });
+  const shim = path.join(bin, "adb");
+  await fs.writeFile(shim, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "tests", "helpers", "fake-adb.mjs")}" "$@"\n`, { mode: 0o755 });
+  process.env.FAKE_ADB_STATE = path.join(home, "pretend-tv.json");
+  await fs.rm(process.env.FAKE_ADB_STATE, { force: true });
+  process.env.BULWARK_ADB = shim;
+  android = true;
+} else process.env.BULWARK_ADB = "";
+
 const lan = await startFakeLan();
 const targets = Object.values(lan.ips);
 const extraSsdp = [{ ip: lan.ips.router, location: lan.upnpLocation, server: "Linux/3.4 UPnP/1.0 MiniUPnPd/1.8", st: "urn:schemas-upnp-org:device:InternetGatewayDevice:1" }];
@@ -48,6 +62,7 @@ const scan = await runScan(host, {
   local: false,
   code: { roots: [projects], cacheDir: path.join(home, "osv-cache") },
   network: { targets, authorized: false, confirmedOwnership: true, noMulticast: true, extraSsdp },
+  android,
 });
 await state.saveScan(scan);
-await startServer({ host, state, port: Number(process.env.PORT) || 7078, bind: "127.0.0.1", demo: { targets, extraSsdp, codeRoots: [projects] } });
+await startServer({ host, state, port: Number(process.env.PORT) || 7078, bind: "127.0.0.1", demo: { targets, extraSsdp, codeRoots: [projects], android } });

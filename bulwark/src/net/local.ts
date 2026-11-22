@@ -16,8 +16,10 @@ export interface LocalNet {
   private: boolean;
 }
 
-// Container bridges, VPNs and virtual adapters aren't the home network.
-const VIRTUAL = /^(docker|br-|veth|virbr|vmnet|vboxnet|lxc|lxd|cni|flannel|cali|tun|tap|utun|wg|tailscale|zt|ham|llw|awdl|bridge|anpi|gif|stf|vEthernet|VirtualBox|VMware|Hyper-V|Loopback)/i;
+// Container bridges, VPNs and virtual adapters aren't the home network. Neither is a phone's mobile
+// data connection: those addresses are private too, but they belong to the carrier, and the
+// "neighbours" there are other customers' phones.
+const VIRTUAL = /^(docker|br-|veth|virbr|vmnet|vboxnet|lxc|lxd|cni|flannel|cali|tun|tap|utun|wg|tailscale|zt|ham|llw|awdl|bridge|anpi|gif|stf|vEthernet|VirtualBox|VMware|Hyper-V|Loopback|rmnet|r_rmnet|ccmni|pdp|seth|v4-|clat|dummy|ifb|ip6tnl|sit|tunl|epdg|p2p|ppp|wwan|usb|ncm|rndis|aware|nan)/i;
 
 export function localNetworks(ifaces = os.networkInterfaces()): LocalNet[] {
   const out: LocalNet[] = [];
@@ -58,10 +60,22 @@ export function parseProcRoute(text: string): string | null {
   return null;
 }
 
+export function parseIpRoute(text: string): string | null {
+  return text.match(/^default\s+via\s+(\d+\.\d+\.\d+\.\d+)/m)?.[1] ?? text.match(/\bvia\s+(\d+\.\d+\.\d+\.\d+)/)?.[1] ?? null;
+}
+
 export async function defaultGateway(host: Host): Promise<string | null> {
-  if (host.platform === "linux") {
+  if (host.platform === "linux" || host.platform === "android") {
     const text = await host.readFile("/proc/net/route");
-    return text ? parseProcRoute(text) : null;
+    const gw = text ? parseProcRoute(text) : null;
+    if (gw) return gw;
+    // Android hides /proc/net/route from apps; `ip route` still answers.
+    for (const args of [["route", "show", "default"], ["route", "get", "8.8.8.8"]]) {
+      const r = await host.exec("ip", args);
+      const found = r.code === 0 ? parseIpRoute(r.stdout) : null;
+      if (found) return found;
+    }
+    return null;
   }
   if (host.platform === "darwin") {
     const r = await host.exec("route", ["-n", "get", "default"]);
@@ -100,7 +114,8 @@ export function parseArp(platform: string, text: string): Map<string, string> {
 }
 
 export async function arpTable(host: Host): Promise<Map<string, string>> {
-  if (host.platform === "linux") return parseArp("linux", (await host.readFile("/proc/net/arp")) ?? "");
+  // Android 10+ hides the ARP table from apps, so this is often empty there; the TCP sweep still works.
+  if (host.platform === "linux" || host.platform === "android") return parseArp("linux", (await host.readFile("/proc/net/arp")) ?? "");
   const r = await host.exec("arp", host.platform === "darwin" ? ["-an"] : ["-a"]);
   return parseArp(host.platform, r.stdout);
 }

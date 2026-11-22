@@ -5,6 +5,7 @@ import { FIXES, getCheck } from "../checks/index.ts";
 import { outcomeToFinding } from "./audit.ts";
 import { performNetworkAction, undoNetworkAction } from "../net/scan.ts";
 import { recheckDependencies, refreshDependencyFindings } from "../software/deps.ts";
+import { refreshAndroidFindings, verifyAndroid } from "../android/scan.ts";
 import { clearHostCache } from "./cache.ts";
 import type { StateStore } from "./state.ts";
 import { rollbackActions, Tx } from "./tx.ts";
@@ -74,6 +75,7 @@ function subjectOf(f: Finding): string | undefined {
 export async function refreshFindings(host: Host, findings: Finding[]): Promise<Finding[]> {
   clearHostCache(host);
   if (findings.length && findings.every((f) => f.checkId === "deps.vulnerable")) return refreshDependencyFindings(host, findings);
+  if (findings.length && findings.every((f) => f.target.startsWith("adb:"))) return refreshAndroidFindings(host, findings);
   const results = new Map<string, CheckOutcome[]>();
   const out: Finding[] = [];
   for (const f of findings) {
@@ -152,7 +154,7 @@ export async function applyFix(host: Host, state: StateStore, findings: Finding[
   }
   change.actions = tx.actions;
   change.log = tx.log;
-  change.verification = await verify(host, findings);
+  change.verification = findings.every((f) => f.target.startsWith("adb:")) ? await verifyAndroid(host, findings, fix.id) : await verify(host, findings);
   await state.saveChange(change);
   return change;
 }
@@ -189,7 +191,8 @@ export function safeBatches(findings: Finding[]): Finding[][] {
     if (f.status !== "fail" || !id) continue;
     const fix = FIXES.get(id);
     if (!fix || fix.risk !== "safe") continue;
-    const key = fix.merge ? id : f.id;
+    // Fixes that can combine findings do so per device: one phone's settings, not every phone's.
+    const key = fix.merge ? `${id}\u0000${f.target}` : f.id;
     groups.set(key, [...(groups.get(key) ?? []), f]);
   }
   return [...groups.values()];

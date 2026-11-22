@@ -6,12 +6,14 @@
 // headers, and only accepts JSON. Fix requests name a finding; what the fix does comes from
 // Bulwark's own scan and a fresh re-check, never from the request.
 
-import { timingSafeEqual } from "node:crypto";
+import { randomInt, timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ADB_INSTALL_HINT, adbConnect, adbDevices, adbPair, findAdb } from "./android/adb.ts";
+import { isSelfSerial } from "./android/scan.ts";
 import { FIXES } from "./checks/index.ts";
 import { applyFix, FixError, planFix, refreshFindings, rollbackChange, safeBatches } from "./core/fixer.ts";
 import { markdownReport } from "./core/report.ts";
@@ -19,7 +21,7 @@ import { allFindings, deviceInfo, runScan, type ScanProgress } from "./core/scan
 import type { StateStore } from "./core/state.ts";
 import type { ChangeRecord, Finding, Host, Scan } from "./core/types.ts";
 import { errorMessage, randomId } from "./core/util.ts";
-import { arpTable, defaultGateway } from "./net/local.ts";
+import { arpTable, defaultGateway, localNetworks } from "./net/local.ts";
 import { defaultTargets } from "./net/scan.ts";
 import { defaultCodeRoots } from "./software/deps.ts";
 import { isPrivate, resolveTargets } from "./net/scope.ts";
@@ -55,8 +57,43 @@ export interface ServerOptions {
   state: StateStore;
   port: number;
   bind: string;
-  /** Demo mode: scans only ever cover this pretend network (and these pretend code projects). */
-  demo?: { targets: string[]; extraSsdp: SsdpReply[]; codeRoots?: string[] };
+  /** Also listen on this device's Wi-Fi/LAN addresses, so a TV or tablet can open the dashboard. */
+  lan?: boolean;
+  /** Demo mode: scans only ever cover this pretend network (and these pretend code projects and TV). */
+  demo?: { targets: string[]; extraSsdp: SsdpReply[]; codeRoots?: string[]; android?: boolean };
+}
+
+/**
+ * A one-time sign-in code for the dashboard, for devices where typing the long link is a pain
+ * (a TV remote). It works once, for 30 minutes, and five wrong guesses switch it off.
+ */
+export class LoginCode {
+  readonly code: string;
+  private expires: number;
+  private attempts = 0;
+  private used = false;
+
+  constructor(code = String(randomInt(0, 1_000_000)).padStart(6, "0"), ttlMs = 30 * 60_000) {
+    this.code = code;
+    this.expires = Date.now() + ttlMs;
+  }
+
+  get pretty(): string {
+    return `${this.code.slice(0, 3)} ${this.code.slice(3)}`;
+  }
+
+  /** "ok", or why the code can't be used. */
+  check(given: string): "ok" | "wrong" | "off" {
+    if (this.used || this.attempts >= 5 || Date.now() > this.expires) return "off";
+    const a = Buffer.from(given.replace(/\s+/g, ""));
+    const b = Buffer.from(this.code);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      this.used = true;
+      return "ok";
+    }
+    this.attempts++;
+    return this.attempts >= 5 ? "off" : "wrong";
+  }
 }
 
 class HttpError extends Error {
@@ -103,8 +140,13 @@ function tokenOk(given: string | undefined, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function allowedHosts(bind: string, port: number): Set<string> {
-  const set = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
+/** This device's addresses on its Wi-Fi or wired network (never mobile data or VPNs). */
+export function lanAddresses(): string[] {
+  return [...new Set(localNetworks().filter((n) => n.private).map((n) => n.address))];
+}
+
+export function allowedHosts(bind: string, port: number, lan: string[] = []): Set<string> {
+  const set = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`, ...lan.map((a) => `${a}:${port}`)]);
   if (bind !== "127.0.0.1" && bind !== "localhost") {
     if (bind === "0.0.0.0") {
       for (const addrs of Object.values(os.networkInterfaces())) for (const a of addrs ?? []) if (a.family === "IPv4") set.add(`${a.address}:${port}`);
@@ -113,9 +155,9 @@ export function allowedHosts(bind: string, port: number): Set<string> {
   return set;
 }
 
-export function createApp(opts: ServerOptions & { token: string }) {
+export function createApp(opts: ServerOptions & { token: string; loginCode?: LoginCode; lanAddresses?: string[] }) {
   const { host, state, token } = opts;
-  const hosts = allowedHosts(opts.bind, opts.port);
+  const hosts = allowedHosts(opts.bind, opts.port, opts.lanAddresses);
   const jobs = new Map<string, Job>();
   let running: Job | null = null;
 
@@ -169,6 +211,12 @@ export function createApp(opts: ServerOptions & { token: string }) {
     return targets.map((t) => `${t}${mac ? `@${mac}` : ""}`);
   }
 
+  async function needAdb(): Promise<string> {
+    const adb = await findAdb(host);
+    if (!adb) throw new HttpError(400, `adb isn't installed. ${ADB_INSTALL_HINT}`, "no-adb");
+    return adb;
+  }
+
   const routes: Record<string, (req: http.IncomingMessage, url: URL) => Promise<unknown>> = {
     "GET /api/state": async () => {
       const [scan, changes, device] = await Promise.all([state.latestScan(), state.listChanges(), deviceInfo(host)]);
@@ -185,10 +233,28 @@ export function createApp(opts: ServerOptions & { token: string }) {
         safeFixes: [...FIXES.values()].filter((f) => f.risk === "safe").map((f) => f.id),
         network: { targets: def.targets, skipped: def.skipped, confirmed: opts.demo ? def.targets : def.targets.filter((_, i) => known.includes(keys[i])) },
         code: { defaultRoots: opts.demo ? opts.demo.codeRoots ?? [] : await defaultCodeRoots(host) },
+        android: { adb: opts.demo ? !!opts.demo.android : !!(await findAdb(host)), hint: ADB_INSTALL_HINT },
+        rootFixes: [...FIXES.values()].filter((f) => f.needsRoot).map((f) => f.id),
         job: running ? { id: running.id, kind: running.kind } : null,
       };
     },
-    "GET /api/scans": async () => (await state.listScans()).map((s) => ({ id: s.id, startedAt: s.startedAt, scores: s.scores, local: !!s.local, devices: s.network?.devices.length ?? 0 })),
+    "GET /api/scans": async () =>
+      (await state.listScans()).map((s) => ({ id: s.id, startedAt: s.startedAt, scores: s.scores, local: !!s.local, devices: s.network?.devices.length ?? 0, android: s.android?.devices.length ?? 0 })),
+    "GET /api/android": async () => {
+      const adb = await findAdb(host);
+      if (!adb) return { adb: false, hint: ADB_INSTALL_HINT, devices: [] };
+      return { adb: true, devices: (await adbDevices(host, adb)).map((d) => ({ ...d, self: isSelfSerial(d.serial) })) };
+    },
+    "POST /api/android/connect": async (req) => {
+      const body = await readJson(req);
+      if (typeof body.address !== "string" || !body.address.trim() || body.address.length > 300) throw new HttpError(400, "Enter the device's address.");
+      return adbConnect(host, await needAdb(), body.address);
+    },
+    "POST /api/android/pair": async (req) => {
+      const body = await readJson(req);
+      if (typeof body.address !== "string" || typeof body.code !== "string" || body.address.length > 300 || body.code.length > 20) throw new HttpError(400, "Enter the pairing address and code.");
+      return adbPair(host, await needAdb(), body.address, body.code);
+    },
     "POST /api/scan": async (req) => {
       const body = await readJson(req);
       if (opts.demo) {
@@ -198,6 +264,7 @@ export function createApp(opts: ServerOptions & { token: string }) {
             local: false,
             code: demo.codeRoots?.length ? { roots: demo.codeRoots, cacheDir: path.join(state.dir, "osv-cache") } : undefined,
             network: { targets: demo.targets, authorized: false, confirmedOwnership: true, noMulticast: true, extraSsdp: demo.extraSsdp },
+            android: !!demo.android,
             onProgress: (p) => (j.progress = p),
           });
           await state.saveScan(scan);
@@ -230,9 +297,10 @@ export function createApp(opts: ServerOptions & { token: string }) {
         const roots = (typed.length ? typed : await defaultCodeRoots(host)).map((r) => path.resolve(r.trim().replace(/^~(?=$|[\\/])/, home)));
         code = { roots, cacheDir: path.join(state.dir, "osv-cache") };
       }
-      if (!local && !network && !code) throw new HttpError(400, "Choose what to scan.");
+      const android = body.android === true;
+      if (!local && !network && !code && !android) throw new HttpError(400, "Choose what to scan.");
       const job = startJob("scan", async (j) => {
-        const scan = await runScan(host, { local, code, network, onProgress: (p) => (j.progress = p) });
+        const scan = await runScan(host, { local, code, network, android, onProgress: (p) => (j.progress = p) });
         await state.saveScan(scan);
         return { scanId: scan.id };
       });
@@ -303,6 +371,14 @@ export function createApp(opts: ServerOptions & { token: string }) {
         send(res, 404, "Not found.", "text/plain; charset=utf-8");
         return;
       }
+      if (method === "POST" && url.pathname === "/api/login") {
+        const body = await readJson(req);
+        const result = opts.loginCode && typeof body.code === "string" && body.code.length < 20 ? opts.loginCode.check(body.code) : "off";
+        if (result === "ok") json(res, 200, { key: token });
+        else if (result === "wrong") json(res, 403, { error: "That code isn't right. Check the code Bulwark printed and try again.", code: "wrong-code" });
+        else json(res, 403, { error: "Sign-in codes are off. Start Bulwark with ./bulwark serve --lan to get a new one, or open the full link it printed.", code: "codes-off" });
+        return;
+      }
       const auth = req.headers.authorization?.replace(/^Bearer\s+/i, "");
       if (!tokenOk(auth, token)) {
         json(res, 401, { error: "Open the link Bulwark printed when it started (it includes a key).", code: "auth" });
@@ -343,24 +419,58 @@ export function createApp(opts: ServerOptions & { token: string }) {
   };
 }
 
-export async function startServer(opts: ServerOptions): Promise<http.Server> {
+/** Opens a URL in the default browser: the phone's browser in Termux, the desktop's elsewhere. */
+export async function openInBrowser(host: Host, url: string): Promise<boolean> {
+  const [cmd, args]: [string, string[]] =
+    host.platform === "android" ? ["termux-open-url", [url]] : host.platform === "darwin" ? ["open", [url]] : host.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+  if (host.platform === "linux" && (host.isRoot || (!host.env.DISPLAY && !host.env.WAYLAND_DISPLAY))) return false;
+  const r = await host.exec(cmd, args, { timeoutMs: 10_000 });
+  return r.code === 0;
+}
+
+export async function startServer(opts: ServerOptions & { open?: boolean }): Promise<http.Server> {
   const token = await opts.state.token();
-  const handler = createApp({ ...opts, token });
-  const server = http.createServer((req, res) => void handler(req, res));
-  server.requestTimeout = 60_000;
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, opts.bind, () => resolve());
-  });
+  const local = opts.bind === "127.0.0.1" || opts.bind === "localhost";
+  const lan = opts.lan && local ? lanAddresses() : [];
+  const loginCode = lan.length || !local ? new LoginCode() : undefined;
+  const handler = createApp({ ...opts, token, loginCode, lanAddresses: lan });
+  const listen = async (bind: string): Promise<http.Server> => {
+    const server = http.createServer((req, res) => void handler(req, res));
+    server.requestTimeout = 60_000;
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(opts.port, bind, () => resolve());
+    });
+    return server;
+  };
+  const server = await listen(opts.bind);
+  // With --lan, the dashboard also listens on the Wi-Fi address, and only there: not on mobile data or a VPN.
+  const extra: http.Server[] = [];
+  for (const a of lan) {
+    try {
+      extra.push(await listen(a));
+    } catch (err) {
+      console.log(`Couldn't listen on ${a}: ${errorMessage(err)}`);
+    }
+  }
+  server.on("close", () => extra.forEach((x) => x.close()));
   const shown = opts.bind === "0.0.0.0" || opts.bind === "::" ? "127.0.0.1" : opts.bind;
   const link = `http://${shown}:${opts.port}/#key=${token}`;
   console.log(`\nBulwark dashboard: ${link}\n`);
   if (opts.demo) console.log("Demo mode: scans cover a pretend network running on this computer, so nothing real is touched.");
+  else if (opts.host.platform === "android") console.log("Running on Android: Bulwark checks this phone and your network. To check and fix phone or TV settings it connects over ADB (see the Phones & TVs tab).");
   else console.log(opts.host.isRoot ? "Running with admin rights: fixes can be applied from the dashboard." : "Running without admin rights: you can scan, but most fixes need `bulwark serve --sudo`.");
-  if (opts.bind !== "127.0.0.1" && opts.bind !== "localhost") {
-    console.log(`\nWarning: the dashboard is reachable from other devices on ${opts.bind}. Traffic isn't encrypted, so only do this on a network you trust.`);
-    if (!isPrivate(opts.bind) && opts.bind !== "0.0.0.0") console.log("That address isn't private. Don't expose the dashboard to the internet.");
-  }
+  if (!local || extra.length) {
+    const others = [...allowedHosts(opts.bind, opts.port, extra.length ? lan : [])].filter((h) => !/^(127\.0\.0\.1|localhost|\[::1\]):/.test(h));
+    if (others.length) {
+      console.log("\nOn another device on your network (a TV, a tablet), open:");
+      for (const h of others) console.log(`  http://${h}`);
+      if (loginCode) console.log(`and enter the code ${loginCode.pretty} (it works once, for the next 30 minutes).\nOr open the full link: http://${others[0]}/#key=${token}`);
+    } else if (opts.lan) console.log("\nCouldn't find this device's Wi-Fi address, so other devices can't open the dashboard. Is Wi-Fi connected?");
+    console.log(`\nWarning: the dashboard is reachable from other devices on your network. Its traffic isn't encrypted, so only do this on a network you trust, and stop it (Ctrl+C) when you're done.`);
+    if (!local && !isPrivate(opts.bind) && opts.bind !== "0.0.0.0") console.log("That address isn't private. Don't expose the dashboard to the internet.");
+  } else if (opts.lan) console.log("Couldn't find this device's Wi-Fi address, so only this device can open the dashboard. Is Wi-Fi connected?");
+  if (opts.open && !(await openInBrowser(opts.host, link))) console.log("(Couldn't open a browser here; open the link above yourself.)");
   console.log("Press Ctrl+C to stop.");
   return server;
 }
