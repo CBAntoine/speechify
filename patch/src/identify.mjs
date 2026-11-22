@@ -32,6 +32,9 @@ const HOSTNAME_HINTS = [
   [/nintendo[-_ ]?switch|^switch$/i, { kind: "console", brand: "Nintendo", model: "Switch" }],
   [/^(echo|amazon)[-_ ](show|dot|studio|pop)?/i, (m) => ({ kind: m[2] && /show/i.test(m[2]) ? "display" : "speaker", brand: "Amazon", model: `Echo${m[2] ? ` ${m[2][0].toUpperCase()}${m[2].slice(1).toLowerCase()}` : ""}` })],
   [/^kindle/i, { kind: "tablet", brand: "Amazon", model: "Kindle" }],
+  // Family calendars on the wall (they run Android, and are otherwise quiet on the network).
+  [/cozyla/i, { kind: "display", brand: "Cozyla", model: "Family calendar" }],
+  [/skylight/i, { kind: "display", brand: "Skylight", model: "Calendar or photo frame" }],
   [/^(ring|ringdoorbell)[-_]/i, { kind: "camera", brand: "Ring", model: "Doorbell or camera" }],
   [/^(wyze|wyzecam)/i, { kind: "camera", brand: "Wyze", model: "Camera" }],
   [/^(raspberrypi|raspberry)/i, { kind: "computer", brand: "Raspberry Pi", model: "Raspberry Pi" }],

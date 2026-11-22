@@ -62,7 +62,7 @@ export function selfDevice(net, { phone = onPhone(), identity = phoneIdentity() 
 
 export class Scanner extends EventEmitter {
   /**
-   * overrides (used by demo mode and tests): { network, arp, mdnsTarget, ssdpTarget, broadcasts,
+   * overrides (used by demo mode and tests): { network, arp, sweep, mdnsTarget, ssdpTarget, broadcasts,
    * multicastYeelight, skipNetbios, skipReverseDns, includeSelf }
    */
   constructor({ store, inventory, controller, overrides = {} }) {
@@ -250,8 +250,17 @@ export class Scanner extends EventEmitter {
     if (!arp.length || deep) {
       this.progress("Knocking on every address…", 25);
       const rest = ips.filter((ip) => !hosts.has(ip));
-      const found = await tcpSweep(rest, { ports: deep ? [80, 443, 22, 62078, 8080, 445, 554, 7000, 8008, 9100] : [80, 443, 22, 62078, 8080], timeout: 650 });
-      for (const [ip, r] of found) r.open.forEach((p) => host(ip)?.ports.add(p));
+      const found = await (o.sweep || tcpSweep)(rest, { ports: deep ? [80, 443, 22, 62078, 8080, 445, 554, 7000, 8008, 9100] : [80, 443, 22, 62078, 8080], timeout: 650 });
+      // A device that turns Patch away ("nothing listening here") is still there. That's how the
+      // quiet ones (a wall calendar, a laptop, a tablet) are found where the list of addresses
+      // can't be read, as on an Android phone. If nearly every address answers, though, something
+      // on the way is answering for all of them (a VPN, say): then only real services count.
+      const forAll = rest.length >= 16 && found.size > rest.length * 0.75;
+      for (const [ip, r] of found) {
+        if (!r.open.length && forAll) continue;
+        const h = host(ip);
+        r.open.forEach((p) => h?.ports.add(p));
+      }
     }
 
     const alive = [...hosts.keys()].sort(sortIps);
