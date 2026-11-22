@@ -14,7 +14,7 @@ It has a dashboard in your browser and a command line, and no dependencies: just
 
 ## Run it
 
-You need [Node.js](https://nodejs.org) 22.6 or newer. There's nothing to install.
+You need [Node.js](https://nodejs.org) 22.6 or newer. There's nothing to install, and nothing to deploy: Bulwark runs on a computer or phone on your own network (it has to, to see your Wi-Fi and change your devices' settings), and serves its dashboard from there. It isn't part of the website in this repository or its Vercel deployment.
 
 ```bash
 cd bulwark
