@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs Bulwark from this folder: ./bulwark scan, ./bulwark serve, ./bulwark fix 3 …
+# Add --sudo to run with admin rights (it finds node even when sudo's PATH doesn't).
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+NODE=${NODE:-$(command -v node)}
+if [ -z "$NODE" ]; then
+  echo "Bulwark needs Node.js 22.6 or newer: https://nodejs.org" >&2
+  exit 1
+fi
+exec "$NODE" "$DIR/bin/bulwark.mjs" "$@"

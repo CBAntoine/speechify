@@ -1,5 +1,7 @@
 # GTA 6 Secrets Map: the talking map of Leonida
 
+> **Also in this repo: [Bulwark](bulwark/README.md)**, in `bulwark/`. It finds security holes in your devices and fixes them: it audits the computer it runs on, checks the other devices on your network (router, cameras, NAS, TVs), and applies fixes you can review first and undo later. No dependencies; run it with `cd bulwark && ./bulwark scan`.
+
 > **Also in this repo: [Rainmaker](rainmaker/README.md)**, a separate app in `rainmaker/`. It's an AI-first agency CRM (a simpler GoHighLevel alternative) that finds local-business clients, runs your pipeline with Claude agents and builds tailored ads. It has its own `package.json`; run it with `cd rainmaker && npm install && npm run dev`.
 
 An unofficial GTA VI companion site. Players talk to **Sol**, a voice guide built on ElevenLabs Agents. Sol flies the map to any secret, pin or street and opens a popup that explains it. It can also draw a route with turn-by-turn directions, give tips with confidence labels, and read out the day's news. The news and community pins update every day on their own.
