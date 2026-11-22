@@ -1,64 +1,71 @@
-/* Rainmaker design system. Calm surfaces, one accent, generous spacing,
-   plain-language labels. Every color is a token so dark mode is one block. */
+/* Rainmaker design system. Monochrome surfaces, hairlines, pill buttons,
+   gradient orbs for colour. Every color is a token so dark mode is one block. */
 
 :root {
-  --bg: #f5f5f2;
+  /* Monochrome, warm off-white, hairlines and pill buttons: colour comes
+     from the grainy gradient orbs, not from the chrome. */
+  --bg: #fdfcfc;
   --panel: #ffffff;
-  --panel-2: #fafaf8;
-  --sunken: #efeee9;
-  --line: #e6e4de;
-  --line-strong: #d6d3cb;
-  --text: #191917;
-  --text-2: #55534d;
-  --text-3: #8b8880;
-  --brand: #3e5fe0;
-  --brand-hover: #3452c7;
-  --brand-ink: #2b45ad;
-  --brand-soft: #eef1fd;
-  --brand-line: #cdd6f8;
-  --hot: #e5484d;
-  --hot-soft: #fdecec;
-  --warm: #e2791a;
-  --warm-soft: #fdf1e5;
-  --cool: #7d7b73;
-  --cool-soft: #f0efeb;
-  --good: #2b9a66;
-  --good-soft: #e7f5ee;
-  --violet: #8e4ec6;
-  --violet-soft: #f4edfb;
-  --teal: #12a594;
-  --teal-soft: #e5f6f3;
-  --focus: 0 0 0 3px color-mix(in srgb, var(--brand) 28%, transparent);
-  --shadow-1: 0 1px 2px rgba(25, 25, 20, 0.05), 0 0 0 1px rgba(25, 25, 20, 0.02);
-  --shadow-2: 0 12px 32px -12px rgba(25, 25, 20, 0.22), 0 2px 6px -2px rgba(25, 25, 20, 0.08);
-  --shadow-3: 0 24px 64px -16px rgba(25, 25, 20, 0.35);
+  --panel-2: #fbfaf9;
+  --sunken: #f5f3f1;
+  --line: #ebe8e4;
+  --line-strong: #dcd8d3;
+  --text: #000000;
+  --text-2: #57534e;
+  --text-3: #78716c;
+  --brand: #000000;
+  --brand-hover: #292524;
+  --brand-ink: #000000;
+  --brand-soft: #f5f3f1;
+  --brand-line: #dcd8d3;
+  --on-brand: #ffffff;
+  --hot: #dc3d43;
+  --hot-soft: #fcebea;
+  --warm: #c2620f;
+  --warm-soft: #fbf0e4;
+  --cool: #78716c;
+  --cool-soft: #f2f0ed;
+  --good: #1f8a5b;
+  --good-soft: #e6f4ec;
+  --violet: #7c4dbd;
+  --violet-soft: #f3edfa;
+  --teal: #0f8f80;
+  --teal-soft: #e3f4f1;
+  --focus: 0 0 0 3px color-mix(in srgb, var(--text) 16%, transparent);
+  --ring: 0 0 0 0.5px rgba(0, 0, 0, 0.13), 0 1px 1px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-1: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-2: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 14px 34px -14px rgba(0, 0, 0, 0.2), 0 2px 6px -2px rgba(0, 0, 0, 0.06);
+  --shadow-3: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 28px 70px -18px rgba(0, 0, 0, 0.3);
   --r-sm: 8px;
   --r: 12px;
   --r-lg: 16px;
-  --r-xl: 22px;
+  --r-xl: 20px;
   --sidebar: 248px;
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Bricolage Grotesque Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geist Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Film grain for the gradient orbs and cards. */
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111110;
-    --panel: #191918;
-    --panel-2: #1e1e1c;
-    --sunken: #141413;
-    --line: #2b2a28;
-    --line-strong: #3a3936;
-    --text: #eeeeec;
-    --text-2: #b5b3ad;
-    --text-3: #7f7d76;
-    --brand: #6e8bff;
-    --brand-hover: #8299ff;
-    --brand-ink: #a6b6ff;
-    --brand-soft: #1d2340;
-    --brand-line: #2e3a6e;
+    --bg: #0b0b0b;
+    --panel: #131313;
+    --panel-2: #161616;
+    --sunken: #1c1c1b;
+    --line: #272625;
+    --line-strong: #363533;
+    --text: #f5f5f4;
+    --text-2: #b8b3ad;
+    --text-3: #8f8a84;
+    --brand: #ffffff;
+    --brand-hover: #e7e5e4;
+    --brand-ink: #ffffff;
+    --brand-soft: #1f1f1e;
+    --brand-line: #363533;
+    --on-brand: #000000;
     --hot: #ff6369;
     --hot-soft: #3b1719;
     --warm: #ff9a42;
@@ -71,9 +78,10 @@
     --violet-soft: #2a1f3d;
     --teal: #2ad1bc;
     --teal-soft: #0f2e2a;
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
-    --shadow-2: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
-    --shadow-3: 0 24px 64px -16px rgba(0, 0, 0, 0.8);
+    --ring: 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-1: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-2: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 14px 34px -14px rgba(0, 0, 0, 0.75), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+    --shadow-3: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 28px 70px -18px rgba(0, 0, 0, 0.85);
     color-scheme: dark;
   }
 }
@@ -128,6 +136,124 @@ svg {
   border-radius: 6px;
 }
 
+/* ── Orbs: grainy gradient spheres (store, assistant, brand) ── */
+
+.orb {
+  --a: #d6efff;
+  --b: #6fa0ff;
+  --c: #4b3fd8;
+  --d: #17205f;
+  --level: 0;
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(60% 60% at 30% 24%, var(--a) 0%, transparent 72%),
+    radial-gradient(70% 70% at 76% 72%, var(--c) 0%, transparent 72%),
+    radial-gradient(80% 80% at 72% 24%, var(--b) 0%, transparent 72%),
+    radial-gradient(100% 100% at 40% 80%, var(--b) 0%, var(--d) 100%);
+  box-shadow: inset -0.08em -0.1em 0.3em rgba(0, 0, 0, 0.12);
+  transform: scale(calc(1 + var(--level) * 0.18));
+  transition: transform 0.08s linear;
+}
+
+.orb::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background: conic-gradient(from 90deg, var(--a), var(--b), var(--c), var(--b), var(--a));
+  filter: blur(14px);
+  opacity: 0.5;
+  mix-blend-mode: soft-light;
+  animation: orb-spin 16s linear infinite;
+}
+
+.orb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: var(--grain);
+  background-size: 180px;
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+
+.orb.idle::before {
+  animation-duration: 28s;
+}
+
+.orb.lg {
+  width: 88px;
+  height: 88px;
+}
+
+.orb.xl {
+  width: 220px;
+  height: 220px;
+}
+
+.orb.lg::before,
+.orb.xl::before {
+  filter: blur(30px);
+}
+
+@keyframes orb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Palettes. Agents lean blue-green, content warm, business neutral, marketing violet. */
+.tone-sky { --a: #d8f0ff; --b: #7aa2ff; --c: #5a3fe0; --d: #1b2370; }
+.tone-lagoon { --a: #d6fff1; --b: #4fd1b5; --c: #1f7fa0; --d: #0b3546; }
+.tone-aqua { --a: #e3fbff; --b: #6fd3f0; --c: #3b7bd8; --d: #12305c; }
+.tone-ember { --a: #ffe7c4; --b: #ff9b45; --c: #f0471c; --d: #9c2308; }
+.tone-peach { --a: #fff1e6; --b: #ffbf9e; --c: #f0868c; --d: #a8506f; }
+.tone-dawn { --a: #fff4d1; --b: #ffcf6b; --c: #ff7f5e; --d: #c23f6e; }
+.tone-rose { --a: #ffe6ef; --b: #ff9fc0; --c: #e0507f; --d: #6e1d45; }
+.tone-mocha { --a: #f6d7c8; --b: #b97862; --c: #4e2b2a; --d: #22120f; }
+.tone-mist { --a: #f3f4ef; --b: #cfd6cc; --c: #8e9c90; --d: #55615a; }
+.tone-pearl { --a: #ffffff; --b: #e4e2f0; --c: #a9a6c4; --d: #5d5a7a; }
+.tone-iris { --a: #fbe3ff; --b: #d38cff; --c: #7d7bff; --d: #3f3ab8; }
+.tone-candy { --a: #e9f0ff; --b: #9bb7ff; --c: #ff9fb8; --d: #7a5cff; }
+
+/* Grainy gradient surface (the featured plan, the price card). */
+.grain-card {
+  position: relative;
+  isolation: isolate;
+  color: #fff;
+  background:
+    radial-gradient(90% 120% at 0% 0%, #4f7dff 0%, transparent 60%),
+    radial-gradient(90% 120% at 100% 100%, #ff8a3d 0%, transparent 62%),
+    radial-gradient(60% 80% at 80% 20%, #e8453c 0%, transparent 70%),
+    linear-gradient(135deg, #3557ff, #d2452e) !important;
+}
+
+.grain-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--grain);
+  background-size: 180px;
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .orb::before {
+    animation: none;
+  }
+}
+
 /* ── App shell ─────────────────────────────────────────────── */
 
 .app {
@@ -161,14 +287,13 @@ svg {
   border-radius: 9px;
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #5b7cfa, #3247c9 60%, #22308f);
-  color: #fff;
-  box-shadow: 0 6px 16px -6px rgba(50, 71, 201, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: var(--text);
+  color: var(--bg);
 }
 
 .brand-name {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 560;
   font-size: 18px;
   letter-spacing: -0.02em;
 }
@@ -200,13 +325,12 @@ svg {
 }
 
 .nav-link[aria-current="page"] {
-  background: var(--panel);
+  background: var(--sunken);
   color: var(--text);
-  box-shadow: var(--shadow-1);
 }
 
 .nav-link[aria-current="page"] svg {
-  color: var(--brand);
+  color: var(--text);
 }
 
 .nav-link .count {
@@ -294,10 +418,10 @@ svg {
 .page-head h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
-  line-height: 1.15;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 30px;
+  line-height: 1.12;
+  font-weight: 450;
+  letter-spacing: -0.035em;
 }
 
 .page-head p {
@@ -320,12 +444,12 @@ svg {
   justify-content: center;
   gap: 7px;
   height: 36px;
-  padding: 0 14px;
-  border-radius: 10px;
+  padding: 0 15px;
+  border-radius: 999px;
   border: 1px solid var(--line-strong);
   background: var(--panel);
   color: var(--text);
-  font-weight: 550;
+  font-weight: 500;
   font-size: 13.5px;
   white-space: nowrap;
   cursor: pointer;
@@ -350,8 +474,8 @@ svg {
 .btn.primary {
   background: var(--brand);
   border-color: var(--brand);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(40, 60, 180, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: var(--on-brand);
+  box-shadow: none;
 }
 
 .btn.primary:hover {
@@ -379,7 +503,7 @@ svg {
   height: 30px;
   padding: 0 10px;
   font-size: 12.5px;
-  border-radius: 8px;
+  border-radius: 999px;
   gap: 6px;
 }
 
@@ -387,7 +511,7 @@ svg {
   height: 44px;
   padding: 0 20px;
   font-size: 15px;
-  border-radius: 12px;
+  border-radius: 999px;
 }
 
 .btn.icon {
@@ -556,7 +680,7 @@ svg {
 .card-head h3 {
   margin: 0;
   font-size: 14.5px;
-  font-weight: 650;
+  font-weight: 550;
   letter-spacing: -0.01em;
 }
 
@@ -575,7 +699,8 @@ svg {
 h2.display,
 h3.display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: -0.025em;
 }
 
 /* ── Badges, chips, score ──────────────────────────────────── */
@@ -728,11 +853,19 @@ button.chip[aria-pressed="true"] {
   font-weight: 550;
 }
 
+.metric {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 450;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
 .stat .v {
   margin-top: 8px;
   font-family: var(--font-display);
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 450;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
@@ -766,67 +899,52 @@ button.chip[aria-pressed="true"] {
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 26px 26px 24px;
+  padding: 28px 28px 24px;
   border-radius: var(--r-xl);
-  color: #f4f6ff;
-  background:
-    radial-gradient(120% 140% at 100% 0%, rgba(120, 150, 255, 0.45) 0%, transparent 52%),
-    radial-gradient(90% 120% at 0% 100%, rgba(18, 165, 148, 0.35) 0%, transparent 55%),
-    linear-gradient(135deg, #1c2a6e 0%, #263a9e 45%, #2f49c4 100%);
-  box-shadow: var(--shadow-2);
+  color: var(--text);
+  background: var(--sunken);
 }
 
 .hero h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 26px;
-  line-height: 1.15;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 30px;
+  line-height: 1.12;
+  font-weight: 450;
+  letter-spacing: -0.035em;
 }
 
 .hero p {
   margin: 8px 0 18px;
-  color: rgba(236, 240, 255, 0.82);
+  color: var(--text-2);
   max-width: 560px;
 }
 
 .hero-form {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
-  padding: 6px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(6px);
 }
 
 .hero-form .input,
 .hero-form .select {
   height: 44px;
-  border: 0;
-  background: rgba(255, 255, 255, 0.96);
-  color: #191917;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--text);
 }
 
 .hero-form .btn {
   height: 44px;
-  background: #fff;
-  color: #1c2a6e;
-  border-color: #fff;
-  font-weight: 650;
 }
 
-.hero-form .btn:hover {
-  background: #eef1fd;
-}
-
-.hero-rain {
+.hero-orb {
   position: absolute;
-  right: -10px;
-  top: -10px;
-  opacity: 0.22;
+  top: 24px;
+  right: 28px;
+  width: 132px;
+  height: 132px;
   pointer-events: none;
 }
 
@@ -1050,8 +1168,8 @@ button.list-item {
   content: "";
   width: 9px;
   height: 5px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
+  border-left: 2px solid var(--on-brand);
+  border-bottom: 2px solid var(--on-brand);
   transform: translateY(-1px) rotate(-45deg);
 }
 
@@ -1292,9 +1410,10 @@ ul.clean li svg {
 .drawer-head h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 21px;
+  font-weight: 500;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .drawer-body {
@@ -1755,6 +1874,7 @@ ul.clean li svg {
   margin: 0;
   font-size: 16px;
   font-family: var(--font-display);
+  font-weight: 500;
   letter-spacing: -0.015em;
 }
 
@@ -1919,8 +2039,9 @@ ul.clean li svg {
 .login-card h1 {
   margin: 14px 0 4px;
   font-family: var(--font-display);
-  font-size: 28px;
-  letter-spacing: -0.025em;
+  font-size: 30px;
+  font-weight: 450;
+  letter-spacing: -0.035em;
 }
 
 .login-card p {
@@ -1970,7 +2091,7 @@ ul.clean li svg {
 
 .sheet-link:active,
 .sheet-link[aria-current="page"] {
-  background: var(--brand-soft);
+  background: var(--sunken);
 }
 
 @keyframes sheet-up {
@@ -2110,7 +2231,7 @@ details[open] > .niche-summary .chev {
 
   .mobile-title {
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 560;
     font-size: 18px;
     letter-spacing: -0.02em;
   }
@@ -2324,6 +2445,10 @@ details[open] > .niche-summary .chev {
 
   .hero-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero-orb {
+    display: none;
   }
 
   .card-head {
@@ -2550,6 +2675,7 @@ details[open] > .niche-summary .chev {
 }
 
 .switch input:checked::after {
+  background: var(--on-brand);
   transform: translateX(16px);
 }
 

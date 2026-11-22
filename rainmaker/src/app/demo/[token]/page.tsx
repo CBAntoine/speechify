@@ -22,7 +22,7 @@ export default async function DemoPage({ params }: Props) {
       <header className="store-header">
         <div className="store-wrap">
           <span className="store-logo">
-            <span className="store-logo-mark">AI</span>
+            <span className="orb idle tone-sky" aria-hidden />
             {profile.agencyName}
           </span>
           <span className="spacer" />
@@ -33,8 +33,12 @@ export default async function DemoPage({ params }: Props) {
       </header>
       <main className="demo-hero">
         <div className="store-wrap demo-card">
-          <span className="store-eyebrow">Private demo for {lead.name}</span>
-          <h1>Talk to the AI receptionist we built for {lead.name}</h1>
+          <span className="store-eyebrow">
+            <span className="orb idle tone-lagoon" aria-hidden /> Private demo for {lead.name}
+          </span>
+          <h1>
+            Talk to the AI receptionist <span style={{ color: "var(--text-3)" }}>we built for {lead.name}</span>
+          </h1>
           <p>
             {profile.agencyName} trained it on your public website. Call it like a customer would: ask about your services, prices, hours or booking an appointment. The real
             version answers your phone line 24/7 and sends you a summary of every call.

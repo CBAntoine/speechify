@@ -122,6 +122,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
   const connecting = busy || status === "connecting";
 
   const name = title ?? store?.settings.assistantName ?? "Assistant";
+  const tone = demoToken ? "tone-lagoon" : "tone-sky";
   const push = useCallback((role: Line["role"], text: string) => {
     setLines((prev) => {
       const last = prev[prev.length - 1];
@@ -309,12 +310,18 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
     const onReq = (e: Event) => {
       const d = (e as CustomEvent<AssistantRequest>).detail ?? {};
       setOpen(true);
-      if (d.ask) void ask(d.ask);
+      if (d.ask && d.mode === "voice" && !connected && !connecting) {
+        // Start a voice call that opens with this question.
+        const t = d.ask.trim();
+        push("user", t);
+        pendingText.current = t;
+        void begin("voice");
+      } else if (d.ask) void ask(d.ask);
       else if (d.mode && !connected && !connecting) void begin(d.mode);
     };
     window.addEventListener("rm:assistant", onReq);
     return () => window.removeEventListener("rm:assistant", onReq);
-  }, [ask, begin, connected, connecting]);
+  }, [ask, begin, connected, connecting, push]);
 
   const prompts =
     quick ??
@@ -337,7 +344,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
   if (variant === "dock" && !open) {
     return (
       <button type="button" className="assistant-fab" onClick={() => setOpen(true)} aria-label={`Talk to ${name}, our AI assistant`}>
-        <span className="orb idle" />
+        <span className={`orb idle ${tone}`} />
         <span style={{ textAlign: "left" }}>
           Talk to {name}
           <small>AI assistant · voice or chat</small>
@@ -349,7 +356,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
   return (
     <section className={`assistant-panel ${variant === "inline" ? "inline" : ""}`} aria-label={`${name}, AI assistant`}>
       <div className="ap-head">
-        <span ref={orbRef} className={`orb ${connected ? "" : "idle"}`} />
+        <span ref={orbRef} className={`orb ${tone} ${connected ? "" : "idle"}`} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <b className="truncate">{name}</b>
           <small aria-live="polite">{statusText}</small>
@@ -377,7 +384,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
       <div className="ap-body" ref={scrollRef}>
         {!lines.length && (
           <div className="ap-intro">
-            <span className="orb lg idle" />
+            <span className={`orb lg idle ${tone}`} />
             <p>
               {store && !demoToken
                 ? `Hi! I'm ${name}, an AI assistant. Ask me about any of our services, what they cost, or which plan fits your business.`

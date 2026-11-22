@@ -130,7 +130,7 @@ export default async function Today() {
         <div className="card-body grid-3" style={{ gap: 14 }}>
           <Link href="/sales" className="stack" style={{ gap: 2 }}>
             <span className="faint small">Store revenue</span>
-            <b style={{ fontSize: 20 }}>{dollars(sales.mrr, { currency: db.store.currency })}/mo</b>
+            <b className="metric">{dollars(sales.mrr, { currency: db.store.currency })}/mo</b>
             <span className="muted small">
               {sales.active} active client{sales.active === 1 ? "" : "s"}
               {sales.pending ? ` · ${sales.pending} unfinished checkout${sales.pending === 1 ? "" : "s"}` : ""}
@@ -138,12 +138,12 @@ export default async function Today() {
           </Link>
           <Link href="/sales" className="stack" style={{ gap: 2 }}>
             <span className="faint small">Collected this month</span>
-            <b style={{ fontSize: 20 }}>{dollars(sales.revenueThisMonth, { currency: db.store.currency })}</b>
+            <b className="metric">{dollars(sales.revenueThisMonth, { currency: db.store.currency })}</b>
             <span className="muted small">{sales.newThisMonth} new this month</span>
           </Link>
           <Link href="/autopilot" className="stack" style={{ gap: 2 }}>
             <span className="faint small">Autopilot {db.autopilot.config.enabled ? "is on" : "is off"}</span>
-            <b style={{ fontSize: 20 }}>{lastRun ? `${lastRun.counts.saved} leads, ${lastRun.counts.drafted} drafts` : "Not run yet"}</b>
+            <b className="metric">{lastRun ? `${lastRun.counts.saved} lead${lastRun.counts.saved === 1 ? "" : "s"}, ${lastRun.counts.drafted} draft${lastRun.counts.drafted === 1 ? "" : "s"}` : "Not run yet"}</b>
             <span className="muted small">{lastRun ? `Last run ${timeAgo(lastRun.startedAt)}${lastRun.counts.demos ? ` · ${lastRun.counts.demos} demos` : ""}` : "Add cities and press Run now"}</span>
           </Link>
         </div>

@@ -5,7 +5,7 @@ import { CreditCard, Lock, X } from "lucide-react";
 import { useOverlay, useToast } from "@/components/client";
 import { ANNUAL_MONTHS, dollars } from "@/lib/catalog";
 import { findOffer, storedLeadId, useStore, type CheckoutRequest } from "./bus";
-import { OfferIcon } from "./icons";
+import { OfferOrb } from "./icons";
 
 type Interval = "month" | "year";
 
@@ -93,16 +93,14 @@ export function Checkout() {
       <div className="store-scrim" onClick={close} />
       <div className="store-modal" role="dialog" aria-modal="true" aria-label={`Checkout: ${offer.name}`}>
         <div className="row between" style={{ marginBottom: 14 }}>
-          <b style={{ fontSize: 18 }}>{canPay ? "Secure checkout" : "Get started"}</b>
+          <b className="modal-title">{canPay ? "Secure checkout" : "Get started"}</b>
           <button type="button" className="btn ghost icon sm" onClick={close} aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
         <div className="checkout-summary">
-          <span className="offer-icon">
-            <OfferIcon name={offer.icon} />
-          </span>
+          <OfferOrb offer={offer} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <b>{offer.name}</b>
             <div className="faint small truncate">{offer.tagline}</div>
@@ -138,7 +136,7 @@ export function Checkout() {
               <b style={{ color: "var(--good)" }}>Waived</b>
             </div>
           ) : null}
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 6, marginTop: 4 }}>
+          <div className="due">
             <span>Due today</span>
             <b>
               {dollars(recurring + setup, { currency: c })} {c.toUpperCase()}

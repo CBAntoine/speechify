@@ -1,11 +1,11 @@
-import { Check, PhoneCall, Sparkles } from "lucide-react";
-import { AskButton, PlanCards, ProductCatalog, TalkButton } from "@/components/store/parts";
+import { Check, PhoneCall } from "lucide-react";
+import { AskButton, CtaBand, PlanCards, ProductCatalog, Showcase, TalkButton } from "@/components/store/parts";
 import { dollars } from "@/lib/catalog";
 import { getStoreView } from "@/lib/store-view";
 
 export const dynamic = "force-dynamic";
 
-/** "*words*" in the headline setting become the gradient highlight. */
+/** "*words*" in the headline setting are set in the lighter second tone. */
 function Headline({ text }: { text: string }) {
   const parts = text.split("*");
   return <>{parts.map((p, i) => (i % 2 ? <em key={i}>{p}</em> : <span key={i}>{p}</span>))}</>;
@@ -15,9 +15,7 @@ function ExampleCall() {
   return (
     <div className="call-card" aria-label="Example call with an AI receptionist">
       <div className="call-card-head">
-        <span className="offer-icon">
-          <PhoneCall size={20} />
-        </span>
+        <span className="orb tone-lagoon" aria-hidden />
         <div>
           <b>Incoming call · Bright Smile Dental</b>
           <small>Saturday, 7:42 pm · office closed</small>
@@ -47,13 +45,15 @@ function ExampleCall() {
           <i />
         </div>
         <div className="call-summary" style={{ flex: 1 }}>
-          <Check size={16} /> Booking request and call summary sent to the front desk
+          <Check size={16} aria-hidden /> Booking request and call summary sent to the front desk
         </div>
       </div>
       <div className="call-note">Illustration of a typical call. Talk to our assistant to hear the real thing.</div>
     </div>
   );
 }
+
+const LANGS = ["English", "Español", "Français", "Deutsch", "Português", "中文", "हिन्दी", "العربية", "Tagalog", "Tiếng Việt", "한국어", "Italiano"];
 
 const FAQS = (agency: string, showEngine: boolean) => [
   { q: "Do I need any technical skills?", a: `No. ${agency} sets everything up, connects it to your phone line and website, and keeps it running. Your part is a short kickoff call and approving what we build.` },
@@ -89,44 +89,119 @@ export default async function StorePage() {
         <div className="store-wrap store-hero-grid">
           <div>
             <span className="store-eyebrow">
-              <Sparkles size={14} /> {v.settings.showEngine ? "Done-for-you AI, built on ElevenLabs voices" : "Done-for-you AI for local businesses"}
+              <span className="orb idle tone-lagoon" aria-hidden /> {v.settings.showEngine ? "Done-for-you AI, built on ElevenLabs voices" : "Done-for-you AI for local businesses"}
             </span>
             <h1 className="store-h1">
               <Headline text={v.settings.headline} />
             </h1>
-            <p className="store-lede">{v.settings.subheadline}</p>
             <div className="store-cta-row">
-              <TalkButton mode="voice" />
-              <TalkButton mode="text" className="btn xl" />
-              <a className={`btn xl ${v.assistant ? "" : "primary"}`} href="#plans">
-                Plans from {dollars(plansFrom, { currency: c })}/mo
-              </a>
-              {!v.assistant && v.brand.calendarUrl && (
-                <a className="btn xl" href={v.brand.calendarUrl} target="_blank" rel="noopener">
-                  Book a call
-                </a>
+              {v.assistant ? (
+                <>
+                  <TalkButton mode="voice" className="btn btn-talk lg" />
+                  <TalkButton mode="text" className="btn lg" />
+                </>
+              ) : (
+                <>
+                  <a className="btn primary lg" href="#plans">
+                    See plans
+                  </a>
+                  {v.brand.calendarUrl && (
+                    <a className="btn lg" href={v.brand.calendarUrl} target="_blank" rel="noopener">
+                      Book a call
+                    </a>
+                  )}
+                </>
               )}
             </div>
+          </div>
+          <div>
+            <p className="store-lede">{v.settings.subheadline}</p>
             <div className="store-trust">
               <span>
-                <Check size={16} /> Answers 24/7
+                <Check size={15} aria-hidden /> Answers 24/7
               </span>
               <span>
-                <Check size={16} /> 90+ languages
+                <Check size={15} aria-hidden /> 90+ languages
               </span>
               <span>
-                <Check size={16} /> Live in days
+                <Check size={15} aria-hidden /> Live in days
               </span>
               <span>
-                <Check size={16} /> No contracts
+                <Check size={15} aria-hidden /> Plans from {dollars(plansFrom, { currency: c })}/mo
               </span>
             </div>
           </div>
-          <ExampleCall />
         </div>
       </section>
 
-      <section className="store-section alt" id="plans">
+      <div className="showcase-wrap">
+        <Showcase />
+      </div>
+
+      <section className="store-section" id="why">
+        <div className="store-wrap">
+          <h2 className="store-h2">
+            One AI team for every customer conversation. <em>Built, run and improved for you.</em>
+          </h2>
+          <div className="bento">
+            <div className="bento-card wide">
+              <h3 className="store-h3">Answers every call, day and night</h3>
+              <p>Your AI receptionist picks up on the first ring, books appointments, answers questions and sends you a summary of every call.</p>
+              <div className="bento-visual">
+                <ExampleCall />
+              </div>
+            </div>
+            <div className="bento-card">
+              <h3 className="store-h3">Meets customers where they are</h3>
+              <p>Phone, website chat and WhatsApp, with the same knowledge of your business on every channel.</p>
+              <div className="bento-visual">
+                <div style={{ display: "grid", placeItems: "center" }}>
+                  <div style={{ position: "relative", display: "grid", placeItems: "center" }}>
+                    <span className="orb xl tone-aqua" aria-hidden />
+                    <span className="orb-play" style={{ cursor: "default" }} aria-hidden>
+                      <PhoneCall size={22} />
+                    </span>
+                  </div>
+                  <div className="channel-pills" aria-label="Channels">
+                    <span>Voice</span>
+                    <span>Chat</span>
+                    <span>WhatsApp</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bento-card">
+              <h3 className="store-h3">Speaks your customers' language</h3>
+              <p>Agents, voiceovers and dubbing in 90+ languages. Callers are answered in the language they speak.</p>
+              <div className="bento-visual">
+                <div className="lang-cloud">
+                  {LANGS.map((l) => (
+                    <span key={l}>{l}</span>
+                  ))}
+                  <span className="more">and 80 more</span>
+                </div>
+              </div>
+            </div>
+            <div className="bento-card wide">
+              <h3 className="store-h3">Marketing that makes itself</h3>
+              <p>Ads written for your business every month, with custom art in your brand colours, voiceovers and short videos.</p>
+              <div className="bento-visual">
+                <div className="ad-mock" aria-label="Example ad">
+                  <div className="art grain-card" />
+                  <div className="copy">
+                    <small>Sponsored · Bright Smile Dental</small>
+                    <b>Saturday cleanings, booked in seconds</b>
+                    <span>Call any time: we always pick up. New patients welcome.</span>
+                    <i>Book now</i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="store-section" id="plans">
         <div className="store-wrap">
           <PlanCards />
         </div>
@@ -134,20 +209,27 @@ export default async function StorePage() {
 
       <section className="store-section" id="services">
         <div className="store-wrap">
-          <div className="store-kicker">Services</div>
-          <h2 className="store-h2">{v.settings.showEngine ? "Every ElevenLabs-powered service, done for you" : "Every service, done for you"}</h2>
+          <div className="store-kicker">
+            <span className="orb idle tone-lagoon" aria-hidden /> Services
+          </div>
+          <h2 className="store-h2">
+            Every service, done for you. <em>Buy just the one you need.</em>
+          </h2>
           <p className="store-sub">
-            Need just one thing? Every service is available on its own, built and run by us. Not sure which fits?{" "}
-            {v.assistant ? `Ask ${v.settings.assistantName}: it knows every product in detail.` : "Book a call and we'll tell you."}
+            Every service is available on its own, built and run by us.{" "}
+            {v.assistant ? `Not sure which fits? Ask ${v.settings.assistantName}: it knows every product in detail.` : "Not sure which fits? Book a call and we'll tell you."}
           </p>
-          <ProductCatalog />
+          <div style={{ marginTop: 28 }}>
+            <ProductCatalog />
+          </div>
         </div>
       </section>
 
-      <section className="store-section alt" id="how">
+      <section className="store-section" id="how">
         <div className="store-wrap">
-          <div className="store-kicker">How it works</div>
-          <h2 className="store-h2">You talk to us for 20 minutes. We do the rest.</h2>
+          <h2 className="store-h2">
+            You talk to us for 20 minutes. <em>We do the rest.</em>
+          </h2>
           <div className="steps-3">
             {[
               ["Tell us about your business", "Pick a plan or a service, then a 20-minute kickoff call: your services, prices, hours and goals. That's all the work you do."],
@@ -166,8 +248,9 @@ export default async function StorePage() {
 
       <section className="store-section" id="compare">
         <div className="store-wrap">
-          <div className="store-kicker">Compare</div>
-          <h2 className="store-h2">Better than doing it yourself</h2>
+          <h2 className="store-h2">
+            Better than doing it yourself. <em>Faster than hiring.</em>
+          </h2>
           <p className="store-sub">Software like GoHighLevel gives you the tools and leaves the building to you. We build it, run it and keep it improving.</p>
           <div className="compare-wrap">
             <table className="compare-table">
@@ -225,10 +308,16 @@ export default async function StorePage() {
         </div>
       </section>
 
-      <section className="store-section alt" id="faq">
-        <div className="store-wrap">
-          <div className="store-kicker">FAQ</div>
-          <h2 className="store-h2">Questions, answered</h2>
+      <section className="store-section" id="faq">
+        <div className="store-wrap faq-grid">
+          <div>
+            <h2 className="store-h2">
+              Frequently <em>asked questions</em>
+            </h2>
+            <div className="faq-more">
+              <AskButton text="I have a question that isn't in the FAQ." label="Ask something else" />
+            </div>
+          </div>
           <div className="faq">
             {FAQS(v.brand.name, v.settings.showEngine).map((f) => (
               <details key={f.q}>
@@ -237,33 +326,15 @@ export default async function StorePage() {
               </details>
             ))}
           </div>
-          <div style={{ marginTop: 18 }}>
-            <AskButton text="I have a question that isn't in the FAQ." label="Ask something else" />
-          </div>
         </div>
       </section>
 
-      <section className="store-section">
+      <section className="store-section cta">
         <div className="store-wrap">
-          <div className="cta-band">
-            <div>
-              <h2>{v.assistant ? "Hear it for yourself" : "Ready when you are"}</h2>
-              <p>{v.assistant ? "Talk to our AI assistant right now, by voice or text. It'll explain anything and get you started." : "Pick a plan and we'll have your AI live within days."}</p>
-            </div>
-            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <TalkButton mode="voice" label="Start talking" className="btn xl" />
-              {!v.assistant && (
-                <a className="btn xl" href="#plans">
-                  See plans
-                </a>
-              )}
-              {v.brand.calendarUrl && (
-                <a className="btn xl ghost-light" href={v.brand.calendarUrl} target="_blank" rel="noopener">
-                  Book a call
-                </a>
-              )}
-            </div>
-          </div>
+          <CtaBand
+            title={v.assistant ? "Hear it for yourself, right now." : "Your AI team, live within days."}
+            text={v.assistant ? "Talk to our AI assistant by voice or text. It'll explain anything and get you started." : "Pick a plan and we'll handle the rest."}
+          />
         </div>
       </section>
     </>

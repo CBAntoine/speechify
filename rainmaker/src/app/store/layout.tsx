@@ -22,97 +22,134 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-function initials(name: string): string {
-  const w = name.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean);
-  return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] ?? "AI").slice(0, 2)).toUpperCase();
-}
+/** The services the footer lists first, when they're on sale. */
+const FOOTER_SERVICES = ["ai-receptionist", "website-agent", "follow-up-calls", "voiceovers", "video-dubbing", "ad-creative", "ad-campaigns"];
 
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
   const v = await getStoreView();
   const year = new Date().getFullYear();
+  const services = FOOTER_SERVICES.map((id) => v.products.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
+  const yearlyOffer = v.settings.enabled && v.settings.annual;
+
   return (
     <div className="store">
       <StoreClient view={v}>
-        {v.payments.testMode && <div className="store-test-banner">Test mode: checkouts use Stripe or PayPal test accounts, so no real money moves.</div>}
-        <header className="store-header">
-          <div className="store-wrap">
-            <Link href="/store" className="store-logo" aria-label={`${v.brand.name} home`}>
-              <span className="store-logo-mark">{initials(v.brand.name)}</span>
-              <span className="truncate">{v.brand.name}</span>
-            </Link>
-            <nav className="store-nav" aria-label="Store">
-              <a href="/store#plans">Plans</a>
-              <a href="/store#services">Services</a>
-              <a href="/store#how">How it works</a>
-              <a href="/store#compare">Compare</a>
-              <a href="/store#faq">FAQ</a>
-            </nav>
-            <span className="spacer" />
-            <TalkButton mode="voice" label="Talk to AI" className="btn btn-talk hide-sm" />
-            <a className="btn primary" href="/store#plans">
-              Get started
-            </a>
-          </div>
-        </header>
+        {v.payments.testMode ? (
+          <div className="store-banner test">Test mode: checkouts use Stripe or PayPal test accounts, so no real money moves.</div>
+        ) : (
+          yearlyOffer && (
+            <div className="store-banner">
+              <span>Pay yearly and get 2 months free{v.settings.waiveSetupOnAnnual ? ", with no setup fee" : ""}</span>
+              <span className="sep" aria-hidden />
+              <span className="dim">Every plan and service</span>
+              <a className="banner-pill" href="/store#plans">
+                See plans
+              </a>
+            </div>
+          )
+        )}
+        <div className="store-sheet">
+          <header className="store-header">
+            <div className="store-wrap">
+              <Link href="/store" className="store-logo" aria-label={`${v.brand.name} home`}>
+                <span className="orb idle tone-sky" aria-hidden />
+                <span className="truncate">{v.brand.name}</span>
+              </Link>
+              <nav className="store-nav" aria-label="Store">
+                <a href="/store#plans">Plans</a>
+                <a href="/store#services">Services</a>
+                <a href="/store#how">How it works</a>
+                <a href="/store#compare">Compare</a>
+                <a href="/store#faq">FAQ</a>
+              </nav>
+              <span className="spacer" />
+              <TalkButton mode="voice" label="Talk to AI" className="btn hide-sm" />
+              <a className="btn primary" href="/store#plans">
+                Get started
+              </a>
+            </div>
+          </header>
 
-        <main>{children}</main>
+          <main>{children}</main>
 
-        <footer className="store-footer">
-          <div className="store-wrap">
-            <div>
-              <div className="store-logo" style={{ marginBottom: 10 }}>
-                <span className="store-logo-mark">{initials(v.brand.name)}</span>
-                {v.brand.name}
+          <footer className="store-footer">
+            <div className="store-wrap">
+              <div>
+                <div className="store-logo">
+                  <span className="orb idle tone-sky" aria-hidden />
+                  {v.brand.name}
+                </div>
+                <p className="about">
+                  Done-for-you AI phone agents, voice, video and ads for {v.brand.city ? `businesses in ${v.brand.city} and beyond` : "local businesses"}.
+                </p>
+                {v.brand.mailingAddress && <p className="about">{v.brand.mailingAddress}</p>}
               </div>
-              <p style={{ margin: 0, maxWidth: 380, lineHeight: 1.55 }}>
-                Done-for-you AI phone agents, voice, video and ads for {v.brand.city ? `businesses in ${v.brand.city} and beyond` : "local businesses"}.
-              </p>
-            </div>
-            <div>
-              <h4>Contact</h4>
-              <ul>
-                {v.brand.email && (
+              <div>
+                <h4>Plans</h4>
+                <ul>
+                  {v.plans.map((p) => (
+                    <li key={p.id}>
+                      <Link href={`/store/${p.slug}`}>{p.name}</Link>
+                    </li>
+                  ))}
                   <li>
-                    <a href={`mailto:${v.brand.email}`}>{v.brand.email}</a>
+                    <a href="/store#compare">Compare</a>
                   </li>
-                )}
-                {v.brand.phone && (
+                </ul>
+              </div>
+              <div>
+                <h4>Services</h4>
+                <ul>
+                  {services.map((p) => (
+                    <li key={p.id}>
+                      <Link href={`/store/${p.slug}`}>{p.name}</Link>
+                    </li>
+                  ))}
                   <li>
-                    <a href={`tel:${v.brand.phone.replace(/[^\d+]/g, "")}`}>{v.brand.phone}</a>
+                    <a href="/store#services">All services</a>
                   </li>
-                )}
-                {v.brand.calendarUrl && (
+                </ul>
+              </div>
+              <div>
+                <h4>Company</h4>
+                <ul>
+                  {v.brand.email && (
+                    <li>
+                      <a href={`mailto:${v.brand.email}`}>{v.brand.email}</a>
+                    </li>
+                  )}
+                  {v.brand.phone && (
+                    <li>
+                      <a href={`tel:${v.brand.phone.replace(/[^\d+]/g, "")}`}>{v.brand.phone}</a>
+                    </li>
+                  )}
+                  {v.brand.calendarUrl && (
+                    <li>
+                      <a href={v.brand.calendarUrl} target="_blank" rel="noopener">
+                        Book a call
+                      </a>
+                    </li>
+                  )}
                   <li>
-                    <a href={v.brand.calendarUrl} target="_blank" rel="noopener">
-                      Book a call
-                    </a>
+                    <Link href="/store/terms">Terms & refunds</Link>
                   </li>
-                )}
-                {v.brand.mailingAddress && <li>{v.brand.mailingAddress}</li>}
-              </ul>
+                  <li>
+                    <Link href="/store/privacy">Privacy</Link>
+                  </li>
+                  <li>
+                    <Link href="/login">Team sign in</Link>
+                  </li>
+                </ul>
+              </div>
+              <div className="legal">
+                © {year} {v.brand.name}. Prices in {v.settings.currency.toUpperCase()}, before tax.
+                {v.settings.showEngine &&
+                  ` Our voice products are built on ElevenLabs technology. ElevenLabs is a trademark of ElevenLabs Inc.; ${v.brand.name} is an independent agency, not affiliated with or endorsed by ElevenLabs.`}{" "}
+                GoHighLevel is a trademark of HighLevel Inc.
+              </div>
             </div>
-            <div>
-              <h4>Company</h4>
-              <ul>
-                <li>
-                  <Link href="/store/terms">Terms & refunds</Link>
-                </li>
-                <li>
-                  <Link href="/store/privacy">Privacy</Link>
-                </li>
-                <li>
-                  <Link href="/login">Team sign in</Link>
-                </li>
-              </ul>
-            </div>
-            <div className="legal">
-              © {year} {v.brand.name}. Prices in {v.settings.currency.toUpperCase()}, before tax.
-              {v.settings.showEngine &&
-                ` Our voice products are built on ElevenLabs technology. ElevenLabs is a trademark of ElevenLabs Inc.; ${v.brand.name} is an independent agency, not affiliated with or endorsed by ElevenLabs.`}{" "}
-              GoHighLevel is a trademark of HighLevel Inc.
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </StoreClient>
     </div>
   );

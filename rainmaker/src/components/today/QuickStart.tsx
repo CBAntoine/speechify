@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, Bot } from "lucide-react";
 import { PlacePicker, loadSavedPlace } from "@/components/PlacePicker";
-import { RainMark } from "@/components/ui";
 
 export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id: string; label: string }[]; defaultNiche: string; defaultCity: string }) {
   const router = useRouter();
@@ -23,18 +22,10 @@ export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id
   const agentGoal = `Find 15 ${label} businesses in ${city || "my city"} that clearly need help with their website, booking or reviews`;
   return (
     <section className="hero">
-      <svg className="hero-rain" width="260" height="200" viewBox="0 0 260 200" aria-hidden>
-        {Array.from({ length: 28 }, (_, i) => (
-          <line key={i} x1={(i * 37) % 260} y1={(i * 53) % 200} x2={((i * 37) % 260) - 8} y2={((i * 53) % 200) + 26} stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-        ))}
-      </svg>
-      <div className="row" style={{ gap: 10, marginBottom: 10 }}>
-        <span className="brand-mark" style={{ width: 26, height: 26, boxShadow: "none" }}>
-          <RainMark size={15} />
-        </span>
-        <span className="small" style={{ opacity: 0.85, fontWeight: 600 }}>
-          Find your next client
-        </span>
+      <span className="orb hero-orb tone-sky" aria-hidden />
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+        <span className="orb idle tone-lagoon" style={{ width: 14, height: 14 }} aria-hidden />
+        <span className="small muted">Find your next client</span>
       </div>
       <h2>Who do you want to work with?</h2>
       <p>Pick a niche, a province or state, and a city. Rainmaker finds the businesses, checks their websites, and ranks them by how much they need you.</p>
@@ -47,14 +38,14 @@ export function QuickStart({ niches, defaultNiche, defaultCity }: { niches: { id
           ))}
         </select>
         <PlacePicker value={city} onChange={setCity} labels={false} />
-        <button className="btn lg" type="submit">
+        <button className="btn primary lg" type="submit">
           Find clients <ArrowRight size={16} />
         </button>
       </form>
       <button
         type="button"
         className="btn ghost sm"
-        style={{ marginTop: 12, color: "rgba(255,255,255,.85)" }}
+        style={{ marginTop: 12 }}
         onClick={() => router.push(`/agents?${new URLSearchParams({ agent: "prospector", goal: agentGoal })}`)}
       >
         <Bot size={14} /> Or let the Prospector agent do it for you

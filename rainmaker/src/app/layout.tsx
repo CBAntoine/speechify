@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
-import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/geist";
 import "./globals.css";
 import { ToastProvider } from "@/components/client";
 import { INSTALL_CAPTURE_SCRIPT, PwaSetup } from "@/components/pwa";
@@ -23,8 +23,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f5f2" },
-    { media: "(prefers-color-scheme: dark)", color: "#111110" },
+    { media: "(prefers-color-scheme: light)", color: "#fdfcfc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0b" },
   ],
 };
 
