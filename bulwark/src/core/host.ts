@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExecResult, FileStat, Host, Platform } from "./types.ts";
+import type { ExecOptions, ExecResult, FileStat, Host, Platform } from "./types.ts";
 
 function toStat(s: import("node:fs").Stats): FileStat {
   return {
@@ -19,27 +19,47 @@ function toStat(s: import("node:fs").Stats): FileStat {
 
 const SBIN_DIRS = ["/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/opt/homebrew/bin", "/opt/homebrew/sbin"];
 
+/** Folders where per-user tools live (pipx, cargo, go, npm prefixes, Homebrew). */
+export function userToolDirs(home: string | undefined): string[] {
+  if (!home) return [];
+  return [`${home}/.local/bin`, `${home}/.cargo/bin`, `${home}/go/bin`, `${home}/.npm-global/bin`, `${home}/.bun/bin`];
+}
+
 /** Runs a command without a shell. Never throws: a missing program is exit code 127. */
-export function run(
-  cmd: string,
-  args: string[],
-  opts: { timeoutMs?: number; env?: Record<string, string>; input?: string } = {},
-): Promise<ExecResult> {
+export function run(cmd: string, args: string[], opts: ExecOptions = {}): Promise<ExecResult> {
   return new Promise((resolve) => {
     const env: Record<string, string | undefined> = { ...process.env, ...opts.env };
+    const switchUser = !!opts.runAs && process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0;
     if (process.platform !== "win32") {
       // Tools like ufw, apt and systemctl print localized text otherwise, and we parse it.
       env.LC_ALL = "C";
       env.LANG = "C";
-      // Non-root shells often lack sbin directories, where most admin tools live.
+      // Non-root shells often lack sbin directories, where most admin tools live, and sudo's PATH
+      // often lacks the folder of the Node that runs Bulwark (and its npm).
       const parts = (env.PATH ?? "").split(":").filter(Boolean);
-      for (const d of SBIN_DIRS) if (!parts.includes(d)) parts.push(d);
+      const extra = [...SBIN_DIRS, path.dirname(process.execPath), "/usr/local/go/bin", ...userToolDirs(opts.runAs?.home ?? env.HOME)];
+      for (const d of extra) if (!parts.includes(d)) parts.push(d);
       env.PATH = parts.join(":");
+      if (switchUser && opts.runAs) {
+        if (opts.runAs.home) env.HOME = opts.runAs.home;
+        if (opts.runAs.user) env.USER = env.LOGNAME = opts.runAs.user;
+        delete env.SUDO_USER;
+        delete env.SUDO_UID;
+        delete env.SUDO_GID;
+      }
     }
     const child = execFile(
       cmd,
       args,
-      { timeout: opts.timeoutMs ?? 30_000, maxBuffer: 32 * 1024 * 1024, env, windowsHide: true, encoding: "utf8" },
+      {
+        timeout: opts.timeoutMs ?? 30_000,
+        maxBuffer: 32 * 1024 * 1024,
+        env,
+        cwd: opts.cwd,
+        windowsHide: true,
+        encoding: "utf8",
+        ...(switchUser && opts.runAs ? { uid: opts.runAs.uid, gid: opts.runAs.gid } : {}),
+      },
       (err, stdout, stderr) => {
         if (err && (err as NodeJS.ErrnoException).code === "ENOENT") {
           resolve({ code: 127, stdout: "", stderr: `${cmd}: not found` });
@@ -49,9 +69,12 @@ export function run(
         resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
       },
     );
-    if (opts.input !== undefined) {
-      child.stdin?.end(opts.input);
-    }
+    child.on("error", () => {
+      /* reported through the callback */
+    });
+    // Close stdin so a tool that wants to ask a question fails instead of waiting forever.
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(opts.input ?? "");
   });
 }
 

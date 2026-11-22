@@ -68,6 +68,8 @@ const ICON = {
   nas: svg('<rect x="4" y="3" width="16" height="7.5" rx="1.5"/><rect x="4" y="13.5" width="16" height="7.5" rx="1.5"/><path d="M8 6.75h.01M8 17.25h.01"/>'),
   home: svg('<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/>'),
   device: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/>'),
+  code: svg('<path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-11Z"/><path d="m10 11-2 2 2 2M14 11l2 2-2 2"/>'),
+  package: svg('<path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9L12 3Z"/><path d="m3.5 7.5 8.5 4.5 8.5-4.5M12 12v9"/>'),
 };
 const KIND_ICON = { Router: "router", Computer: "computer", "This device": "computer", "Phone or tablet": "phone", "Phone or laptop": "phone", "Android device": "phone", Camera: "camera", Printer: "printer", "TV or streaming device": "tv", Speaker: "speaker", NAS: "nas", "Smart home device": "home" };
 
@@ -75,7 +77,11 @@ const KIND_ICON = { Router: "router", Computer: "computer", "This device": "comp
 
 const scan = () => S.data && S.data.scan;
 const localFindings = () => (scan() && scan().local ? scan().local.findings : []);
+const deviceFindings = () => localFindings().filter((f) => f.category !== "Software");
+const softwareFindings = () => localFindings().filter((f) => f.category === "Software");
+const codeFindings = () => (scan() && scan().code ? scan().code.findings : []);
 const netFindings = () => (scan() && scan().network ? scan().network.findings : []);
+const everyFinding = () => [...localFindings(), ...codeFindings(), ...netFindings()];
 const failing = (list) => list.filter((f) => f.status === "fail");
 
 function counts(list) {
@@ -184,7 +190,7 @@ function topBar() {
 function banners() {
   const out = [];
   if (S.data.demo) {
-    out.push(`<div class="banner banner-info">${ICON.home}<div><b>Demo network</b>These devices are pretend ones running on this computer (127.0.0.x), with the kinds of holes real routers, cameras and NAS boxes have. Try the fixes: removing the router's port forwards really happens, on the pretend router.</div></div>`);
+    out.push(`<div class="banner banner-info">${ICON.home}<div><b>Demo network</b>These devices are pretend ones running on this computer (127.0.0.x), with the kinds of holes real routers, cameras and NAS boxes have, and the two code projects are pretend ones in Bulwark's demo folder. Try the fixes: they really run, on the pretend router and the pretend projects.</div></div>`);
   } else if (!S.data.device.isRoot) {
     out.push(`<div class="banner banner-warn">${ICON.warn}<div><b>Read-only mode</b>Bulwark can find problems but can't fix most of them without admin rights. Stop it and start it again with <code>./bulwark serve --sudo</code>${S.data.device.platform === "win32" ? " (on Windows: from a terminal opened with \"Run as administrator\")" : ""}.</div></div>`);
   }
@@ -194,24 +200,24 @@ function banners() {
 function welcome() {
   return `<div class="empty">
     <h3>Find the security holes in your devices, and fix them</h3>
-    <p>Bulwark checks this computer's settings, updates, accounts and services, then (if you want) every device on your network: routers, cameras, printers, TVs, NAS boxes. Every fix is shown before it's applied and can be undone.</p>
+    <p>Bulwark checks this computer's settings, accounts, services and installed software, the code projects you point it at (for dependencies with known vulnerabilities), and, if you want, every device on your network: routers, cameras, printers, TVs, NAS boxes. Every fix is shown before it's applied and can be undone.</p>
     <button class="btn btn-primary" data-action="scan-dialog">${ICON.scan} Run the first scan</button>
   </div>`;
 }
 
 function overview() {
   const s = scan();
-  const local = s.local ? localFindings() : [];
-  const net = netFindings();
-  const score = s.local ? s.scores.local : Math.min(100, ...Object.values(s.scores.devices || { x: 100 }));
-  const safe = safeFixable([...local, ...net]);
+  const all = everyFinding();
+  const score = s.local ? s.scores.local : s.code && !s.network ? s.scores.code : Math.min(100, ...Object.values(s.scores.devices || { x: 100 }));
+  const safe = safeFixable(all);
   const devs = s.network ? s.network.devices.length : 0;
+  const projects = s.code ? s.code.projects.length : 0;
   return `<section class="overview">
     ${ring(score ?? 100)}
     <div>
-      <h1 class="ov-title">${s.local ? (score >= 90 ? "This device is in good shape" : score >= 65 ? "A few things to fix" : "This device needs attention") : "Network scan"}</h1>
-      <p class="ov-sub">Scanned ${esc(when(s.finishedAt || s.startedAt))}${s.network ? ` · ${plural(devs, "device")} on ${esc(s.network.targets.slice(0, 3).join(", "))}${s.network.targets.length > 3 ? ` and ${s.network.targets.length - 3} more` : ""}` : ""}</p>
-      <div class="counts">${countRow(counts([...local, ...net]))}</div>
+      <h1 class="ov-title">${s.local ? (score >= 90 ? "This device is in good shape" : score >= 65 ? "A few things to fix" : "This device needs attention") : s.code && !s.network ? "Code projects" : "Network scan"}</h1>
+      <p class="ov-sub">Scanned ${esc(when(s.finishedAt || s.startedAt))}${s.code ? ` · ${plural(projects, "code project")}` : ""}${s.network ? ` · ${plural(devs, "device")} on ${esc(s.network.targets.slice(0, 3).join(", "))}${s.network.targets.length > 3 ? ` and ${s.network.targets.length - 3} more` : ""}` : ""}</p>
+      <div class="counts">${countRow(counts(all))}</div>
     </div>
     <div class="ov-actions">
       ${safe.length ? `<button class="btn btn-primary" data-action="fix-all" ${S.job || !S.data.device.isRoot ? "disabled" : ""}>${ICON.wand} Fix ${plural(safe.length, "low-risk issue")}</button>` : ""}
@@ -224,7 +230,8 @@ function tabs() {
   const s = scan();
   const t = (id, label, n) => `<button class="tab" role="tab" data-action="tab" data-tab="${id}" aria-selected="${S.tab === id}">${label}${n !== undefined ? `<span class="n">${n}</span>` : ""}</button>`;
   return `<nav class="tabs" role="tablist">
-    ${t("device", "This device", s.local ? failing(localFindings()).length : undefined)}
+    ${t("device", "This device", s.local ? failing(deviceFindings()).length : undefined)}
+    ${t("software", "Software", s.local || s.code ? failing([...softwareFindings(), ...codeFindings()]).length : undefined)}
     ${t("network", "Network", s.network ? s.network.devices.length : undefined)}
     ${t("history", "History", (S.data.changes || []).length || undefined)}
   </nav>`;
@@ -233,7 +240,7 @@ function tabs() {
 function deviceTab() {
   const s = scan();
   if (!s.local) return `<div class="empty"><h3>This device wasn't part of the last scan</h3><button class="btn btn-primary" data-action="scan-dialog">${ICON.scan} Scan this device</button></div>`;
-  const list = localFindings();
+  const list = deviceFindings();
   const fails = failing(list).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
   const passed = list.filter((f) => f.status === "pass");
   const skipped = list.filter((f) => f.status === "skipped" || f.status === "error");
@@ -242,6 +249,60 @@ function deviceTab() {
   else html += `<div class="empty"><h3>No problems found on this device</h3><p>Every check Bulwark ran came back clean.</p></div>`;
   if (passed.length) html += `<div class="group-title">Passed</div><div class="passed">${passed.map((f) => `<span>${ICON.check}${esc(f.summary)}</span>`).join("")}</div>`;
   if (skipped.length) html += `<div class="group-title">Not checked</div><div class="passed">${skipped.map((f) => `<span>${esc(f.summary)}</span>`).join("")}</div>`;
+  return html;
+}
+
+const inProject = (f, dir) => f.id.startsWith(`deps.vulnerable@${dir}#`);
+
+function projectCard(p, list) {
+  const open = S.device === `code:${p.path}`;
+  const status = !scan().code.online ? `<span class="count">Not checked (offline)</span>` : countRow(counts(list)).replace("No problems found", "No known vulnerabilities");
+  return `<button class="device" data-action="device" data-ip="${esc(`code:${p.path}`)}" aria-expanded="${open}">
+    <div class="device-top"><div class="device-icon">${ICON.code}</div>
+      <div class="sr-wrap"><div class="device-name">${esc(p.name)}</div><div class="device-sub">${esc(p.path)}</div></div></div>
+    <div class="counts">${status}</div>
+    <div class="chips">${p.files.map((f) => `<span class="chip">${esc(f)}</span>`).join("")}<span class="chip">${p.packages} packages</span></div>
+  </button>`;
+}
+
+function softwareTab() {
+  const s = scan();
+  let html = "";
+  // Installed on this device.
+  html += `<div class="group-title">Installed on this device</div>`;
+  if (!s.local) html += `<div class="empty">This device wasn't part of the last scan.</div>`;
+  else {
+    const list = softwareFindings();
+    const fails = failing(list).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+    const passed = list.filter((f) => f.status === "pass");
+    if (fails.length) html += findingList(fails);
+    if (passed.length) html += `<div class="passed passed-gap">${passed.map((f) => `<span>${ICON.check}${esc(f.summary)}</span>`).join("")}</div>`;
+    const skipped = list.filter((f) => f.status === "skipped");
+    if (skipped.length) html += `<div class="passed passed-gap">${skipped.map((f) => `<span>${esc(f.summary)}</span>`).join("")}</div>`;
+  }
+  // Code projects.
+  html += `<div class="group-title">Code projects</div>`;
+  if (!s.code) {
+    html += `<div class="empty"><h3>Check the software you build</h3>
+      <p>Bulwark finds the code projects in a folder (npm, pnpm, Yarn, pip, Poetry, uv, Pipenv, Cargo, Go, Bundler, Composer, NuGet, Gradle), checks every exact dependency version against the OSV.dev vulnerability database, and updates vulnerable ones with each project's own tool.</p>
+      <button class="btn btn-primary" data-action="scan-dialog" data-code="1">${ICON.scan} Check my code projects</button></div>`;
+    return html;
+  }
+  const code = s.code;
+  if (!code.online) html += `<div class="banner banner-warn">${ICON.warn}<div><b>Couldn't reach osv.dev</b>The projects were found, but their dependencies couldn't be checked. Check the internet connection and scan again.</div></div>`;
+  if (!code.projects.length) html += `<div class="empty">No lockfiles found in ${esc(code.roots.join(", "))}.</div>`;
+  const projects = [...code.projects].sort((a, b) => worst(code.findings.filter((f) => inProject(f, a.path))) - worst(code.findings.filter((f) => inProject(f, b.path))) || a.name.localeCompare(b.name));
+  html += `<div class="devices">`;
+  for (const p of projects) {
+    const list = code.findings.filter((f) => inProject(f, p.path));
+    html += projectCard(p, list);
+    if (S.device === `code:${p.path}`) {
+      const fs = failing(list).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+      html += `<div class="device-detail">${fs.length ? findingList(fs) : `<div class="empty">No known vulnerabilities in ${p.packages} package versions.</div>`}</div>`;
+    }
+  }
+  html += `</div>`;
+  if (code.notes.length) html += `<div class="notes">${code.notes.map((n) => `<p>${esc(n)}</p>`).join("")}</div>`;
   return html;
 }
 
@@ -345,7 +406,7 @@ function render() {
     app.innerHTML = `<div class="boot">Loading…</div>`;
     return;
   }
-  const body = !scan() ? welcome() : overview() + tabs() + (S.tab === "network" ? networkTab() : S.tab === "history" ? historyTab() : deviceTab());
+  const body = !scan() ? welcome() : overview() + tabs() + (S.tab === "network" ? networkTab() : S.tab === "software" ? softwareTab() : S.tab === "history" ? historyTab() : deviceTab());
   app.innerHTML = topBar() + `<main>${banners()}${body}</main>`;
   renderProgress();
   renderModal();
@@ -462,7 +523,10 @@ function renderModal() {
       return;
     }
     const body = `
-      <div class="field"><label><input type="checkbox" name="local" ${m.local ? "checked" : ""}><span><b>This device</b><div class="hint">Updates, firewall, SSH, accounts, file permissions, kernel and services. About 10 seconds.</div></span></label></div>
+      <div class="field"><label><input type="checkbox" name="local" ${m.local ? "checked" : ""}><span><b>This device</b><div class="hint">Settings, accounts, services and installed software: updates, firewall, SSH, outdated apps and runtimes. About 20 seconds.</div></span></label></div>
+      <div class="field"><label><input type="checkbox" name="code" ${m.code ? "checked" : ""}><span><b>Code projects</b><div class="hint">Finds projects in a folder and checks their dependencies for known vulnerabilities.</div></span></label></div>
+      ${m.code ? `<div class="sub-field"><div class="field"><input type="text" name="codeRoots" value="${esc(m.codeRoots ?? S.data.code.defaultRoots.join(", "))}" placeholder="~/code" aria-label="Folders to look in" spellcheck="false">
+        <div class="hint">Package names and versions are looked up on osv.dev. Nothing else leaves this computer.</div></div></div>` : ""}
       <div class="field"><label><input type="checkbox" name="network" ${m.network ? "checked" : ""}><span><b>Other devices on my network</b><div class="hint">Finds devices and checks each one's open services. Doesn't log in or try passwords. About a minute.</div></span></label></div>
       ${m.network ? `<div class="sub-field">
         <div class="field"><input type="text" name="targets" value="${esc(targets)}" placeholder="192.168.1.0/24" aria-label="Addresses to scan" spellcheck="false">
@@ -471,7 +535,7 @@ function renderModal() {
         ${publicTyped ? `<div class="field"><label><input type="checkbox" name="authorized" ${m.authorized ? "checked" : ""}><span>Some of these are public internet addresses. I own them or have written permission to test them.</span></label></div>` : ""}
       </div>` : ""}
       ${m.error ? `<div class="callout callout-bad">${esc(m.error)}</div>` : ""}`;
-    const ready = (m.local || m.network) && (!m.network || !needsConfirm || m.own) && (!publicTyped || m.authorized);
+    const ready = (m.local || m.network || m.code) && (!m.network || !needsConfirm || m.own) && (!publicTyped || m.authorized);
     root.innerHTML = modalFrame("Scan", body, `<button class="btn" data-action="close">Cancel</button><button class="btn btn-primary" data-action="scan-start" ${ready ? "" : "disabled"}>${ICON.scan} Start scan</button>`);
   } else if (m.type === "plan") {
     const body = m.error ? `<div class="callout callout-bad">${esc(m.error)}</div>` : m.alreadyFixed ? `<div class="callout callout-ok">This is already fixed. Scan again to update the list.</div>` : !m.plan ? `<p><span class="spin"></span> Working out exactly what would change…</p>` : planBody(m.plan);
@@ -549,15 +613,16 @@ async function startScan() {
   const m = S.modal;
   const targets = m.network ? (m.targets ?? S.data.network.targets.join(", ")).split(/[\s,]+/).filter(Boolean) : [];
   try {
-    const { jobId } = await api("/api/scan", { local: !!m.local, network: !!m.network, targets: m.targets === undefined ? undefined : targets, confirmOwnership: !!m.own, authorized: !!m.authorized });
+    const codeRoots = m.code ? (m.codeRoots ?? S.data.code.defaultRoots.join(", ")).split(",").map((r) => r.trim()).filter(Boolean) : undefined;
+    const { jobId } = await api("/api/scan", { local: !!m.local, code: !!m.code, codeRoots, network: !!m.network, targets: m.targets === undefined ? undefined : targets, confirmOwnership: !!m.own, authorized: !!m.authorized });
     S.modal = null;
     const j = await watchJob(jobId, "scan");
     if (j.status === "error") throw new Error(j.error);
-    S.tab = m.local ? (S.tab === "history" ? "device" : S.tab) : "network";
+    S.tab = m.local ? (S.tab === "history" ? "device" : S.tab) : m.code && !m.network ? "software" : m.network ? "network" : S.tab;
     S.open.clear();
     await refresh();
     const s = scan();
-    const n = failing([...localFindings(), ...netFindings()]).length;
+    const n = failing(everyFinding()).length;
     toast(n ? `Scan finished: ${plural(n, "problem")} found.` : "Scan finished: no problems found.", n ? "" : "ok");
     if (!s) render();
   } catch (err) {
@@ -635,7 +700,9 @@ document.addEventListener("click", (e) => {
       break;
     case "scan-dialog": {
       const hasNet = !!(scan() && scan().network);
-      S.modal = { type: "scan", local: el.dataset.network ? false : true, network: !!el.dataset.network || hasNet };
+      const hasCode = !!(scan() && scan().code);
+      const only = el.dataset.network || el.dataset.code;
+      S.modal = { type: "scan", local: !only, code: !!el.dataset.code || (!only && hasCode), network: !!el.dataset.network || (!only && hasNet) };
       renderModal();
       break;
     }
@@ -643,7 +710,7 @@ document.addEventListener("click", (e) => {
       startScan();
       break;
     case "scan-again":
-      S.modal = { type: "scan", local: true, network: !!(scan() && scan().network) };
+      S.modal = { type: "scan", local: true, code: !!(scan() && scan().code), network: !!(scan() && scan().network) };
       renderModal();
       break;
     case "plan":
@@ -653,7 +720,7 @@ document.addEventListener("click", (e) => {
       applyPlan();
       break;
     case "fix-all":
-      S.modal = { type: "fix-all", items: safeFixable([...localFindings(), ...netFindings()]) };
+      S.modal = { type: "fix-all", items: safeFixable(everyFinding()) };
       renderModal();
       break;
     case "fix-all-start":
@@ -684,19 +751,19 @@ document.addEventListener("input", (e) => {
   const m = S.modal;
   if (!m || m.type !== "scan") return;
   const t = e.target;
-  if (t.name === "targets") {
-    m.targets = t.value;
+  if (t.name === "targets" || t.name === "codeRoots") {
+    m[t.name] = t.value;
     // Re-render without losing the caret.
     const pos = t.selectionStart;
     renderModal();
-    const again = document.querySelector('input[name="targets"]');
+    const again = document.querySelector(`input[name="${t.name}"]`);
     if (again) {
       again.focus();
       again.setSelectionRange(pos, pos);
     }
     return;
   }
-  if (["local", "network", "own", "authorized"].includes(t.name)) {
+  if (["local", "code", "network", "own", "authorized"].includes(t.name)) {
     m[t.name] = t.checked;
     renderModal();
   }

@@ -36,6 +36,15 @@ export function markdownReport(scan: Scan, changes: ChangeRecord[] = []): string
       ...section("Problems", scan.local.findings),
     );
   }
+  if (scan.code) {
+    const vulnerable = scan.code.projects.filter((p) => p.vulnerable);
+    out.push(`## Code projects: ${scan.code.projects.length} checked, ${vulnerable.length} with vulnerable dependencies`, "");
+    if (!scan.code.online) out.push("> Vulnerability lookups (osv.dev) couldn't be reached, so dependencies weren't checked.", "");
+    for (const p of scan.code.projects) {
+      const fs = scan.code.findings.filter((f) => f.id.startsWith(`deps.vulnerable@${p.path}#`));
+      out.push(...section(`${p.path} (${p.files.join(", ")}, ${p.packages} packages)`, fs));
+    }
+  }
   if (scan.network) {
     out.push(`## Network: ${scan.network.devices.length} devices`, "", `Scanned: ${scan.network.targets.join(", ")}`, "");
     for (const d of scan.network.devices) {

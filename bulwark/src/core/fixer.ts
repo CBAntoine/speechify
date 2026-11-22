@@ -4,6 +4,7 @@
 import { FIXES, getCheck } from "../checks/index.ts";
 import { outcomeToFinding } from "./audit.ts";
 import { performNetworkAction, undoNetworkAction } from "../net/scan.ts";
+import { recheckDependencies, refreshDependencyFindings } from "../software/deps.ts";
 import { clearHostCache } from "./cache.ts";
 import type { StateStore } from "./state.ts";
 import { rollbackActions, Tx } from "./tx.ts";
@@ -72,6 +73,7 @@ function subjectOf(f: Finding): string | undefined {
  */
 export async function refreshFindings(host: Host, findings: Finding[]): Promise<Finding[]> {
   clearHostCache(host);
+  if (findings.length && findings.every((f) => f.checkId === "deps.vulnerable")) return refreshDependencyFindings(host, findings);
   const results = new Map<string, CheckOutcome[]>();
   const out: Finding[] = [];
   for (const f of findings) {
@@ -96,6 +98,10 @@ export async function refreshFindings(host: Host, findings: Finding[]): Promise<
 
 async function verify(host: Host, findings: Finding[]): Promise<{ status: Status; summary: string }> {
   clearHostCache(host);
+  if (findings.every((f) => f.checkId === "deps.vulnerable")) {
+    const r = await recheckDependencies(host, findings);
+    return { status: r.status, summary: r.summary };
+  }
   const problems: string[] = [];
   for (const f of findings) {
     if (f.target !== "local") continue;

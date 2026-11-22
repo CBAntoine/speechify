@@ -1,6 +1,6 @@
 // An in-memory machine for tests: files, permissions and commands, with nothing real touched.
 
-import type { ExecResult, FileStat, Host, Platform } from "../../src/core/types.ts";
+import type { ExecOptions, ExecResult, FileStat, Host, Platform } from "../../src/core/types.ts";
 
 interface FakeFile {
   content: string;
@@ -21,7 +21,7 @@ export class FakeHost implements Host {
   dirs = new Set<string>(["/"]);
   links = new Map<string, string>();
   commands = new Set<string>();
-  execs: { cmd: string; args: string[] }[] = [];
+  execs: { cmd: string; args: string[]; opts?: ExecOptions }[] = [];
   private handlers: ExecHandler[] = [];
 
   constructor(opts: { platform?: Platform; isRoot?: boolean } = {}) {
@@ -35,12 +35,15 @@ export class FakeHost implements Host {
     return this;
   }
 
-  dir(path: string, mode = 0o755): this {
+  dir(path: string, mode = 0o755, owner: [number, number] = [0, 0]): this {
     this.dirs.add(path);
     this.dirModes.set(path, mode);
+    this.dirOwners.set(path, owner);
     this.addParents(path);
     return this;
   }
+
+  private dirOwners = new Map<string, [number, number]>();
 
   link(path: string, target: string): this {
     this.links.set(path, target);
@@ -102,7 +105,10 @@ export class FakeHost implements Host {
     }
     const f = this.files.get(p);
     if (f) return { mode: f.mode, uid: f.uid, gid: f.gid, size: f.content.length, mtimeMs: f.mtimeMs, isFile: true, isDir: false, isSymlink: false };
-    if (this.dirs.has(p)) return { mode: this.dirModes.get(p) ?? 0o755, uid: 0, gid: 0, size: 0, mtimeMs: 0, isFile: false, isDir: true, isSymlink: false };
+    if (this.dirs.has(p)) {
+      const [uid, gid] = this.dirOwners.get(p) ?? [0, 0];
+      return { mode: this.dirModes.get(p) ?? 0o755, uid, gid, size: 0, mtimeMs: 0, isFile: false, isDir: true, isSymlink: false };
+    }
     return null;
   }
 
@@ -118,8 +124,8 @@ export class FakeHost implements Host {
     return this.links.get(p) ?? null;
   }
 
-  async exec(cmd: string, args: string[], opts: { input?: string } = {}): Promise<ExecResult> {
-    this.execs.push({ cmd, args });
+  async exec(cmd: string, args: string[], opts: ExecOptions = {}): Promise<ExecResult> {
+    this.execs.push({ cmd, args, opts });
     for (const h of [...this.handlers].reverse()) {
       const r = h(cmd, args, opts.input);
       if (r) return r;

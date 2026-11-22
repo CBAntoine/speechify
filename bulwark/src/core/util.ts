@@ -17,9 +17,11 @@ export function shellQuote(arg: string): string {
 }
 
 export function displayCommand(spec: ExecSpec): string {
-  if (spec.display) return spec.display;
+  const where = [spec.cwd ? `in ${spec.cwd}` : "", spec.runAs?.user ? `as ${spec.runAs.user}` : ""].filter(Boolean).join(", ");
+  const suffix = where ? `   (${where})` : "";
+  if (spec.display) return spec.display + suffix;
   const env = spec.env ? Object.entries(spec.env).map(([k, v]) => `${k}=${shellQuote(v)} `).join("") : "";
-  return env + [spec.cmd, ...spec.args].map(shellQuote).join(" ");
+  return env + [spec.cmd, ...spec.args].map(shellQuote).join(" ") + suffix;
 }
 
 /** Runs async jobs with at most `limit` in flight. Results keep input order. */

@@ -22,6 +22,8 @@ export type Category =
   | "Encryption"
   | "System"
   | "Wi-Fi"
+  | "Software"
+  | "Dependencies"
   | "Network device";
 
 export interface AutoFixRef {
@@ -40,7 +42,7 @@ export interface Finding {
   /** Unique within a scan. Local: "<checkId>[:subject]". Network: "<checkId>@<ip>[:port][#subject]". */
   id: string;
   checkId: string;
-  /** "local" for this computer, otherwise the device's IP address. */
+  /** "local" for this computer, "code" for a code project's dependencies, otherwise the device's IP address. */
   target: string;
   title: string;
   category: Category;
@@ -137,6 +139,13 @@ export interface FixPlan {
   preconditions: Precondition[];
 }
 
+export interface RunAs {
+  uid: number;
+  gid: number;
+  user?: string;
+  home?: string;
+}
+
 export interface ExecSpec {
   cmd: string;
   args: string[];
@@ -144,6 +153,18 @@ export interface ExecSpec {
   timeoutMs?: number;
   /** Readable form for plans, when the real argv isn't (encoded PowerShell, long scripts). */
   display?: string;
+  /** Working directory. */
+  cwd?: string;
+  /** Run as this user instead of root (a project's owner, Homebrew's owner). */
+  runAs?: RunAs;
+}
+
+export interface ExecOptions {
+  timeoutMs?: number;
+  env?: Record<string, string>;
+  input?: string;
+  cwd?: string;
+  runAs?: RunAs;
 }
 
 /** The only way a fix may change anything. */
@@ -160,6 +181,8 @@ export interface TxApi {
   ): Promise<ExecResult>;
   /** A change to another device (for example removing a router port forward). */
   network(action: NetworkAction, opts: { title: string; detail?: string }): Promise<void>;
+  /** Runs `fn` (usually a tool like npm) and records how it changed these files, so undo can restore them. */
+  track<T>(paths: string[], title: string, fn: () => Promise<T>): Promise<T>;
 }
 
 export type NetworkAction = {
@@ -244,7 +267,7 @@ export interface Host {
   stat(path: string): Promise<FileStat | null>;
   lstat(path: string): Promise<FileStat | null>;
   readlink(path: string): Promise<string | null>;
-  exec(cmd: string, args: string[], opts?: { timeoutMs?: number; env?: Record<string, string>; input?: string }): Promise<ExecResult>;
+  exec(cmd: string, args: string[], opts?: ExecOptions): Promise<ExecResult>;
   which(cmd: string): Promise<string | null>;
   writeFile(path: string, content: string, mode?: number): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
@@ -302,6 +325,27 @@ export interface DeviceInfo {
   user: string;
 }
 
+export interface CodeProject {
+  /** Absolute path of the project folder. */
+  path: string;
+  name: string;
+  /** Lockfiles and manifests that were read, relative to the project. */
+  files: string[];
+  ecosystems: string[];
+  packages: number;
+  vulnerable: number;
+}
+
+export interface CodeScan {
+  roots: string[];
+  projects: CodeProject[];
+  findings: Finding[];
+  notes: string[];
+  /** Whether vulnerability lookups (osv.dev) worked. */
+  online: boolean;
+  durationMs: number;
+}
+
 export interface Scan {
   id: string;
   startedAt: string;
@@ -309,6 +353,7 @@ export interface Scan {
   tool: { name: string; version: string };
   device: DeviceInfo;
   local?: { findings: Finding[]; durationMs: number };
+  code?: CodeScan;
   network?: NetworkScan;
-  scores: { local?: number; devices: Record<string, number> };
+  scores: { local?: number; code?: number; devices: Record<string, number> };
 }

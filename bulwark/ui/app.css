@@ -268,3 +268,5 @@ pre.detail .meta { color: #94a3b8; }
 .banner > svg { width: 20px; height: 20px; flex: none; margin-top: 1px; color: var(--accent); }
 .banner-warn > svg { color: var(--warn); }
 .pill svg { width: 13px; height: 13px; }
+
+.passed-gap { margin-top: 12px; }

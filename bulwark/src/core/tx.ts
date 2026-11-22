@@ -87,7 +87,7 @@ export class Tx implements TxApi {
   ): Promise<ExecResult> {
     this.steps.push({ kind: "command", title: opts.title, detail: displayCommand(spec) });
     if (this.dryRun) return { code: 0, stdout: "", stderr: "" };
-    const r = await this.host.exec(spec.cmd, spec.args, { env: spec.env, timeoutMs: spec.timeoutMs ?? 120_000 });
+    const r = await this.host.exec(spec.cmd, spec.args, { env: spec.env, timeoutMs: spec.timeoutMs ?? 120_000, cwd: spec.cwd, runAs: spec.runAs });
     const ok = (opts.okCodes ?? [0]).includes(r.code);
     this.log.push(`$ ${displayCommand(spec)} → exit ${r.code}`);
     if (!ok) {
@@ -106,6 +106,43 @@ export class Tx implements TxApi {
     await this.net(action);
     this.actions.push({ type: "network", title: opts.title, action });
     this.log.push(opts.title);
+  }
+
+  async track<T>(paths: string[], title: string, fn: () => Promise<T>): Promise<T> {
+    if (this.dryRun) {
+      this.steps.push({ kind: "note", title });
+      return fn();
+    }
+    const before = new Map<string, { content: string | null; mode?: number }>();
+    for (const p of paths) {
+      const content = await this.host.readFile(p);
+      before.set(p, { content, mode: content === null ? undefined : (await this.host.stat(p))?.mode });
+    }
+    // Record whatever changed even if the tool fails half-way, so the automatic undo covers it.
+    const record = async () => {
+      for (const [p, b] of before) {
+        const after = await this.host.readFile(p);
+        if (after === b.content) continue;
+        if (after === null) {
+          if (b.content !== null) this.actions.push({ type: "remove", path: p, backup: Buffer.from(b.content, "utf8").toString("base64"), prevMode: b.mode ?? 0o644, prevHash: sha256(b.content) });
+          continue;
+        }
+        this.actions.push({
+          type: "write",
+          path: p,
+          existed: b.content !== null,
+          backup: b.content === null ? undefined : Buffer.from(b.content, "utf8").toString("base64"),
+          prevMode: b.mode,
+          newHash: sha256(after),
+        });
+        this.log.push(`Changed ${p}`);
+      }
+    };
+    try {
+      return await fn();
+    } finally {
+      await record();
+    }
   }
 }
 
@@ -173,7 +210,7 @@ export async function rollbackActions(
           if (a.rerunOnRollback) {
             reruns.unshift(a.spec);
           } else if (a.undo) {
-            const r = await host.exec(a.undo.cmd, a.undo.args, { env: a.undo.env, timeoutMs: a.undo.timeoutMs ?? 120_000 });
+            const r = await host.exec(a.undo.cmd, a.undo.args, { env: a.undo.env, timeoutMs: a.undo.timeoutMs ?? 120_000, cwd: a.undo.cwd, runAs: a.undo.runAs });
             log.push(`$ ${displayCommand(a.undo)} → exit ${r.code}`);
             if (r.code !== 0) errors.push(`Undo of "${a.title}" failed: ${(r.stderr || r.stdout).trim().split("\n").pop() ?? ""}`);
           } else {
@@ -194,7 +231,7 @@ export async function rollbackActions(
   }
 
   for (const spec of reruns) {
-    const r = await host.exec(spec.cmd, spec.args, { env: spec.env, timeoutMs: spec.timeoutMs ?? 120_000 });
+    const r = await host.exec(spec.cmd, spec.args, { env: spec.env, timeoutMs: spec.timeoutMs ?? 120_000, cwd: spec.cwd, runAs: spec.runAs });
     log.push(`$ ${displayCommand(spec)} → exit ${r.code}`);
     if (r.code !== 0) errors.push(`"${displayCommand(spec)}" failed after undo: ${(r.stderr || r.stdout).trim().split("\n").pop() ?? ""}`);
   }

@@ -14,6 +14,7 @@ import { defaultStateDir, StateStore } from "./core/state.ts";
 import type { ChangeRecord, Finding, FixPlan, Host, Scan, Severity } from "./core/types.ts";
 import { arpTable, defaultGateway } from "./net/local.ts";
 import { defaultTargets } from "./net/scan.ts";
+import { displayPath } from "./software/deps.ts";
 import { VERSION } from "./version.ts";
 
 // ── output ──
@@ -50,12 +51,14 @@ interface Args {
   rest: string[];
   flags: Record<string, string | boolean>;
   targets: string[];
+  /** Folders to check for code projects: null without --code, [] for "the current folder". */
+  code: string[] | null;
 }
 
 const BOOL = new Set(["network", "network-only", "local", "authorized", "yes", "json", "dry-run", "all-safe", "force", "last", "help", "version", "sudo", "lan"]);
 
 export function parseArgs(argv: string[]): Args {
-  const out: Args = { cmd: "", rest: [], flags: {}, targets: [] };
+  const out: Args = { cmd: "", rest: [], flags: {}, targets: [], code: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-h") out.flags.help = true;
@@ -64,7 +67,11 @@ export function parseArgs(argv: string[]): Args {
     else if (a.startsWith("--")) {
       const [k, v] = a.slice(2).split("=", 2);
       if (k === "target" || k === "targets") out.targets.push(...(v ?? argv[++i] ?? "").split(",").filter(Boolean));
-      else if (BOOL.has(k)) out.flags[k] = true;
+      else if (k === "code") {
+        out.code = out.code ?? [];
+        if (v) out.code.push(v);
+        else if (argv[i + 1] && !argv[i + 1].startsWith("-")) out.code.push(argv[++i]);
+      } else if (BOOL.has(k)) out.flags[k] = true;
       else out.flags[k] = v ?? argv[++i] ?? "";
     } else if (!out.cmd) out.cmd = a;
     else out.rest.push(a);
@@ -80,6 +87,8 @@ ${bold("Usage")}
   bulwark scan --network          …and the other devices on your network
   bulwark scan --target 192.168.1.0/24 [--target 10.0.0.5]
                                   Check specific addresses (yours, or with permission)
+  bulwark scan --code [folder]    Check the code projects in a folder (default: this one) for
+                                  dependencies with known vulnerabilities (looked up on osv.dev)
   bulwark fix <number|id>…        Review and apply a fix from the last scan
   bulwark fix --all-safe          Apply every low-risk fix at once
   bulwark rollback <change-id>    Undo a change (or --last)
@@ -132,9 +141,19 @@ function reexecWithSudo(argv: string[]): never {
   process.exit(r.status ?? 1);
 }
 
-/** Failing findings in the order the scan printed them, so "bulwark fix 3" means what you saw. */
+const isSoftware = (f: Finding) => f.category === "Software";
+
+const inProject = (f: Finding, dir: string) => f.id.startsWith(`deps.vulnerable@${dir}#`);
+
+/**
+ * Failing findings in exactly the order printScan shows them (this device, installed software,
+ * then each code project, then each network device), so "bulwark fix 3" means what you saw.
+ */
 export function numbered(scan: Scan): Finding[] {
-  return allFindings(scan).filter((f) => f.status === "fail");
+  const local = scan.local?.findings ?? [];
+  const code = scan.code ? scan.code.projects.flatMap((p) => scan.code!.findings.filter((f) => inProject(f, p.path))) : [];
+  const net = scan.network ? scan.network.devices.flatMap((d) => scan.network!.findings.filter((f) => f.target === d.ip)) : [];
+  return [...local.filter((f) => !isSoftware(f)), ...local.filter(isSoftware), ...code, ...net].filter((f) => f.status === "fail");
 }
 
 async function latestScan(state: StateStore): Promise<Scan | null> {
@@ -162,14 +181,33 @@ function printScan(scan: Scan): void {
   let n = 0;
   if (scan.local) {
     const s = scan.scores.local ?? 0;
-    const c = counts(scan.local.findings);
-    const fails = scan.local.findings.filter((f) => f.status === "fail");
-    console.log(`\n${bold("This device")}  ${scoreText(s)}   ${summaryCounts(c)}`);
-    for (const f of fails) printFinding(f, ++n);
-    const passed = scan.local.findings.filter((f) => f.status === "pass").length;
-    const skipped = scan.local.findings.filter((f) => f.status === "skipped");
+    const device = scan.local.findings.filter((f) => !isSoftware(f));
+    const software = scan.local.findings.filter(isSoftware);
+    console.log(`\n${bold("This device")}  ${scoreText(s)}   ${summaryCounts(counts(scan.local.findings))}`);
+    for (const f of device.filter((f) => f.status === "fail")) printFinding(f, ++n);
+    const passed = device.filter((f) => f.status === "pass").length;
+    const skipped = device.filter((f) => f.status === "skipped");
     console.log(`    ${green("✓")} ${passed} checks passed${skipped.length ? dim(`, ${skipped.length} didn't apply or need admin rights`) : ""}`);
     if (!d.isRoot && skipped.some((f) => /admin rights/.test(f.summary))) console.log(dim(`      Run with sudo to include the checks that need admin rights.`));
+    if (software.length) {
+      const fails = software.filter((f) => f.status === "fail");
+      console.log(`\n${bold("Installed software")}  ${summaryCounts(counts(software))}`);
+      for (const f of fails) printFinding(f, ++n);
+      for (const f of software.filter((f) => f.status === "pass")) console.log(`    ${green("✓")} ${f.summary}`);
+    }
+  }
+  if (scan.code) {
+    const code = scan.code;
+    const pkgs = code.projects.reduce((a, p) => a + p.packages, 0);
+    console.log(`\n${bold("Code projects")}  ${code.projects.length} project${code.projects.length === 1 ? "" : "s"} · ${pkgs} package versions · ${(code.durationMs / 1000).toFixed(1)}s`);
+    if (!code.projects.length) console.log(dim(`    No lockfiles found under ${code.roots.join(", ")}.`));
+    for (const p of code.projects) {
+      const fs = code.findings.filter((f) => inProject(f, p.path));
+      const status = !code.online ? yellow("not checked (offline)") : fs.length ? summaryCounts(counts(fs)) : green("no known vulnerabilities");
+      console.log(`\n  ${bold(displayPath(p.path))}  ${dim(`${p.files.join(", ")} · ${p.packages} packages`)}  ${status}`);
+      for (const f of fs) printFinding(f, ++n);
+    }
+    for (const note of code.notes) console.log(yellow(`  ! ${wrap(note, 4)}`));
   }
   if (scan.network) {
     const net = scan.network;
@@ -189,7 +227,7 @@ function printScan(scan: Scan): void {
   console.log();
   if (n) console.log(`${bold("Next:")} ${auto ? `bulwark fix <number> to review a fix · bulwark fix --all-safe · ` : ""}bulwark serve for the dashboard`);
   else console.log(green("No problems found."));
-  if (!scan.network) console.log(dim("Add --network to also check the other devices on your network."));
+  if (!scan.network && !scan.code) console.log(dim("Add --network to also check the other devices on your network, or --code <folder> for your code projects."));
 }
 
 function scoreText(s: number): string {
@@ -247,7 +285,10 @@ async function networkKey(host: Host, cidr: string): Promise<string> {
 
 async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
   const wantNetwork = !!a.flags.network || !!a.flags["network-only"] || a.targets.length > 0;
-  const local = !a.flags["network-only"] && !(a.targets.length && !a.flags.local);
+  // --code or --target on their own mean "just that"; add --local to include this device too.
+  const local = !a.flags["network-only"] && !((a.targets.length || a.code) && !a.flags.local);
+  const codeRoots = a.code ? (a.code.length ? a.code.map((c) => path.resolve(c)) : [process.cwd()]) : undefined;
+  if (codeRoots) console.log(dim(`Package names and versions from ${codeRoots.map(displayPath).join(", ")} are looked up on osv.dev; nothing else is sent.`));
   let network: Parameters<typeof runScan>[1]["network"];
   if (wantNetwork) {
     let targets = a.targets;
@@ -258,7 +299,7 @@ async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
       targets = d.targets;
       if (!targets.length) {
         console.log(red("No private network found to scan. Pass --target with the addresses to check."));
-        if (!local) return;
+        if (!local && !codeRoots) return;
       }
     }
     if (targets.length) {
@@ -270,7 +311,7 @@ async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
         console.log(dim("Only scan networks you own or have permission to test (a home network, your office with IT's OK)."));
         if (!(await yes("Is this your network?"))) {
           console.log("Skipped the network scan.");
-          if (!local) return;
+          if (!local && !codeRoots) return;
           targets = [];
         }
       }
@@ -281,10 +322,11 @@ async function cmdScan(host: Host, state: StateStore, a: Args): Promise<void> {
       }
     }
   }
-  if (!local && !network) return;
+  if (!local && !network && !codeRoots) return;
   const tty = process.stdout.isTTY && !a.flags.json;
   const scan = await runScan(host, {
     local,
+    code: codeRoots ? { roots: codeRoots, cacheDir: path.join(state.dir, "osv-cache") } : undefined,
     network,
     onProgress: (p) => {
       if (tty) process.stdout.write(`\r\x1b[2K${dim(`${p.message ?? p.phase} ${p.total > 1 ? `(${p.done}/${p.total})` : ""}`)}`);
@@ -410,6 +452,10 @@ function cmdChecks(): void {
   console.log("  without NLA, VNC without a password, open Redis/Memcached/MongoDB/Elasticsearch/CouchDB/Docker APIs,");
   console.log("  anonymous MQTT, open Android debugging, exposed databases, camera streams without a login, known-vulnerable");
   console.log("  software versions (CVE list), and the router's UPnP port forwards (which Bulwark can remove).");
+  console.log(bold("\nCode projects (--code)"));
+  console.log("  Every exact dependency version in npm, pnpm, Yarn, pip, Poetry, uv, Pipenv, Cargo, Go, Bundler, Composer,");
+  console.log("  NuGet and Gradle lockfiles is checked against OSV.dev. Fixes use each project's own tool (npm audit fix,");
+  console.log("  poetry update, uv lock, cargo update, go get, bundle lock, composer update) or edit requirements.txt pins.");
 }
 
 async function cmdReport(state: StateStore, a: Args): Promise<void> {

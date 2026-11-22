@@ -2,6 +2,7 @@
 
 import * as os from "node:os";
 import { scanNetwork, type NetScanOptions } from "../net/scan.ts";
+import { scanCode } from "../software/deps.ts";
 import { auditLocal } from "./audit.ts";
 import { describeOs } from "./host.ts";
 import { score, sortFindings } from "./score.ts";
@@ -28,7 +29,13 @@ export async function deviceInfo(host: Host): Promise<DeviceInfo> {
 
 export async function runScan(
   host: Host,
-  opts: { local: boolean; network?: Omit<NetScanOptions, "onProgress">; onProgress?: (p: ScanProgress) => void },
+  opts: {
+    local: boolean;
+    /** Code projects under these folders. */
+    code?: { roots: string[]; cacheDir?: string };
+    network?: Omit<NetScanOptions, "onProgress">;
+    onProgress?: (p: ScanProgress) => void;
+  },
 ): Promise<Scan> {
   const startedAt = new Date();
   const scan: Scan = {
@@ -45,6 +52,10 @@ export async function runScan(
     scan.local = { findings: sortFindings(findings), durationMs: Date.now() - t };
     scan.scores.local = score(findings);
   }
+  if (opts.code) {
+    scan.code = await scanCode(host, opts.code.roots, { cacheDir: opts.code.cacheDir, onProgress: (p) => opts.onProgress?.(p) });
+    scan.scores.code = score(scan.code.findings);
+  }
   if (opts.network) {
     const net = await scanNetwork(host, { ...opts.network, onProgress: (p) => opts.onProgress?.(p) });
     net.findings = sortFindings(net.findings);
@@ -56,5 +67,5 @@ export async function runScan(
 }
 
 export function allFindings(scan: Scan) {
-  return [...(scan.local?.findings ?? []), ...(scan.network?.findings ?? [])];
+  return [...(scan.local?.findings ?? []), ...(scan.code?.findings ?? []), ...(scan.network?.findings ?? [])];
 }

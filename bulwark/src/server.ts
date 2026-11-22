@@ -21,6 +21,7 @@ import type { ChangeRecord, Finding, Host, Scan } from "./core/types.ts";
 import { errorMessage, randomId } from "./core/util.ts";
 import { arpTable, defaultGateway } from "./net/local.ts";
 import { defaultTargets } from "./net/scan.ts";
+import { defaultCodeRoots } from "./software/deps.ts";
 import { isPrivate, resolveTargets } from "./net/scope.ts";
 import type { SsdpReply } from "./net/ssdp.ts";
 import { VERSION } from "./version.ts";
@@ -54,8 +55,8 @@ export interface ServerOptions {
   state: StateStore;
   port: number;
   bind: string;
-  /** Demo mode: scans only ever cover this pretend network. */
-  demo?: { targets: string[]; extraSsdp: SsdpReply[] };
+  /** Demo mode: scans only ever cover this pretend network (and these pretend code projects). */
+  demo?: { targets: string[]; extraSsdp: SsdpReply[]; codeRoots?: string[] };
 }
 
 class HttpError extends Error {
@@ -183,6 +184,7 @@ export function createApp(opts: ServerOptions & { token: string }) {
         changes: changes.slice(0, 100),
         safeFixes: [...FIXES.values()].filter((f) => f.risk === "safe").map((f) => f.id),
         network: { targets: def.targets, skipped: def.skipped, confirmed: opts.demo ? def.targets : def.targets.filter((_, i) => known.includes(keys[i])) },
+        code: { defaultRoots: opts.demo ? opts.demo.codeRoots ?? [] : await defaultCodeRoots(host) },
         job: running ? { id: running.id, kind: running.kind } : null,
       };
     },
@@ -194,6 +196,7 @@ export function createApp(opts: ServerOptions & { token: string }) {
         const job = startJob("scan", async (j) => {
           const scan = await runScan(host, {
             local: false,
+            code: demo.codeRoots?.length ? { roots: demo.codeRoots, cacheDir: path.join(state.dir, "osv-cache") } : undefined,
             network: { targets: demo.targets, authorized: false, confirmedOwnership: true, noMulticast: true, extraSsdp: demo.extraSsdp },
             onProgress: (p) => (j.progress = p),
           });
@@ -220,9 +223,16 @@ export function createApp(opts: ServerOptions & { token: string }) {
         for (const k of keys) await state.confirmNetwork(k);
         network = { targets, authorized: body.authorized === true, confirmedOwnership: true };
       }
-      if (!local && !network) throw new HttpError(400, "Choose what to scan.");
+      let code: Parameters<typeof runScan>[1]["code"];
+      if (body.code === true) {
+        const typed = Array.isArray(body.codeRoots) ? body.codeRoots.filter((t): t is string => typeof t === "string" && t.trim().length > 0 && t.length < 1000).slice(0, 10) : [];
+        const home = (await defaultCodeRoots(host))[0];
+        const roots = (typed.length ? typed : await defaultCodeRoots(host)).map((r) => path.resolve(r.trim().replace(/^~(?=$|[\\/])/, home)));
+        code = { roots, cacheDir: path.join(state.dir, "osv-cache") };
+      }
+      if (!local && !network && !code) throw new HttpError(400, "Choose what to scan.");
       const job = startJob("scan", async (j) => {
-        const scan = await runScan(host, { local, network, onProgress: (p) => (j.progress = p) });
+        const scan = await runScan(host, { local, code, network, onProgress: (p) => (j.progress = p) });
         await state.saveScan(scan);
         return { scanId: scan.id };
       });
