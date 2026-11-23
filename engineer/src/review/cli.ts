@@ -11,16 +11,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import Anthropic, { toFile } from "@anthropic-ai/sdk";
-import { parseConfig, summarize, toAgentJson } from "./fortios.ts";
-import { redactionCounts, sanitize } from "./sanitize.ts";
-import { parseHits } from "./hits.ts";
+import Anthropic from "@anthropic-ai/sdk";
+import { buildBundle, BundleError, type Bundle } from "./bundle.ts";
 import { downloadFortinetKev, fortinetKev, type KevFile } from "./kev.ts";
 import { loadIds, AGENT_FILE, ENVIRONMENT_FILE } from "./ids.ts";
-import { MAX_ITERATIONS, RUBRIC, outcomeDescription } from "./rubric.ts";
+import { outcomeEvent, startReview } from "./runs.ts";
 import { downloadOutputs, follow, terminalApprover, type Printer } from "./session.ts";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const USAGE = `Review a FortiGate rulebase and firmware with a Claude agent.
 
@@ -145,69 +143,21 @@ function readOptions(): Options {
   };
 }
 
-interface InputFile {
-  name: string;
-  path: string;
-  type: string;
+interface Staged {
+  dir: string;
+  bundle: Bundle;
 }
 
-interface Bundle {
-  dir: string;
-  device: string;
-  files: InputFile[];
+function readText(file: string): string {
+  if (!fs.existsSync(file)) fail(`Can't find ${file}.`);
+  return fs.readFileSync(file, "utf8");
 }
 
 /** Redact, parse and stage every input under <out>/<device>-<date>/inputs/. */
-async function prepare(opts: Options): Promise<Bundle> {
-  if (!fs.existsSync(opts.configPath)) fail(`Can't find ${opts.configPath}.`);
-  const original = fs.readFileSync(opts.configPath, "utf8").replace(/^﻿/, "");
-  const { text: redacted, redactions } = sanitize(original);
-  if (redacted.split("\n").length !== original.split("\n").length) {
-    fail("Redaction changed the number of lines, so line references would be wrong. Nothing was uploaded.");
-  }
-  const parsed = parseConfig(redacted);
-  const summary = summarize(parsed);
-  const policyCount = Object.values(summary.policies).reduce((a, b) => a + b, 0);
-  if (!parsed.header.config_version && policyCount === 0) {
-    fail(`${path.basename(opts.configPath)} doesn't look like a FortiGate backup: no #config-version header and no firewall policies.`);
-  }
-
-  const device = summary.hostname ?? path.basename(opts.configPath).replace(/\.[^.]+$/, "");
-  let dir = path.join(opts.out, `${slug(device)}-${opts.reviewDate}`);
-  if (fs.existsSync(dir)) {
-    const d = new Date();
-    dir = `${dir}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  }
-  const inputs = path.join(dir, "inputs");
-  fs.mkdirSync(inputs, { recursive: true });
-  const files: InputFile[] = [];
-  const write = (name: string, content: string, type: string) => {
-    const p = path.join(inputs, name);
-    fs.writeFileSync(p, content);
-    files.push({ name, path: p, type });
-  };
-
-  write("config.conf", redacted, "text/plain");
-  write("config.json", JSON.stringify(toAgentJson(parsed)), "application/json");
-
-  let hitsPeriod: number | null = null;
-  if (opts.hits) {
-    if (!fs.existsSync(opts.hits)) fail(`Can't find ${opts.hits}.`);
-    const exportedAt = opts.hitsExported
-      ? new Date(opts.hitsExported).toISOString()
-      : fs.statSync(opts.hits).mtime.toISOString();
-    const hits = parseHits(fs.readFileSync(opts.hits, "utf8"), {
-      source: path.basename(opts.hits),
-      periodDays: opts.hitsDays,
-      exportedAt,
-    });
-    hitsPeriod = hits.period_days;
-    write("hits.json", JSON.stringify(hits, null, 2), "application/json");
-  }
-
+async function prepare(opts: Options): Promise<Staged> {
   let kev: KevFile | null = null;
   if (opts.kevFile) {
-    kev = fortinetKev(JSON.parse(fs.readFileSync(opts.kevFile, "utf8")), path.basename(opts.kevFile));
+    kev = fortinetKev(JSON.parse(readText(opts.kevFile)), path.basename(opts.kevFile));
   } else if (!opts.noKev) {
     try {
       kev = await downloadFortinetKev();
@@ -218,42 +168,50 @@ async function prepare(opts: Options): Promise<Bundle> {
       );
     }
   }
-  if (kev) write("kev-fortinet.json", JSON.stringify(kev, null, 2), "application/json");
 
-  if (opts.deviations) {
-    const data = JSON.parse(fs.readFileSync(opts.deviations, "utf8"));
-    if (!Array.isArray(data)) fail("--deviations must be a JSON array.");
-    write("deviations.json", JSON.stringify(data, null, 2), "application/json");
+  let bundle: Bundle;
+  try {
+    bundle = buildBundle({
+      configText: readText(opts.configPath),
+      configName: path.basename(opts.configPath),
+      hits: opts.hits
+        ? {
+            text: readText(opts.hits),
+            name: path.basename(opts.hits),
+            periodDays: opts.hitsDays,
+            exportedAt: opts.hitsExported ? new Date(opts.hitsExported).toISOString() : fs.statSync(opts.hits).mtime.toISOString(),
+          }
+        : undefined,
+      deviations: opts.deviations ? { text: readText(opts.deviations), name: path.basename(opts.deviations) } : undefined,
+      kev,
+      notes: opts.notes,
+      reviewDate: opts.reviewDate,
+    });
+  } catch (err) {
+    if (err instanceof BundleError) fail(err.message);
+    throw err;
   }
 
-  const run = {
-    format: "fortigate-review run.json v1",
-    device,
-    review_date: opts.reviewDate,
-    notes: opts.notes,
-    source_file: path.basename(opts.configPath),
-    redacted_settings: redactionCounts(redactions),
-    inputs: {
-      hits: Boolean(opts.hits),
-      hits_period_days: hitsPeriod,
-      kev: Boolean(kev),
-      kev_entries: kev?.count ?? 0,
-      deviations: Boolean(opts.deviations),
-    },
-    parser_warnings: parsed.warnings.length,
-  };
-  write("run.json", JSON.stringify(run, null, 2), "application/json");
-
+  let dir = path.join(opts.out, `${slug(bundle.device)}-${opts.reviewDate}`);
+  if (fs.existsSync(dir)) {
+    const d = new Date();
+    dir = `${dir}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+  const inputs = path.join(dir, "inputs");
+  fs.mkdirSync(inputs, { recursive: true });
+  for (const f of bundle.files) fs.writeFileSync(path.join(inputs, f.name), f.content);
   // Kept on this machine only: which lines were redacted, never the values.
-  fs.writeFileSync(path.join(dir, "redactions.json"), JSON.stringify(redactions, null, 2));
+  fs.writeFileSync(path.join(dir, "redactions.json"), JSON.stringify(bundle.redactions, null, 2));
 
+  const { summary } = bundle;
   const policies = Object.entries(summary.policies).map(([v, n]) => `${n} in ${v}`).join(", ") || "none";
-  console.log(bold(device) + dim(`  ${summary.model ?? "unknown model"}, FortiOS ${summary.version ?? "?"} build ${summary.build ?? "?"}`));
-  console.log(`  ${parsed.line_count} lines, policies: ${policies}, ${summary.addresses} addresses`);
-  console.log(`  Redacted ${redactions.length} secret${redactions.length === 1 ? "" : "s"} before upload. The list of lines is in ${shown(path.join(dir, "redactions.json"))}`);
-  if (parsed.warnings.length) console.log(`  Parser warnings: ${parsed.warnings.length} (listed in config.json)`);
-  console.log(`  Inputs: ${files.map((f) => f.name).join(", ")}`);
-  return { dir, device, files };
+  const n = bundle.redactions.length;
+  console.log(bold(bundle.device) + dim(`  ${summary.model ?? "unknown model"}, FortiOS ${summary.version ?? "?"} build ${summary.build ?? "?"}`));
+  console.log(`  ${bundle.lineCount} lines, policies: ${policies}, ${summary.addresses} addresses`);
+  console.log(`  Redacted ${n} secret${n === 1 ? "" : "s"} before upload. The list of lines is in ${shown(path.join(dir, "redactions.json"))}`);
+  if (bundle.warnings.length) console.log(`  Parser warnings: ${bundle.warnings.length} (listed in config.json)`);
+  console.log(`  Inputs: ${bundle.files.map((f) => f.name).join(", ")}`);
+  return { dir, bundle };
 }
 
 function printFindings(dir: string) {
@@ -275,9 +233,9 @@ async function main() {
   const ids = opts.dryRun ? null : loadIds(ROOT);
   if (ids && "error" in ids) fail(ids.error);
 
-  const bundle = await prepare(opts);
+  const { dir, bundle } = await prepare(opts);
   if (!ids) {
-    console.log(`\nDry run: nothing was sent. The files that would be uploaded are in ${shown(path.join(bundle.dir, "inputs"))}`);
+    console.log(`\nDry run: nothing was sent. The files that would be uploaded are in ${shown(path.join(dir, "inputs"))}`);
     return;
   }
 
@@ -285,21 +243,9 @@ async function main() {
   const uploaded: string[] = [];
   let exitCode = 0;
   try {
-    const resources: { type: "file"; file_id: string; mount_path: string }[] = [];
-    for (const f of bundle.files) {
-      const meta = await client.files.upload({ file: await toFile(fs.readFileSync(f.path), f.name, { type: f.type }) });
-      uploaded.push(meta.id);
-      resources.push({ type: "file", file_id: meta.id, mount_path: `/${f.name}` });
-    }
-
-    const session = await client.beta.sessions.create({
-      agent: ids.agentId,
-      environment_id: ids.environmentId,
-      title: `Rulebase review: ${bundle.device} (${opts.reviewDate})`,
-      resources,
-      budget: { type: "limit", max_list_cost: { amount: String(opts.budgetCents), currency: "USD" } },
-      metadata: { workflow: "NET-2", device: bundle.device.slice(0, 200), review_date: opts.reviewDate },
-    });
+    const started = await startReview(client, ids, bundle, { budgetCents: opts.budgetCents, kickoff: false, source: "cli" });
+    uploaded.push(...started.uploaded);
+    const session = { id: started.sessionId };
     console.log(`\nSession ${session.id}, spending cap $${(opts.budgetCents / 100).toFixed(2)}`);
     console.log(`Watch it live: https://platform.claude.com/workspaces/${opts.workspace}/sessions/${session.id}`);
 
@@ -312,16 +258,7 @@ async function main() {
     });
 
     const kickoff = async () => {
-      await client.beta.sessions.events.send(session.id, {
-        events: [
-          {
-            type: "user.define_outcome",
-            description: outcomeDescription({ device: bundle.device, reviewDate: opts.reviewDate, files: bundle.files.map((f) => f.name) }),
-            rubric: { type: "text", content: RUBRIC },
-            max_iterations: MAX_ITERATIONS,
-          },
-        ],
-      });
+      await client.beta.sessions.events.send(session.id, { events: [outcomeEvent(bundle)] });
     };
     const ending = await follow(client, session.id, kickoff, {
       approve: terminalApprover,
@@ -329,7 +266,7 @@ async function main() {
       unattended: !process.stdin.isTTY,
     });
 
-    const saved = await downloadOutputs(client, session.id, bundle.dir);
+    const saved = await downloadOutputs(client, session.id, dir);
     const finished = await client.beta.sessions.retrieve(session.id);
     const cost = finished.usage?.list_cost;
 
@@ -347,9 +284,9 @@ async function main() {
       console.log(`The report didn't fully meet the rubric (${ending.outcome.replace(/_/g, " ")}). Read it with that in mind.`);
       exitCode = 2;
     }
-    printFindings(bundle.dir);
+    printFindings(dir);
     if (saved.length) {
-      console.log(`Saved to ${shown(bundle.dir)}: ${saved.join(", ")}`);
+      console.log(`Saved to ${shown(dir)}: ${saved.join(", ")}`);
     } else {
       console.log("The agent didn't save any output files.");
       exitCode = exitCode || 2;
@@ -369,7 +306,7 @@ main().catch((err: unknown) => {
     fail("Anthropic rejected the credentials. Set ANTHROPIC_API_KEY, or run `ant auth login`.");
   }
   if (err instanceof Anthropic.NotFoundError) {
-    fail(`Anthropic couldn't find the agent or environment. Run \`ant apply ${AGENT_FILE} ${ENVIRONMENT_FILE}\` from the fortigate-review folder.\n${err.message}`);
+    fail(`Anthropic couldn't find the agent or environment. Run \`ant apply ${AGENT_FILE} ${ENVIRONMENT_FILE}\` from the engineer folder.\n${err.message}`);
   }
   if (err instanceof Anthropic.APIError) fail(`Anthropic API error ${err.status ?? ""}: ${err.message}`);
   fail(err instanceof Error ? err.message : String(err));

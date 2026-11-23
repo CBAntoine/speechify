@@ -1,0 +1,35 @@
+{
+  "name": "engineer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Talk to a security engineer voice agent that reviews FortiGate firewalls and drafts changes, built on Claude and ElevenLabs.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "dev": "next dev --port 3200",
+    "build": "next build",
+    "start": "next start --port 3200",
+    "review": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/review/cli.ts",
+    "voice:sync": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/voice-sync.ts",
+    "voice:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/voice-test.ts",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.10.0",
+    "@elevenlabs/react": "1.23.1",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

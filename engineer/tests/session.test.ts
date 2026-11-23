@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
-import { downloadOutputs, follow, type Printer, type SessionEvent } from "../src/session.ts";
+import { downloadOutputs, follow, type Printer, type SessionEvent } from "../src/review/session.ts";
 
 const quiet: Printer = { message() {}, detail() {}, heading() {} };
 

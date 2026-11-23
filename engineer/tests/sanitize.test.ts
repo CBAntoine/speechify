@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { REDACTED, sanitize } from "../src/sanitize.ts";
-import { findSections, parseConfig } from "../src/fortios.ts";
+import { REDACTED, sanitize } from "../src/review/sanitize.ts";
+import { findSections, parseConfig } from "../src/review/fortios.ts";
 
 const sample = fs.readFileSync(new URL("../samples/branch-office.conf", import.meta.url), "utf8");
 const lines = (s: string) => s.split("\n").length;

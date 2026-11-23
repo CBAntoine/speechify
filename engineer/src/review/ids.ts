@@ -27,7 +27,7 @@ function fromLock(lockPath: string): Partial<Ids> {
   return { agentId: find(AGENT_FILE), environmentId: find(ENVIRONMENT_FILE), source: lockPath };
 }
 
-export function loadIds(baseDir: string, env: NodeJS.ProcessEnv = process.env): Ids | { error: string } {
+export function loadIds(baseDir: string, env: Record<string, string | undefined> = process.env): Ids | { error: string } {
   const lockPaths = [path.join(baseDir, "claude-lock.json"), path.join(process.cwd(), "claude-lock.json")];
   let lock: Partial<Ids> = {};
   for (const p of lockPaths) {
@@ -42,7 +42,7 @@ export function loadIds(baseDir: string, env: NodeJS.ProcessEnv = process.env): 
   }
   return {
     error:
-      "No agent yet. From the fortigate-review folder, run:\n" +
+      "No agent yet. From the engineer folder, run:\n" +
       `  ant apply ${AGENT_FILE} ${ENVIRONMENT_FILE}\n` +
       "or set FGT_REVIEW_AGENT_ID and FGT_REVIEW_ENVIRONMENT_ID.",
   };

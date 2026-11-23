@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { findSections, parseConfig, summarize } from "../src/fortios.ts";
+import { findSections, parseConfig, summarize } from "../src/review/fortios.ts";
 
 const sample = fs.readFileSync(new URL("../samples/branch-office.conf", import.meta.url), "utf8");
 

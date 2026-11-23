@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseHits } from "../src/hits.ts";
-import { fortinetKev } from "../src/kev.ts";
-import { loadIds } from "../src/ids.ts";
-import { CHECK_IDS, RUBRIC } from "../src/rubric.ts";
+import { parseHits } from "../src/review/hits.ts";
+import { fortinetKev } from "../src/review/kev.ts";
+import { loadIds } from "../src/review/ids.ts";
+import { CHECK_IDS, RUBRIC } from "../src/review/rubric.ts";
 
 const opts = { source: "test", periodDays: 90, exportedAt: "2026-11-22T14:05:00.000Z" };
 

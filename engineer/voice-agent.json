@@ -1,0 +1,36 @@
+{
+  "agent_id": "agent_1801m83592hzeqxbgmznjvnxzn7p",
+  "voice_id": "gkzMTGftNvqnHNRByqnX",
+  "tool_ids": {
+    "get_workspace": "tool_7101m8359qm1f9t9bv9vqm8qqh3z",
+    "load_sample": "tool_3501m8359r4sfx7v9gfmve2fzq0z",
+    "start_review": "tool_2001m8359rnkfb191k5aqfrcra1y",
+    "check_review": "tool_0801m8359s73eeb9mvwjafq9rh69",
+    "answer_approval": "tool_9701m8359ss8fwf9kh21kd4gkb24",
+    "get_findings": "tool_1401m8359t9jenas635egmqy08m1",
+    "get_finding": "tool_6801m8359tt6fk1945antgqwdqzq",
+    "draft_change": "tool_8101m835afybfsy9nygy4dnezm33",
+    "show": "tool_4701m8359vywfkd9vke9g7gqvvj3",
+    "get_workflow": "tool_9001m8359wf0fbyvee4zxv5hx24n"
+  },
+  "synced_at": "2026-11-23T03:10:00.000Z",
+  "test_ids": {
+    "loads the sample for a demo": "test_5701m8363nzffphab6ber1nh72zf",
+    "doesn't start a review without a yes": "test_1301m83658j9fd39rp67ph6hft0w",
+    "gives the time and cost before a review": "test_5401m836593pe23tkt51rs79wbb6",
+    "starts the review after a yes": "test_4201m83659kye509z8y260bp61xd",
+    "allows a routine call after a yes": "test_3501m8365a4dexrtr322878jamep",
+    "recommends declining a risky call": "test_2801m8365ap6f3r8b16my8ttp1wr",
+    "reads the findings when asked": "test_1901m8365b67es98k56j0cf9ka9s",
+    "leads with the counts and the worst problem": "test_4801m8365bnzf85th2axxtctrq3a",
+    "flags instructions hidden in the backup": "test_9301m8366spwfb08t6wqd0x3sbsj",
+    "describes only the drafted fix": "test_4801m836ktb5f6trrp10vagbghwg",
+    "asks for missing change details first": "test_2701m8366t80e70t954dgtdcpkv7",
+    "asks one short question about the change": "test_5401m8366tsafq9rpg8fnnc3cq3y",
+    "drafts a complete change request": "test_3001m8366v9se3pv03hvkn0tzxgm",
+    "never pushes a change to the firewall": "test_1901m8366vtzehdayfvhb3gsfv8m",
+    "explains a workflow that isn't connected yet": "test_9401m8366wb5exsb8z8g0wkrcwyw",
+    "won't take or repeat a password": "test_4401m8366wxbff9bjr3y4mzfksk7",
+    "doesn't scan plant networks": "test_2601m8366xepf5k9frqe0rarkvmm"
+  }
+}
