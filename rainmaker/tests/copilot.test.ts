@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { GUIDE, searchGuide } from "../src/lib/copilot/guide.ts";
 import { COPILOT_CRM_TOOLS, SCREENS, matchScreen, screenById, screenForPath } from "../src/lib/copilot/screens.ts";
 import { buildAppState } from "../src/lib/copilot/state.ts";
+import { briefingWindow, buildBriefing } from "../src/lib/copilot/briefing.ts";
 import { seedDb } from "../src/lib/seed.ts";
 import type { Integrations } from "../src/lib/config.ts";
+import type { Db } from "../src/lib/types.ts";
 
 const NO_KEYS: Integrations = {
   claude: false,
@@ -69,4 +71,35 @@ test("the app snapshot covers everything and stays small", () => {
   assert.ok(s.sample_data_present);
   const size = JSON.stringify(s).length;
   assert.ok(size < 20_000, `snapshot is ${size} bytes`);
+});
+
+test("the copilot opens with what changed since the last visit", () => {
+  const seed = seedDb({ withSamples: true });
+  const now = new Date("2026-11-23T15:00:00Z");
+  const db: Db = { ...seed, drafts: [], tasks: [], activity: [], orders: [] };
+  const lead = seed.leads[0];
+  db.leads = [
+    { ...lead, id: "l1", sample: false, createdAt: "2026-11-23T09:00:00Z" },
+    { ...lead, id: "l2", sample: false, createdAt: "2026-11-20T09:00:00Z" },
+    { ...lead, id: "l3", sample: true, createdAt: "2026-11-23T09:00:00Z" },
+  ];
+  assert.equal(buildBriefing(db, "2026-11-22T15:00:00Z", now), "Since your last visit: 1 new lead.");
+  db.drafts = [{ ...seed.drafts[0], status: "pending" }, { ...seed.drafts[0], id: "d2", status: "pending" }, { ...seed.drafts[0], id: "d3", status: "sent" }];
+  db.tasks = [{ ...seed.tasks[0], done: false, due: "2026-11-23" }];
+  db.activity = [{ id: "a1", at: "2026-11-23T12:00:00Z", kind: "stage", text: "Arctic Air moved to Replied", leadId: "l1" }];
+  assert.equal(buildBriefing(db, "2026-11-22T15:00:00Z", now), "Since your last visit: 1 lead replied or booked a meeting, 1 new lead and 2 drafts waiting for your approval.");
+  assert.equal(buildBriefing({ ...db, leads: [], drafts: [], tasks: [], activity: [] }, "2026-11-22T15:00:00Z", now), "All quiet since your last visit.");
+  assert.match(buildBriefing(db, undefined, now), /^In the last day: /);
+});
+
+test("typing then switching to voice shares one briefing window", () => {
+  const now = new Date("2026-11-23T15:00:00Z");
+  assert.equal(briefingWindow(undefined, now).since, undefined);
+  assert.equal(briefingWindow(undefined, now).next.lastSessionAt, now.toISOString());
+  const recent = briefingWindow({ lastSessionAt: "2026-11-23T14:50:00Z", briefSince: "2026-11-22T10:00:00Z" }, now);
+  assert.equal(recent.since, "2026-11-22T10:00:00Z", "ten minutes later: same window");
+  const later = briefingWindow({ lastSessionAt: "2026-11-23T10:00:00Z", briefSince: "2026-11-22T10:00:00Z" }, now);
+  assert.equal(later.since, "2026-11-23T10:00:00Z", "hours later: since that visit");
+  const firstEver = briefingWindow(briefingWindow(undefined, new Date("2026-11-23T14:55:00Z")).next, now);
+  assert.equal(firstEver.since, undefined, "right after the very first session: still the last day");
 });

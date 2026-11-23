@@ -44,6 +44,7 @@ export default function PlaybooksPage() {
               </div>
             )}
             <div className="evidence">
+              {p.own && <span className="faint">From your playbook. Check the numbers against your own trials.</span>}
               {p.sources.map((s) => (
                 <a key={s.url} href={s.url} target="_blank" rel="noreferrer">
                   {s.text}

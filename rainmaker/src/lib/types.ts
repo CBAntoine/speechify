@@ -101,6 +101,10 @@ export interface Lead {
   demo?: DemoAgent;
   /** The client's own ElevenLabs agent, once they pay. */
   clientAgentId?: string;
+  /** An AI Website Guide (chat + voice agent for their site) built from their website. */
+  guide?: GuideDemo;
+  /** Inputs for the guide's ROI: their monthly website visitors and what one lead is worth. */
+  guideRoi?: { monthlyVisitors?: number; leadValue?: number };
   /** Follow-up emails written with the first touch; autopilot drafts each when it's due. */
   sequence?: SequenceStep[];
 }
@@ -121,6 +125,28 @@ export interface DemoAgent {
   knowledgeBaseId?: string;
   /** Voice sessions used today, to cap what a shared link can spend. */
   usage?: { day: string; sessions: number };
+}
+
+/** An AI Website Guide built for a prospect: their website's knowledge, a demo page, and later their live widget. */
+export interface GuideDemo {
+  agentId: string;
+  /** Random token in the private demo page (/guide/<token>). */
+  token: string;
+  createdAt: string;
+  /** The guide's first name, e.g. "Ava". */
+  name: string;
+  knowledge: { id: string; name: string }[];
+  /** Pages of their website the knowledge base was built from. */
+  pages: { url: string; title?: string }[];
+  faqs: number;
+  brand?: { name?: string; color?: string; logo?: string; image?: string; headline?: string; tagline?: string; services?: string[] };
+  /** The five questions to ask it in front of the owner, with its answers when tested. */
+  questions: { q: string; answer?: string; unsure?: boolean; note?: string }[];
+  testedAt?: string;
+  /** Demo sessions used today, to cap what a shared link can spend. */
+  usage?: { day: string; sessions: number };
+  /** Installed on their real website for a free trial. */
+  trial?: { domain: string; startedAt: string; endsAt: string };
 }
 
 /** A business found by search, before it is saved as a lead. */
@@ -503,7 +529,9 @@ export interface Db {
   store: StoreSettings;
   payments: PaymentsState;
   autopilot: AutopilotState;
-  /** The CRM copilot's ElevenLabs agent, once synced from this app. */
-  copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string };
+  /** The CRM copilot's ElevenLabs agent, once synced from this app; hash is the spec it was synced from. */
+  copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string; hash?: string };
+  /** When the owner last talked to the copilot, for its "since your last visit" greeting. */
+  copilotSeen?: { lastSessionAt: string; briefSince?: string };
   seeded: boolean;
 }

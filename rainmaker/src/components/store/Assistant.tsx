@@ -21,8 +21,12 @@ export interface AssistantProps {
   variant: "dock" | "inline";
   /** Talk to a prospect's demo receptionist instead of the sales assistant. */
   demoToken?: string;
+  /** Talk to a prospect's demo AI website guide (by its private token). */
+  guideToken?: string;
   title?: string;
   subtitle?: string;
+  /** The line above the start buttons, before anyone has said anything. */
+  intro?: string;
   quick?: string[];
 }
 
@@ -100,7 +104,8 @@ function friendly(msg: string): string {
   return "Something went wrong with the conversation. Try again, or type instead.";
 }
 
-function AssistantInner({ variant, demoToken, title, subtitle, quick }: AssistantProps) {
+function AssistantInner({ variant, demoToken, guideToken, title, subtitle, intro, quick }: AssistantProps) {
+  const isDemo = Boolean(demoToken || guideToken);
   const store = useStoreOptional();
   const router = useRouter();
   const path = usePathname();
@@ -116,13 +121,16 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
   const [draft, setDraft] = useState("");
   const nextId = useRef(1);
   const pendingText = useRef<string | null>(null);
+  /** Set when the mic is pressed during a typed chat: start a voice call once it ends. */
+  const switchToVoice = useRef(false);
+  const beginRef = useRef<(m: "voice" | "text") => Promise<void>>(async () => undefined);
   const orbRef = useRef<HTMLSpanElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const connected = status === "connected";
   const connecting = busy || status === "connecting";
 
   const name = title ?? store?.settings.assistantName ?? "Assistant";
-  const tone = demoToken ? "tone-lagoon" : "tone-sky";
+  const tone = isDemo ? "tone-lagoon" : "tone-sky";
   const push = useCallback((role: Line["role"], text: string) => {
     setLines((prev) => {
       const last = prev[prev.length - 1];
@@ -218,6 +226,8 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
   }, [connected, mode, getInputVolume, getOutputVolume]);
 
   useEffect(() => {
+    // Before anyone speaks, keep the greeting and start buttons in view.
+    if (!lines.length && !notice) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [lines, notice]);
 
@@ -229,7 +239,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
         const res = await fetch("/api/store/voice", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ mode: nextMode, demo: demoToken }),
+          body: JSON.stringify({ mode: nextMode, demo: demoToken, guide: guideToken }),
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; auth?: { conversationToken: string } | { signedUrl: string } };
         if (!res.ok || !data.ok || !data.auth) {
@@ -245,7 +255,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
         startSession({
           ...auth,
           textOnly: nextMode === "text",
-          ...(store && !demoToken
+          ...(store && !isDemo
             ? {
                 dynamicVariables: {
                   assistant_name: store.settings.assistantName,
@@ -258,7 +268,7 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
           onConnect: () => {
             push("system", nextMode === "voice" ? "Connected. Start talking." : "Connected.");
             lastPath.current = window.location.pathname;
-            if (store && !demoToken) {
+            if (store && !isDemo) {
               sendContextualUpdate(
                 `Product and plan ids, for the tools: ${[...store.plans, ...store.products].map((o) => `${o.id} (${o.name})`).join(", ")}.`
               );
@@ -274,6 +284,12 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
           },
           onDisconnect: () => {
             setMode(null);
+            if (switchToVoice.current) {
+              switchToVoice.current = false;
+              push("system", "Switching to voice…");
+              window.setTimeout(() => void beginRef.current("voice"), 250);
+              return;
+            }
             push("system", "Conversation ended.");
           },
           onError: (msg: string) => {
@@ -287,8 +303,11 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
         setBusy(false);
       }
     },
-    [demoToken, push, sendContextualUpdate, sendUserMessage, startSession, store]
+    [demoToken, guideToken, isDemo, push, sendContextualUpdate, sendUserMessage, startSession, store]
   );
+  useEffect(() => {
+    beginRef.current = begin;
+  }, [begin]);
 
   const ask = useCallback(
     async (text: string) => {
@@ -386,9 +405,10 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
           <div className="ap-intro">
             <span className={`orb lg idle ${tone}`} />
             <p>
-              {store && !demoToken
-                ? `Hi! I'm ${name}, an AI assistant. Ask me about any of our services, what they cost, or which plan fits your business.`
-                : "Talk to it like a caller would. Ask about services, prices, hours or booking."}
+              {intro ??
+                (store && !isDemo
+                  ? `Hi! I'm ${name}, an AI assistant. Ask me about any of our services, what they cost, or which plan fits your business.`
+                  : "Talk to it like a caller would. Ask about services, prices, hours or booking.")}
             </p>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
               <button type="button" className="btn primary" onClick={() => void begin("voice")} disabled={connecting}>
@@ -430,7 +450,18 @@ function AssistantInner({ variant, demoToken, title, subtitle, quick }: Assistan
             {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
           </button>
         ) : (
-          <button type="button" className="mic-btn" onClick={() => (connected ? endSession() : void begin("voice"))} disabled={connecting} aria-label="Talk by voice" title="Talk by voice">
+          <button
+            type="button"
+            className="mic-btn"
+            onClick={() => {
+              if (!connected) return void begin("voice");
+              switchToVoice.current = true;
+              endSession();
+            }}
+            disabled={connecting}
+            aria-label="Talk by voice"
+            title="Talk by voice"
+          >
             <Mic size={18} />
           </button>
         )}

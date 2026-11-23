@@ -1,6 +1,6 @@
 import "server-only";
 import { STAGES, type Lead, type Prospect, type Stage } from "@/lib/types";
-import { claudeEnabled } from "@/lib/config";
+import { claudeEnabled, elevenEnabled } from "@/lib/config";
 import { getNiche } from "@/lib/niches";
 import { domainOf } from "@/lib/net";
 import { auditWebsite } from "@/lib/prospecting/audit";
@@ -8,6 +8,8 @@ import { deriveSignals, scoreProspect, topSignals } from "@/lib/prospecting/scor
 import { findBusinesses, resolveNiche, scoreAll } from "@/lib/prospecting/search";
 import { generateCampaign, templateCampaign, toCampaign } from "@/lib/claude/ads";
 import { researchWeb } from "@/lib/claude/research";
+import { addKnowledge, buildGuide, draftGuidePitch, guideReport, guideUrl, setGuideRoi, startGuideTrial, testGuide } from "@/lib/offers/guide";
+import { INTENT_LABEL, estimateGuideRoi, intentFor, leadValueFor } from "@/lib/offers/guide-math";
 import {
   createDraft,
   createTask,
@@ -65,6 +67,205 @@ function compactLead(l: Lead, drafts: number) {
     pending_drafts: drafts,
   };
 }
+
+const num = (v: unknown) => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v.replace(/[^\d.]/g, "")) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+};
+
+/** The lead a guide tool works on, or an error result to return. */
+async function guideLead(input: Record<string, unknown>) {
+  const id = str(input.lead_id, 80);
+  const lead = id ? await getLead(id) : undefined;
+  return lead ?? null;
+}
+const noLead = { result: { error: "Lead not found. Use list_leads to get its lead_id." }, summary: "Lead not found" };
+const needsEleven = { result: { error: "AI guides need ELEVENLABS_API_KEY in the hosting settings." }, summary: "ElevenLabs not connected" };
+const by = (ctx: ToolContext) => (ctx.agentId === "copilot" ? "copilot" : `agent:${ctx.agentId}`);
+
+// The AI Website Guide offer: a chat and voice agent on a business's website
+// that answers visitors and passes them the leads.
+const GUIDE_TOOLS: Record<"estimate_ai_guide" | "build_ai_guide" | "test_ai_guide" | "pitch_ai_guide" | "start_ai_guide_trial" | "ai_guide_report" | "teach_ai_guide", ToolDef> = {
+  estimate_ai_guide: {
+    name: "estimate_ai_guide",
+    description:
+      "Size the AI Website Guide offer (a chat and voice guide on their website that answers visitors and captures leads) for a business: how well their niche fits (need-to-have services convert best), and from their monthly website visitors the chats (5%) and leads (2.5%) it should bring, what those are worth, and what to charge ($300 to $4,000+ a month, plus a setup fee for big sites). Pass monthly_visitors when known (Semrush, Similarweb or their Google Analytics). With lead_id, the numbers are saved on the lead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string", description: "The lead, if they're in the pipeline" },
+        niche: { type: "string", description: "Niche id, when there's no lead (hvac, plumber, dentist…)" },
+        monthly_visitors: { type: "number", description: "Website visitors a month" },
+        lead_value: { type: "number", description: "What one new lead is worth to them, in dollars (default: typical for the niche)" },
+      },
+    },
+    describe: () => "Sizing the AI website guide offer",
+    run: async (input) => {
+      const lead = await guideLead(input);
+      if (input.lead_id && !lead) return noLead;
+      const niche = lead?.niche ?? str(input.niche, 40);
+      const visitors = num(input.monthly_visitors) ?? lead?.guideRoi?.monthlyVisitors ?? 0;
+      const leadValue = num(input.lead_value) ?? lead?.guideRoi?.leadValue ?? leadValueFor(niche);
+      if (lead && (num(input.monthly_visitors) !== undefined || num(input.lead_value) !== undefined)) await setGuideRoi(lead.id, { monthlyVisitors: visitors, leadValue });
+      const roi = estimateGuideRoi({ monthlyVisitors: visitors, leadValue, pages: lead?.guide?.pages.length });
+      const fit = INTENT_LABEL[intentFor(niche)];
+      return {
+        result: {
+          business: lead?.name ?? null,
+          fit: fit.label,
+          advice: fit.advice,
+          monthly_visitors: visitors || null,
+          lead_value: leadValue,
+          chats_per_month: roi.chats,
+          leads_per_month: roi.leads,
+          lead_value_per_month: roi.value,
+          suggested_monthly_price: roi.price.monthly,
+          price_can_go_higher: roi.price.plus,
+          setup_fee: roi.price.setup,
+          setup_note: roi.price.setupNote,
+          note: visitors ? null : "No traffic number yet. Check Semrush or Similarweb, or ask for their Google Analytics. Small sites start at $300 a month.",
+          has_guide: Boolean(lead?.guide),
+        },
+        summary: visitors ? `${roi.leads} leads a month; charge $${roi.price.monthly}${roi.price.plus ? "+" : ""}/mo` : `${fit.label}; needs their traffic`,
+      };
+    },
+  },
+  build_ai_guide: {
+    name: "build_ai_guide",
+    description:
+      "Build the AI Website Guide for a lead: reads their website (services, pricing, FAQs, booking and contact pages) into a knowledge base, creates the chat and voice guide in ElevenLabs (it says it's an AI and takes visitors' name and number), and makes a private demo page, a one-page copy of their site with the guide on it, plus five questions to ask it in front of the owner. Takes up to a minute. If their website blocks automated reading or there is none, pass details the owner gave you. Returns the demo link.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string" },
+        details: { type: "string", description: "Only when their site can't be read: services, prices, hours, areas, common questions and answers" },
+      },
+      required: ["lead_id"],
+    },
+    describe: () => "Building the AI website guide",
+    run: async (input, ctx) => {
+      if (!elevenEnabled()) return needsEleven;
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      const existed = Boolean(lead.guide);
+      const g = await buildGuide(lead.id, by(ctx), { text: str(input.details, 60_000) || undefined });
+      return {
+        result: {
+          business: lead.name,
+          already_built: existed,
+          guide_name: g.name,
+          demo_url: guideUrl(g.token),
+          pages_read: g.pages.length,
+          faqs_found: g.faqs,
+          demo_questions: g.questions.map((q) => q.q),
+          next: "Test the five questions (test_ai_guide), then write the pitch (pitch_ai_guide).",
+        },
+        summary: existed ? `${lead.name} already has ${g.name}` : `Built ${g.name} from ${g.pages.length} pages`,
+      };
+    },
+  },
+  test_ai_guide: {
+    name: "test_ai_guide",
+    description: "Ask a lead's AI guide its five demo questions, as a website visitor would, and report each answer and whether it needs work (it wasn't sure, so a fact is missing). Run it before showing the guide to the owner. Takes about a minute.",
+    input_schema: { type: "object", properties: { lead_id: { type: "string" } }, required: ["lead_id"] },
+    describe: () => "Testing the AI guide's demo questions",
+    run: async (input) => {
+      if (!elevenEnabled()) return needsEleven;
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      if (!lead.guide) return { result: { error: "No AI guide yet. Build it first with build_ai_guide." }, summary: "No guide" };
+      const g = await testGuide(lead.id);
+      const bad = g.questions.filter((q) => q.unsure).length;
+      return {
+        result: {
+          questions: g.questions.map((q) => ({ question: q.q, answer: q.answer ?? null, needs_work: Boolean(q.unsure), why: q.unsure ? (q.note ?? null) : null })),
+          fix: bad ? "Add the missing facts with teach_ai_guide, then test again." : null,
+        },
+        summary: bad ? `${bad} of ${g.questions.length} answers need work` : `All ${g.questions.length} answered well`,
+      };
+    },
+  },
+  pitch_ai_guide: {
+    name: "pitch_ai_guide",
+    description:
+      "Write the AI Website Guide pitch for a lead as drafts in the Inbox: an email, a text and a cold call script, each with their demo link and the offer (10–20% more website leads; free on their site for a few weeks, no credit card; then the monthly price). Nothing is sent. The guide must be built first.",
+    input_schema: { type: "object", properties: { lead_id: { type: "string" } }, required: ["lead_id"] },
+    describe: () => "Writing the AI guide pitch",
+    run: async (input, ctx) => {
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      if (!lead.guide) return { result: { error: "No AI guide yet. Build it first with build_ai_guide, so the pitch can link to their demo." }, summary: "No guide" };
+      const n = await draftGuidePitch(lead.id, undefined, by(ctx));
+      return { result: { drafts: n, channels: ["email", "sms", "call"], demo_url: guideUrl(lead.guide.token), where: "Inbox, waiting for approval" }, summary: `${n} drafts in the Inbox` };
+    },
+  },
+  start_ai_guide_trial: {
+    name: "start_ai_guide_trial",
+    description:
+      "Start the free trial once the owner has agreed: the lead's AI guide goes public, but only on their website's domain, with the call to action \"Click here for a quick answer\" at the top of the page. Returns the two lines of embed code to put on their site, and adds tasks for the first leads report and the end of the trial. Ask the user before calling, and pass confirmed true only after they say yes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string" },
+        website: { type: "string", description: "Their website or domain (default: the one on the lead)" },
+        weeks: { type: "integer", description: "Trial length, 2 to 4 weeks (default 4)" },
+        confirmed: { type: "boolean", description: "True only after the user said yes to putting it live" },
+      },
+      required: ["lead_id", "confirmed"],
+    },
+    describe: () => "Putting the AI guide on their website",
+    run: async (input) => {
+      if (input.confirmed !== true) return { result: { error: "Ask the user to confirm first, then call again with confirmed true." }, summary: "Needs confirmation" };
+      if (!elevenEnabled()) return needsEleven;
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      if (!lead.guide) return { result: { error: "No AI guide yet. Build it first with build_ai_guide." }, summary: "No guide" };
+      const r = await startGuideTrial(lead.id, str(input.website, 300) ?? lead.website ?? "", int(input.weeks, 2, 4, 4));
+      return {
+        result: { live_on: r.guide.trial?.domain, trial_ends: r.guide.trial?.endsAt.slice(0, 10), embed_code: r.snippet, install: "Paste the two lines just before </body> on every page, or in their site builder's custom code box." },
+        summary: `Live on ${r.guide.trial?.domain}`,
+      };
+    },
+  },
+  ai_guide_report: {
+    name: "ai_guide_report",
+    description: "What a lead's AI guide has done: conversations and leads captured in the last 30 days, the visitors who left their details (name, phone or email, what they wanted), and questions it couldn't answer (to fix with teach_ai_guide). Use it for the weekly leads report and the monthly upkeep.",
+    input_schema: { type: "object", properties: { lead_id: { type: "string" } }, required: ["lead_id"] },
+    describe: () => "Checking the AI guide's conversations",
+    run: async (input) => {
+      if (!elevenEnabled()) return needsEleven;
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      if (!lead.guide) return { result: { error: "This lead has no AI guide." }, summary: "No guide" };
+      const r = await guideReport(lead.id);
+      return {
+        result: {
+          business: lead.name,
+          live_on: lead.guide.trial?.domain ?? null,
+          trial_ends: lead.guide.trial?.endsAt.slice(0, 10) ?? null,
+          last_30_days: r.last30,
+          captured_leads: r.leads.slice(0, 15).map((c) => ({ when: c.at.slice(0, 10), name: c.contact.name ?? null, phone: c.contact.phone ?? null, email: c.contact.email ?? null, wanted: c.contact.need ?? c.title ?? null })),
+          unanswered_questions: r.unanswered,
+        },
+        summary: `${r.last30.conversations} conversations, ${r.last30.leads} leads in 30 days`,
+      };
+    },
+  },
+  teach_ai_guide: {
+    name: "teach_ai_guide",
+    description: "Teach a lead's AI guide something it didn't know (an answer to a question it missed, a price, new hours, a promotion). Write it as plain facts or as Q: and A: lines.",
+    input_schema: { type: "object", properties: { lead_id: { type: "string" }, text: { type: "string" } }, required: ["lead_id", "text"] },
+    describe: () => "Teaching the AI guide",
+    run: async (input) => {
+      if (!elevenEnabled()) return needsEleven;
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      if (!lead.guide) return { result: { error: "This lead has no AI guide." }, summary: "No guide" };
+      const g = await addKnowledge(lead.id, str(input.text, 20_000) ?? "");
+      return { result: { ok: true, knowledge_documents: g.knowledge.length }, summary: "Added to its knowledge" };
+    },
+  },
+};
 
 export const TOOLS: Record<ToolName, ToolDef> = {
   pipeline_summary: {
@@ -483,6 +684,7 @@ export const TOOLS: Record<ToolName, ToolDef> = {
       return { result: { answer: r.answer.slice(0, 6000), sources: r.sources }, summary: `${r.sources.length} sources` };
     },
   },
+  ...GUIDE_TOOLS,
 };
 
 export function toolsFor(names: ToolName[]): ToolDef[] {

@@ -68,7 +68,8 @@ test("seed data is consistent and clearly sample", () => {
 
 test("playbooks and complaints all cite https sources", () => {
   for (const p of PLAYBOOKS) {
-    assert.ok(p.sources.length > 0, p.id);
+    // Research plays cite their sources; the owner's own plays say that's what they are.
+    assert.ok(p.own ? p.sources.length === 0 : p.sources.length > 0, p.id);
     for (const s of p.sources) assert.match(s.url, /^https:\/\//);
     assert.ok(p.action.href.startsWith("/"));
   }

@@ -1,0 +1,390 @@
+/* A prospect's AI guide demo: a one-page copy of their website in their
+   brand colour (--g, with readable text --g-ink), with the guide above the
+   fold. Built on the store's base styles. */
+
+.guide-site {
+  --g: #1c1917;
+  --g-ink: #ffffff;
+}
+
+.guide-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.guide-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 16px;
+  background: #fff8db;
+  border-bottom: 1px solid #f1e3a6;
+  color: #5b4a12;
+  font-size: 13px;
+  text-align: center;
+}
+
+.guide-print-url {
+  display: none;
+}
+
+.guide-nav {
+  background: #fff;
+  border-bottom: 1px solid var(--hair);
+}
+
+.guide-nav .guide-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+}
+
+.guide-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+.guide-brand b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guide-brand img {
+  max-height: 36px;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+.guide-initial {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--g);
+  color: var(--g-ink);
+  font-weight: 600;
+}
+
+.guide-phone {
+  flex: none;
+  color: var(--text);
+  font-weight: 550;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.guide-hero {
+  background: linear-gradient(160deg, var(--g), color-mix(in srgb, var(--g) 78%, #000));
+  color: var(--g-ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.guide-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  grid-template-areas:
+    "top widget"
+    "more widget";
+  grid-template-rows: auto 1fr;
+  gap: 18px 48px;
+  padding-top: 48px;
+  padding-bottom: 56px;
+}
+
+.guide-top {
+  grid-area: top;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: end;
+}
+
+.guide-more {
+  grid-area: more;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.guide-widget {
+  grid-area: widget;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.guide-eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.guide-hero h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(30px, 4.4vw, 50px);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.guide-more p {
+  margin: 0;
+  max-width: 560px;
+  font-size: 17px;
+  opacity: 0.88;
+}
+
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.guide-site .btn.guide-solid {
+  background: var(--g-ink);
+  color: var(--g);
+  border-color: transparent;
+}
+
+.guide-site .btn.guide-ghost {
+  background: transparent;
+  color: var(--g-ink);
+  border-color: color-mix(in srgb, var(--g-ink) 45%, transparent);
+}
+
+.guide-photo {
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* The playbook's call to action: a waving hand and "Click here for a quick answer". */
+.guide-callout {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 10px 18px 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.guide-callout:hover {
+  transform: translateY(-1px);
+}
+
+.guide-hand {
+  display: inline-block;
+  font-size: 22px;
+  transform-origin: 70% 75%;
+  animation: guide-wave 2.6s ease-in-out infinite;
+}
+
+@keyframes guide-wave {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(16deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  40% {
+    transform: rotate(-4deg);
+  }
+  48% {
+    transform: rotate(10deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-hand {
+    animation: none;
+  }
+}
+
+.guide-widget .assistant-panel.inline {
+  height: 540px;
+  color: var(--text);
+}
+
+.guide-section {
+  padding: 44px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.guide-section h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.guide-services {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-services li {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--ring);
+  font-weight: 550;
+  border-left: 4px solid var(--g);
+}
+
+.guide-try ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  font-size: 16px;
+}
+
+.guide-try li {
+  margin: 6px 0;
+}
+
+.guide-try p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--text-2);
+}
+
+.guide-foot {
+  padding: 28px 0 40px;
+  font-size: 13.5px;
+}
+
+.guide-foot .guide-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (max-width: 880px) {
+  .guide-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "widget"
+      "more";
+    grid-template-rows: auto;
+    gap: 16px;
+    padding-top: 24px;
+    padding-bottom: 32px;
+  }
+
+  .guide-hero h1 {
+    font-size: clamp(26px, 7.4vw, 34px);
+  }
+
+  .guide-widget .assistant-panel.inline {
+    height: 500px;
+  }
+
+  .guide-phone {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 600px) {
+  .guide-bar {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .guide-bar-long,
+  .guide-bar .btn {
+    display: none;
+  }
+}
+
+/* Printed for the owner: the page as it looks, with the link to try it highlighted. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  .guide-bar,
+  .guide-callout,
+  .guide-actions {
+    display: none !important;
+  }
+
+  .guide-print-url {
+    display: block;
+    margin: 0 0 10px;
+    padding: 12px 16px;
+    border: 2px solid #111;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .guide-print-url mark {
+    padding: 2px 6px;
+    background: #ffe94d;
+    color: #000;
+    font-size: 18px;
+    word-break: break-all;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .guide-hero-grid {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  .guide-widget .assistant-panel.inline {
+    height: auto;
+    break-inside: avoid;
+  }
+
+  .guide-widget .ap-foot,
+  .guide-widget .ap-notice {
+    display: none;
+  }
+
+  .guide-section {
+    padding: 18px 0;
+    break-inside: avoid;
+  }
+}

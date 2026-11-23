@@ -16,7 +16,14 @@ export type ToolName =
   | "create_ad_campaign"
   | "create_task"
   | "list_tasks"
-  | "research_web";
+  | "research_web"
+  | "estimate_ai_guide"
+  | "build_ai_guide"
+  | "test_ai_guide"
+  | "pitch_ai_guide"
+  | "start_ai_guide_trial"
+  | "ai_guide_report"
+  | "teach_ai_guide";
 
 export interface AgentDef {
   id: AgentId;
@@ -47,7 +54,7 @@ export const AGENTS: AgentDef[] = [
     description: "Searches the map for local businesses in a niche, audits their websites, and saves the ones that clearly need help.",
     icon: "Radar",
     color: "#3e63dd",
-    tools: ["pipeline_summary", "find_businesses", "audit_website", "save_leads", "list_leads", "research_web"],
+    tools: ["pipeline_summary", "find_businesses", "audit_website", "save_leads", "list_leads", "research_web", "estimate_ai_guide"],
     presets: [
       "Find 15 dentists in Austin, TX that have no online booking or a weak website",
       "Find roofing companies in Denver, CO that aren't running ads",
@@ -72,7 +79,7 @@ Report: how many you looked at, how many you saved, the 3 best with their angle,
     description: "Writes personal cold emails, texts, DMs and call scripts that open with a real finding about each business, then queues them for your approval.",
     icon: "PenLine",
     color: "#e5484d",
-    tools: ["list_leads", "get_lead", "audit_website", "draft_message", "update_lead", "research_web"],
+    tools: ["list_leads", "get_lead", "audit_website", "draft_message", "update_lead", "research_web", "estimate_ai_guide"],
     presets: [
       "Write first-touch emails for my 5 hottest new leads",
       "Write a cold-call opener for every lead in Contacted that hasn't replied",
@@ -123,7 +130,7 @@ Report: for each campaign, the offer, the main angle, and how the agency should 
     description: "Reviews the whole pipeline, flags stale deals and overdue follow-ups, creates tasks, drafts nudges and writes your plan for today.",
     icon: "Compass",
     color: "#12a594",
-    tools: ["pipeline_summary", "list_leads", "get_lead", "update_lead", "create_task", "list_tasks", "draft_message"],
+    tools: ["pipeline_summary", "list_leads", "get_lead", "update_lead", "create_task", "list_tasks", "draft_message", "ai_guide_report"],
     presets: [
       "Plan my day: what should I do first to close more deals this week?",
       "Find stale deals (no touch in 5+ days) and draft follow-ups",

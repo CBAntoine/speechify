@@ -40,7 +40,7 @@ export const GUIDE: GuideTopic[] = [
     id: "pipeline",
     title: "Pipeline and leads",
     keywords: ["pipeline", "lead", "leads", "stage", "board", "move", "deal", "kanban", "won", "lost", "contacted"],
-    text: "Pipeline is a board (or list) with stages New, Contacted, Replied, Meeting, Proposal, Won and Lost. Drag cards between stages, or open a lead and change the Stage dropdown. A lead opens in a side panel with tabs Overview (quick actions, contact name, email, phone, website, deal value per month, next step, website check), Outreach (Claude-written email plus 3 follow-ups, text, DM, call script and video-audit script), Ads (sample campaigns for them) and Notes. Its Sell section suggests store products from the audit, gives checkout links that tie a purchase to the lead (so it moves to Won automatically), and builds a demo AI receptionist from their website with a private link to send them.",
+    text: "Pipeline is a board (or list) with stages New, Contacted, Replied, Meeting, Proposal, Won and Lost. Drag cards between stages, or open a lead and change the Stage dropdown. A lead opens in a side panel with tabs Overview (quick actions, contact name, email, phone, website, deal value per month, next step, website check), Outreach (Claude-written email plus 3 follow-ups, text, DM, call script and video-audit script), Ads (sample campaigns for them) and Notes. Its Sell section suggests store products from the audit, gives checkout links that tie a purchase to the lead (so it moves to Won automatically), builds a demo AI receptionist from their website with a private link to send them, and has the AI website guide offer (see the ai_guide topic).",
   },
   {
     id: "inbox",
@@ -100,25 +100,31 @@ export const GUIDE: GuideTopic[] = [
     id: "playbooks",
     title: "Playbooks",
     keywords: ["playbook", "playbooks", "learn", "how to get clients", "referrals", "cold email", "tips"],
-    text: "Playbooks lists 13 client-finding plays from agency surveys and practitioner reports (referral engine, gap-first cold email, free sample ads and more), niche cheat sheets and common GoHighLevel complaints next to what Rainmaker does instead. Every claim links to its source, and each play links to the screen that does it.",
+    text: "Playbooks lists 14 client-finding plays: 13 from agency surveys and practitioner reports (referral engine, gap-first cold email, free sample ads and more) and the AI website guide free trial from your own playbook, niche cheat sheets and common GoHighLevel complaints next to what Rainmaker does instead. Research claims link to their source, and each play links to the screen that does it.",
   },
   {
     id: "install",
     title: "Install on a phone",
     keywords: ["phone", "android", "install", "app", "mobile", "pwa", "home screen"],
-    text: "Open the hosted app in Chrome on Android, sign in, then tap Install in the top bar or Chrome's menu > Install app. On phones the screens are Today, Find, Pipeline, Inbox and More at the bottom; the copilot button sits above them.",
+    text: "Open the hosted app in Chrome on Android, sign in, then tap Install in the top bar or Chrome's menu > Install app. On phones the screens are Today, Find, Pipeline, Inbox and More at the bottom; the copilot is the round button at the top right.",
   },
   {
     id: "compliance",
     title: "Rules Rainmaker follows",
     keywords: ["consent", "law", "legal", "compliance", "spam", "can-spam", "tcpa", "casl", "opt out", "voice clone", "disclosure"],
-    text: "Commercial email must include your postal address and an opt-out line (CAN-SPAM); Autopilot's auto-send refuses emails without them. No automated calls or texts to people who haven't opted in (TCPA, CASL), so Autopilot only emails. Voice clones need the written consent of the person whose voice it is. AI receptionists and assistants say they're AI when asked. The store sells your agency's services, not ElevenLabs credits, and never uses ElevenLabs as your brand.",
+    text: "Commercial email must include your postal address and an opt-out line (CAN-SPAM); Autopilot's auto-send refuses emails without them. No automated calls or texts to people who haven't opted in (TCPA, CASL), so Autopilot only emails. Voice clones need the written consent of the person whose voice it is. AI receptionists and assistants say they're AI when asked; AI website guides introduce themselves as an AI. The store sells your agency's services, not ElevenLabs credits, and never uses ElevenLabs as your brand.",
+  },
+  {
+    id: "ai_guide",
+    title: "AI website guide offer",
+    keywords: ["ai guide", "website guide", "guide", "chat widget", "voice widget", "website chat", "knowledge base", "trial", "demo page", "five questions", "retainer"],
+    text: "A chat and voice guide on a business's website that answers visitors from their own site and passes the business every lead. It lives in a lead's Overview, section AI website guide, in six steps. 1 Is it worth it: enter Website visitors a month (from Semrush, Similarweb or their Google Analytics) and One lead is worth; it shows chats (5% of visitors), new leads (2.5%), their value and what to charge ($300 to $4,000+ a month, plus a setup fee for big sites). Need-to-have businesses (HVAC, plumbing, roofing, auto repair) convert best; want-to-have ones (med spas, salons) least. 2 Build AI guide reads their site (services, pricing, FAQs, booking, contact) and builds the guide in ElevenLabs plus a private demo page, a one-page copy of their site with the guide above the fold and \"Click here for a quick answer\" with a waving hand; buttons Open demo, Print with link and Share. If the site blocks automated reading, use Paste details instead. 3 Five questions to ask it in front of the owner: Test all asks each one and flags weak answers; Edit changes them; Copy prompt for ChatGPT. 4 Write the pitch drafts an email, a text and a cold call script in the Inbox. 5 Free trial on their website: enter their domain and length, Start trial, then send them the two lines of embed code. 6 Monthly upkeep: Load report shows conversations, captured leads and unanswered questions; add answers or Teach it something new. The guide always says it's an AI.",
   },
   {
     id: "copilot",
     title: "What the copilot can do",
     keywords: ["copilot", "assistant", "you", "voice", "talk", "help me", "can you"],
-    text: "The copilot can open any screen, read what's on it, click buttons, fill in fields and point at things, and it can search for businesses, save leads, update leads, draft messages, write ad campaigns, create tasks, research the web and start agent runs. It asks before anything that sends, deletes, cancels or spends money. Open it with the Copilot button or Ctrl+K (Cmd+K on a Mac); talk with the mic or type.",
+    text: "The copilot can open any screen, read what's on it, click buttons, fill in fields and point at things, and it can search for businesses, save leads, update leads, draft messages and cold call scripts, write ad campaigns, create tasks, research the web, start agent runs, and run the AI website guide offer (size it, build it, test it, pitch it, start the trial and report on it). It asks before anything that sends, deletes, cancels or spends money. Open it with the Copilot button or Ctrl+K (Cmd+K on a Mac); talk with the mic or type.",
   },
 ];
 

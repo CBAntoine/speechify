@@ -8,7 +8,7 @@ function trim(u: string): string {
   return u.replace(/\/+$/, "");
 }
 
-export function siteUrlFrom(headers: Headers, fallbackUrl?: string): string {
+export function siteUrlFrom(headers: Pick<Headers, "get">, fallbackUrl?: string): string {
   const env = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL;
   if (env) return trim(env);
   const host = headers.get("x-forwarded-host") ?? headers.get("host");

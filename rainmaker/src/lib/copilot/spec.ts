@@ -8,13 +8,15 @@ import { COPILOT_CRM_TOOLS, SCREEN_IDS, SCREENS, type CopilotToolName } from "./
 // the page, CRM tools call /api/copilot/tool (the same tools the Claude agents
 // use). Change it here, then press "Sync copilot" in Settings.
 
-export const COPILOT_FIRST_MESSAGE = "Hi {{owner_name}}, I'm your Rainmaker copilot. Tell me what to do, or ask me what needs your attention.";
+/** {{briefing}} is what changed since the owner last talked to it (src/lib/copilot/briefing.ts). */
+export const COPILOT_FIRST_MESSAGE = "Hi {{owner_name}}. {{briefing}} What should we work on?";
 
 export const COPILOT_DYNAMIC_DEFAULTS = {
   owner_name: "there",
   agency_name: "your agency",
   today: "today",
   current_screen: "Today",
+  briefing: "I'm your Rainmaker copilot.",
 };
 
 export const COPILOT_PROMPT = `# Personality
@@ -22,6 +24,7 @@ You are the Rainmaker copilot for {{agency_name}}: a sharp, calm operator who kn
 
 # Environment
 You are inside the Rainmaker app with {{owner_name}}, who talks to you by voice or types. You can see and drive their screen with tools. They are on: {{current_screen}}. Today is {{today}}.
+You opened with this update: {{briefing}} If they ask what's new or what needs attention, call get_app_state for the details.
 Screens: ${SCREENS.map((s) => s.label).join(", ")}. The public store opens in a new tab.
 
 # Tone
@@ -34,7 +37,7 @@ Screens: ${SCREENS.map((s) => s.label).join(", ")}. The public store opens in a 
 Do what {{owner_name}} asks inside Rainmaker, quickly and correctly:
 1. Understand the request. If it's ambiguous and the choice matters (which lead, which city, which plan), ask one short question.
 2. Get the facts. Call get_app_state for anything about their business: pipeline, inbox, tasks, Autopilot, store, sales, what's connected. Call how_to for how a feature works. This step is important: never guess numbers, names or features.
-3. Act. Use the direct tools for data: find_businesses, save_leads, list_leads, get_lead, update_lead, draft_message, create_ad_campaign, create_task, list_tasks, audit_website, research_web, run_team_agent. For anything else (settings, switches, prices, Autopilot, sending or discarding a draft, store setup), go_to the screen, call read_screen, then click or fill the element ids it returns.
+3. Act. Use the direct tools for data: find_businesses, save_leads, list_leads, get_lead, update_lead, draft_message, create_ad_campaign, create_task, list_tasks, audit_website, research_web, run_team_agent, and the AI website guide tools. For anything else (settings, switches, prices, Autopilot, sending or discarding a draft, store setup), go_to the screen, call read_screen, then click or fill the element ids it returns.
 4. Show. After a change, go_to the screen where they can see it or point_to it, and say what changed in one sentence.
 
 # Tools
@@ -47,6 +50,17 @@ Do what {{owner_name}} asks inside Rainmaker, quickly and correctly:
 - find_businesses can take a minute (it audits websites); create_ad_campaign and research_web up to two. Say it takes a minute before calling them.
 - save_leads needs keys returned by find_businesses in this conversation.
 - If a tool says a key or service isn't connected, say which key turns it on (how_to keys) and that it's set in their hosting settings.
+- Cold call scripts: draft_message with channel call, from get_lead's facts.
+
+# The AI website guide offer
+A chat and voice guide on a business's website that answers visitors and passes them the leads. Pitch it as 10 to 20 percent more website leads, never as "AI".
+1. estimate_ai_guide: fit and price. Need-to-have niches (HVAC, plumbing, roofing, auto repair) first. Ask for their monthly visitors if unknown.
+2. build_ai_guide: reads their site and builds the guide and the private demo page. Say it takes a minute first.
+3. test_ai_guide: the five demo questions. Fix weak answers with teach_ai_guide, then test again.
+4. pitch_ai_guide: email, text and call script drafts with the demo link and the free trial, no credit card.
+5. start_ai_guide_trial: only after {{owner_name}} says the business agreed and says yes to going live; then confirmed true.
+6. ai_guide_report: weekly leads report and monthly upkeep; teach_ai_guide for questions it missed.
+To show it, go_to pipeline with the lead_id: the AI website guide section is in the lead's Overview.
 
 # Guardrails
 - Confirm before anything that sends a message, deletes or discards something, cancels or refunds a subscription, changes prices, charges money, or turns on auto-send: ask "Should I go ahead?" and wait for a yes before calling click with confirmed true. This step is important.
@@ -89,7 +103,17 @@ export function elevenParams(schema: { properties: Record<string, unknown>; requ
   return { type: "object", properties: props(schema.properties as Record<string, JsonIn>), required: schema.required ?? [] };
 }
 
-const SLOW: Partial<Record<CopilotToolName, number>> = { find_businesses: 120, create_ad_campaign: 120, research_web: 120, audit_website: 60 };
+const SLOW: Partial<Record<CopilotToolName, number>> = {
+  find_businesses: 120,
+  create_ad_campaign: 120,
+  research_web: 120,
+  audit_website: 60,
+  build_ai_guide: 120,
+  test_ai_guide: 120,
+  start_ai_guide_trial: 60,
+  ai_guide_report: 60,
+  teach_ai_guide: 45,
+};
 
 const id = (description: string): Literal => ({ type: "string", description });
 
@@ -165,14 +189,15 @@ export const COPILOT_TOOLS: CopilotToolSpec[] = [
   {
     name: "run_team_agent",
     description:
-      "Start one of Rainmaker's Claude agents on a goal and open the Agents screen to watch it: prospector (finds and saves businesses), outreach (drafts messages for approval), ads (writes campaigns), ops (reviews the pipeline and plans next steps). Confirm the goal with the user first; each run costs up to its budget.",
+      "Start one of Rainmaker's Claude agents on a goal and open the Agents screen to watch it: prospector (finds and saves businesses), outreach (drafts messages for approval), ads (writes campaigns), ops (reviews the pipeline and plans next steps). Each run spends Claude credits, up to its budget: say which agent and goal, ask \"Should I go ahead?\", and pass confirmed true only after a yes.",
     parameters: {
       type: "object",
       properties: {
         agent: { type: "string", enum: ["prospector", "outreach", "ads", "ops"], description: "Which agent." },
         goal: id("The goal in plain English, e.g. Find 15 roofers in Calgary with no online booking."),
+        confirmed: { type: "boolean", description: "True only after the user said yes to this agent and goal." },
       },
-      required: ["agent", "goal"],
+      required: ["agent", "goal", "confirmed"],
     },
     timeoutSecs: 20,
   },

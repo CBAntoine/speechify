@@ -102,6 +102,16 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
       unfinished_checkouts: sales.pending,
       recent_orders: db.orders.slice(0, 5).map((o) => ({ order_id: o.id, client: o.business ?? o.name ?? o.email ?? null, product: o.offerName, status: o.status, amount: o.amount, interval: o.interval, onboarding: o.fulfillment?.status ?? null })),
     },
+    ai_website_guides: (() => {
+      const withGuide = db.leads.filter((l) => l.guide);
+      return {
+        built: withGuide.length,
+        live_trials: withGuide
+          .filter((l) => l.guide?.trial)
+          .map((l) => ({ lead_id: l.id, business: l.name, domain: l.guide!.trial!.domain, trial_ends: l.guide!.trial!.endsAt.slice(0, 10) })),
+        demos_not_yet_pitched_or_live: withGuide.filter((l) => !l.guide?.trial).slice(0, 8).map((l) => ({ lead_id: l.id, business: l.name, stage: l.stage, tested: Boolean(l.guide?.testedAt) })),
+      };
+    })(),
     ad_campaigns: { total: db.campaigns.length, latest: db.campaigns.slice(0, 3).map((c) => ({ campaign_id: c.id, business: c.businessName, made: ago(c.createdAt, now) })) },
     agent_runs: db.runs.slice(0, 3).map((r) => ({ run_id: r.id, agent: r.agentId, goal: r.goal.slice(0, 140), status: r.status, started: ago(r.startedAt, now) })),
     recent_activity: db.activity.slice(0, 8).map((a) => `${ago(a.at, now)}: ${a.text}`),

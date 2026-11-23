@@ -62,6 +62,13 @@ export const COPILOT_CRM_TOOLS = [
   "list_tasks",
   "audit_website",
   "research_web",
+  "estimate_ai_guide",
+  "build_ai_guide",
+  "test_ai_guide",
+  "pitch_ai_guide",
+  "start_ai_guide_trial",
+  "ai_guide_report",
+  "teach_ai_guide",
 ] as const;
 export type CopilotCrmTool = (typeof COPILOT_CRM_TOOLS)[number];
 export type CopilotToolName = (typeof COPILOT_UI_TOOLS)[number] | CopilotCrmTool;

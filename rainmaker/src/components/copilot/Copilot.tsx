@@ -46,10 +46,30 @@ const CRM_LABEL: Record<CopilotCrmTool, (p: Params) => string> = {
   list_tasks: () => "Reading your tasks",
   audit_website: (p) => `Checking ${str(p.url)}`,
   research_web: () => "Researching the web",
+  estimate_ai_guide: () => "Sizing the AI website guide offer",
+  build_ai_guide: () => "Reading their website and building the AI guide (about a minute)",
+  test_ai_guide: () => "Testing the AI guide's five demo questions",
+  pitch_ai_guide: () => "Writing the AI guide pitch for your approval",
+  start_ai_guide_trial: () => "Putting the AI guide on their website",
+  ai_guide_report: () => "Reading the AI guide's conversations",
+  teach_ai_guide: () => "Teaching the AI guide",
 };
 
 /** Tools that change data: the screen refreshes after them. */
-const MUTATES = new Set<CopilotCrmTool>(["save_leads", "update_lead", "draft_message", "create_ad_campaign", "create_task", "audit_website"]);
+const MUTATES = new Set<CopilotCrmTool>([
+  "save_leads",
+  "update_lead",
+  "draft_message",
+  "create_ad_campaign",
+  "create_task",
+  "audit_website",
+  "estimate_ai_guide",
+  "build_ai_guide",
+  "test_ai_guide",
+  "pitch_ai_guide",
+  "start_ai_guide_trial",
+  "teach_ai_guide",
+]);
 
 function friendly(msg: string): string {
   if (/permission|notallowed|microphone|getUserMedia/i.test(msg)) return "Your microphone is blocked. Allow it in the browser, or type instead.";
@@ -104,6 +124,9 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastPath = useRef(path);
+  /** Set when the mic is pressed during a typed chat: start a voice call once it ends. */
+  const switchToVoice = useRef(false);
+  const beginRef = useRef<(m: "voice" | "text") => Promise<void>>(async () => undefined);
   const connected = status === "connected";
   const connecting = busy || status === "connecting";
 
@@ -202,6 +225,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
       const agentId = str(p.agent);
       const goal = str(p.goal);
       if (!agentId || !goal) return "Needs an agent and a goal.";
+      if (p.confirmed !== true) return "Not started. Each run spends Claude credits: tell the user the agent and goal, ask \"Should I go ahead?\", and call again with confirmed true after a yes.";
       const r = await fetch("/api/agents/runs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, goal }) }).catch(() => null);
       const data = (await r?.json().catch(() => ({}))) as { run?: { id: string }; error?: string } | undefined;
       if (!r?.ok || !data?.run) return `Couldn't start it: ${data?.error ?? "the request failed"}.`;
@@ -245,6 +269,13 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   useConversationClientTool("list_tasks", (p: Params) => crm("list_tasks", p));
   useConversationClientTool("audit_website", (p: Params) => crm("audit_website", p));
   useConversationClientTool("research_web", (p: Params) => crm("research_web", p));
+  useConversationClientTool("estimate_ai_guide", (p: Params) => crm("estimate_ai_guide", p));
+  useConversationClientTool("build_ai_guide", (p: Params) => crm("build_ai_guide", p));
+  useConversationClientTool("test_ai_guide", (p: Params) => crm("test_ai_guide", p));
+  useConversationClientTool("pitch_ai_guide", (p: Params) => crm("pitch_ai_guide", p));
+  useConversationClientTool("start_ai_guide_trial", (p: Params) => crm("start_ai_guide_trial", p));
+  useConversationClientTool("ai_guide_report", (p: Params) => crm("ai_guide_report", p));
+  useConversationClientTool("teach_ai_guide", (p: Params) => crm("teach_ai_guide", p));
 
   /** Without the AI: open screens and answer from the guide. */
   const answerLocally = useCallback(
@@ -285,7 +316,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
       setBusy(true);
       try {
         const res = await fetch("/api/copilot/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: nextMode }) });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; auth?: { conversationToken: string } | { signedUrl: string } };
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; briefing?: string; auth?: { conversationToken: string } | { signedUrl: string } };
         if (!res.ok || !data.ok || !data.auth) {
           setNotice(data.error ?? "The copilot isn't available right now.");
           const t = pendingText.current;
@@ -306,6 +337,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
             agency_name: agencyName || "your agency",
             today: new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
             current_screen: screenForPath(window.location.pathname).label,
+            briefing: data.briefing || "I'm your Rainmaker copilot.",
           },
           onConnect: () => {
             push("system", nextMode === "voice" ? "Connected. Start talking." : "Connected.");
@@ -321,6 +353,12 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
           },
           onDisconnect: () => {
             setMode(null);
+            if (switchToVoice.current) {
+              switchToVoice.current = false;
+              push("system", "Switching to voice…");
+              window.setTimeout(() => void beginRef.current("voice"), 250);
+              return;
+            }
             push("system", "Conversation ended.");
           },
           onError: (msg: string) => {
@@ -336,6 +374,9 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
     },
     [agencyName, answerLocally, ownerName, push, sendUserMessage, startSession]
   );
+  useEffect(() => {
+    beginRef.current = begin;
+  }, [begin]);
 
   const ask = useCallback(
     async (text: string) => {
@@ -363,12 +404,20 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
     sendContextualUpdate(`The user is now on the ${screenForPath(path).label} screen (${path}).`);
   }, [connected, path, sendContextualUpdate]);
 
+  const close = useCallback(() => {
+    switchToVoice.current = false;
+    if (connected) endSession();
+    setOpen(false);
+  }, [connected, endSession]);
+
   // Ctrl/Cmd+K, or the Copilot buttons in the sidebar and phone top bar.
+  // Closing hangs up, so the mic never stays on behind a closed panel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (open) close();
+        else setOpen(true);
       }
     };
     const onOpen = () => setOpen(true);
@@ -378,7 +427,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener(OPEN_EVENT, onOpen);
     };
-  }, []);
+  }, [close, open]);
   useEffect(() => {
     if (open) window.setTimeout(() => inputRef.current?.focus(), 60);
   }, [open]);
@@ -404,11 +453,6 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [lines, notice, working]);
-
-  const close = () => {
-    if (connected) endSession();
-    setOpen(false);
-  };
 
   const statusText = connecting
     ? "Connecting…"
@@ -515,7 +559,18 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
               {isMuted ? <MicOff size={17} /> : <Mic size={17} />}
             </button>
           ) : (
-            <button type="button" className="cp-mic" onClick={() => (connected ? endSession() : void begin("voice"))} disabled={connecting} aria-label="Talk by voice" title="Talk by voice">
+            <button
+              type="button"
+              className="cp-mic"
+              onClick={() => {
+                if (!connected) return void begin("voice");
+                switchToVoice.current = true;
+                endSession();
+              }}
+              disabled={connecting}
+              aria-label="Talk by voice"
+              title="Talk by voice"
+            >
               <Mic size={17} />
             </button>
           ))}

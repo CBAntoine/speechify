@@ -1,5 +1,6 @@
 import "server-only";
-import { DEFAULT_COPILOT_AGENT_ID } from "@/lib/config";
+import { createHash } from "node:crypto";
+import { DEFAULT_COPILOT_AGENT_ID, elevenEnabled } from "@/lib/config";
 import { COPILOT_DYNAMIC_DEFAULTS, COPILOT_FIRST_MESSAGE, COPILOT_PROMPT, COPILOT_TOOLS } from "@/lib/copilot/spec";
 import { readDb, update } from "@/lib/store";
 import { PRIVATE_TEXT_OK, syncClientAgent } from "./agent-sync";
@@ -31,6 +32,26 @@ function agentBody(toolIds: string[]) {
   };
 }
 
+/** Fingerprint of the copilot's prompt, settings and tools as this code defines them. */
+export function copilotSpecHash(): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ body: agentBody([]), tools: COPILOT_TOOLS }))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
+ * Sync the copilot when the code has changed since the last sync (a new
+ * deploy with new tools or instructions), so nobody has to press Sync. A
+ * failed sync keeps the agent as it was.
+ */
+export async function ensureCopilotSynced(agencyName: string): Promise<void> {
+  if (!elevenEnabled()) return;
+  const db = await readDb();
+  if (db.copilot?.hash === copilotSpecHash()) return;
+  await syncCopilot(agencyName).catch((err) => console.error("[rainmaker] copilot auto-sync", err));
+}
+
 export async function syncCopilot(agencyName: string): Promise<{ agentId: string; created: boolean; tools: number }> {
   const db = await readDb();
   const res = await syncClientAgent({
@@ -42,7 +63,7 @@ export async function syncCopilot(agencyName: string): Promise<{ agentId: string
     create: { name: `${agencyName} – Rainmaker Copilot`, tags: ["rainmaker", "copilot", "crm"] },
   });
   await update((d) => {
-    d.copilot = { agentId: res.agentId, toolIds: res.toolIds, syncedAt: new Date().toISOString() };
+    d.copilot = { agentId: res.agentId, toolIds: res.toolIds, syncedAt: new Date().toISOString(), hash: copilotSpecHash() };
   });
   return { agentId: res.agentId, created: res.created, tools: COPILOT_TOOLS.length };
 }

@@ -3119,3 +3119,88 @@ details[open] > .niche-summary .chev {
     border-radius: 22px 22px 0 0;
   }
 }
+
+/* ── AI website guide panel (lead drawer) ─────────────────── */
+
+.guide-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.guide-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.guide-step-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.guide-roi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.guide-roi > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+
+.guide-roi b {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+
+.guide-roi span {
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.guide-qs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+}
+
+.guide-answer {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.guide-answer svg {
+  display: inline;
+  vertical-align: -2px;
+  color: var(--good);
+}
+
+.guide-answer.unsure svg {
+  color: var(--warm);
+}
+
+.guide-leads {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}

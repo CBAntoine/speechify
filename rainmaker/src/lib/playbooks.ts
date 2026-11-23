@@ -11,6 +11,8 @@ export interface Playbook {
   script?: string;
   action: { label: string; href: string };
   sources: { text: string; url: string }[];
+  /** A play from the owner's own notes rather than research: shown as such, with no sources. */
+  own?: boolean;
 }
 
 export const PLAYBOOKS: Playbook[] = [
@@ -50,6 +52,24 @@ export const PLAYBOOKS: Playbook[] = [
       { text: "Observation → pain → proof → call to action", url: "https://www.lemlist.com/blog/how-to-write-a-cold-email-that-sells-smma" },
       { text: "Keep it under ~80 words", url: "https://prospeo.io/s/cold-email-for-smma" },
     ],
+  },
+  {
+    id: "website-ai-guide",
+    title: "AI website guide, free trial",
+    tag: "An offer that sells itself in the demo",
+    why: "Put a chat and voice guide on a local business's website that answers visitors and passes the owner their name and number. Pitch more website leads, not AI. Planning numbers to check against your own trials: about 5% of visitors talk to the guide and 2.5% leave their details. Need-to-have businesses (HVAC, plumbing, roofing, auto repair) convert best; want-to-have ones (med spas) least.",
+    steps: [
+      "Pick need-to-have businesses with real traffic: check Semrush or Similarweb, then ask to see their Google Analytics. Enter the visitors on the lead to get the leads and the price ($300 a month for small sites, up to $4,000+).",
+      "Open the lead and press Build AI guide: it reads their site into a knowledge base and builds the guide and a demo page, a one-page copy of their site with the guide above the fold. If the site blocks automated reading, paste the details instead.",
+      "Test the five demo questions before you show it, fix weak answers, and print the demo page with its link highlighted.",
+      "Write the pitch (email, text and call script), then offer it free on their site for 2 to 4 weeks, no credit card.",
+      "Start the trial, send them the two lines of embed code, and send the leads report after a week. At the end, move them to the retainer, plus a $1,000 to $5,000 setup fee for big sites (or $200 an hour).",
+      "Every month, load the report and add answers to the questions it missed: 1 to 2 hours for small clients, more for big ones.",
+    ],
+    script: "I help local businesses get 10 to 20 percent more leads from the traffic they already have. I built a guide for your website from your own pages: ask it what your customers ask. I'll put it on your site free for four weeks, no credit card, and you'll see every lead it captures.",
+    action: { label: "Open a lead to build one", href: "/pipeline" },
+    sources: [],
+    own: true,
   },
   {
     id: "sample-ads",
