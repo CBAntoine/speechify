@@ -1,0 +1,194 @@
+[
+  {
+    "type": "client",
+    "name": "get_overview",
+    "description": "The big picture right now: mode (practice, real money or demo), whether the bot is running or stopped by a safety limit, the bot's money (total, cash, invested, since start, today, drop from peak), every position with its stop, every market with the bot's view, the risk level and any orders waiting for approval on screen. Use for 'how am I doing', 'what's happening', 'status'.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": { "type": "object", "properties": {}, "required": [] }
+  },
+  {
+    "type": "client",
+    "name": "get_positions",
+    "description": "What the bot holds right now: each position's amount, value, buy price, current price, gain or loss, and its protective stop.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": { "type": "object", "properties": {}, "required": [] }
+  },
+  {
+    "type": "client",
+    "name": "get_trades",
+    "description": "Finished trades (buy then sell, with result after fees and why it sold) and recent orders with the reason for each. Optionally for one market.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string", "description": "Optional market to filter by, as the person said it (e.g. 'bitcoin', 'ETH', 'apple'). Leave out for all markets." },
+        "limit": { "type": "integer", "description": "How many to return, 1 to 50. Default 10." }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "get_activity",
+    "description": "The bot's recent activity feed, newest first: trades, stops, safety stops, markets turning bullish or bearish, settings changes, errors.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "limit": { "type": "integer", "description": "How many events, 1 to 60. Default 12." },
+        "kind": { "type": "string", "description": "Optional filter.", "enum": ["trade", "signal", "breaker", "daily-limit", "error", "warning", "start", "pause", "settings", "connect", "backtest", "mode"] }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "get_market",
+    "description": "One market in detail: price, 24-hour change, the bot's view (bullish, neutral or bearish, with a score from -1 to +1), the market mood (trending, choppy, volatile), the plain-English reasons, each expert's opinion and how much say it has, whether the bot holds it and where the stop is, and when the bot decides next. Use for 'what do you think of X', 'should the bot buy X', 'why isn't it buying X'.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string", "description": "The market, as the person said it: a name or ticker such as 'bitcoin', 'ETH', 'SOL/USD', 'apple', 'NVDA', 'S&P 500'." }
+      },
+      "required": ["symbol"]
+    }
+  },
+  {
+    "type": "client",
+    "name": "explain_decision",
+    "description": "Why the bot did or didn't do something. With a symbol: why it's holding, about to sell, or not buying that market. With a trade_id (from get_trades): the story of that trade from buy to sell. With neither: the most recent order and why it was placed.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string", "description": "Optional market name or ticker." },
+        "trade_id": { "type": "string", "description": "Optional trade id from get_trades." }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "run_backtest",
+    "description": "Test the bot on past prices: replays history through the same code that trades, with the exchange's fees, and compares with simply buying and holding. Returns the result, the worst dip, trade stats and a Monte Carlo range of one-year outcomes. If it returns status 'running', tell the person it's working and call get_backtest when the app says it finished. Test crypto and stocks separately.",
+    "expects_response": true,
+    "response_timeout_secs": 30,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "symbols": { "type": "string", "description": "Markets to test, comma separated, as the person said them (e.g. 'bitcoin, ethereum'). Leave out to test the bot's current markets." },
+        "days": { "type": "integer", "description": "How far back to test, in days (60 to 1095). Default 365." },
+        "risk": { "type": "string", "description": "Risk level to test. Default: the current one.", "enum": ["careful", "balanced", "bold"] }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "get_backtest",
+    "description": "Results of a backtest that was still running (or the latest test if no job_id is given).",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "job_id": { "type": "string", "description": "The job_id from run_backtest or from the app's update message." }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "control_bot",
+    "description": "Start, pause, resume (after a safety stop) or sell everything. 'pause' happens immediately. 'start'/'resume' with real money and 'sell_all' first return needsConfirmation with a summary and confirm_token: read the summary to the person, and only after a clear yes call again with the same action and that confirm_token.",
+    "expects_response": true,
+    "response_timeout_secs": 60,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "description": "What to do.", "enum": ["start", "pause", "resume", "sell_all"] },
+        "confirm_token": { "type": "string", "description": "Only after the person said yes to the summary: the confirm_token from the previous call. Never invent one." }
+      },
+      "required": ["action"]
+    }
+  },
+  {
+    "type": "client",
+    "name": "set_risk",
+    "description": "Change how bold the bot is: careful (small positions, safety stop at a 12% drop), balanced (default, 20%) or bold (bigger positions, 35%). Lowering risk happens immediately; raising it returns needsConfirmation first.",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "level": { "type": "string", "description": "The new risk level.", "enum": ["careful", "balanced", "bold"] },
+        "confirm_token": { "type": "string", "description": "Only after the person said yes to the summary: the confirm_token from the previous call." }
+      },
+      "required": ["level"]
+    }
+  },
+  {
+    "type": "client",
+    "name": "manage_markets",
+    "description": "Add a market for the bot to trade, or remove one (selling it first if held). Always returns needsConfirmation first: read the summary, get a clear yes, then call again with the confirm_token.",
+    "expects_response": true,
+    "response_timeout_secs": 60,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "description": "Add or remove.", "enum": ["add", "remove"] },
+        "symbol": { "type": "string", "description": "The market name or ticker, e.g. 'chainlink', 'XRP', 'nvidia', 'SPY'." },
+        "confirm_token": { "type": "string", "description": "Only after the person said yes to the summary: the confirm_token from the previous call." }
+      },
+      "required": ["action", "symbol"]
+    }
+  },
+  {
+    "type": "client",
+    "name": "place_order",
+    "description": "Buy a dollar amount of a market the bot trades, or sell some or all of a market it holds, at the market price. Always returns needsConfirmation first: read back exactly what will happen, get a clear yes, then call again with the same arguments and the confirm_token. With real money, the order then waits on the screen for the person to press Approve.",
+    "expects_response": true,
+    "response_timeout_secs": 60,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string", "description": "The market name or ticker." },
+        "side": { "type": "string", "description": "Buy or sell.", "enum": ["buy", "sell"] },
+        "amount_usd": { "type": "number", "description": "Dollar amount. Required to buy (at least 10). For a sell, leave out to sell all of it." },
+        "sell_everything_of_it": { "type": "boolean", "description": "For a sell: true to sell the whole position." },
+        "confirm_token": { "type": "string", "description": "Only after the person said yes to the summary: the confirm_token from the previous call." }
+      },
+      "required": ["symbol", "side"]
+    }
+  },
+  {
+    "type": "client",
+    "name": "get_setup",
+    "description": "How the app is set up: practice or real money, where practice prices come from, connected exchanges and their fees, the exchanges available, and how to connect one or switch to real money (which only the person can do, on the dashboard).",
+    "expects_response": true,
+    "response_timeout_secs": 15,
+    "parameters": { "type": "object", "properties": {}, "required": [] }
+  },
+  {
+    "type": "client",
+    "name": "show_on_screen",
+    "description": "Switch the dashboard to a page, and optionally show a market's chart. Use whenever the person wants to see something.",
+    "expects_response": true,
+    "response_timeout_secs": 10,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "view": { "type": "string", "description": "Which page: home (dashboard and charts), test (backtests), connect (exchanges and real money), settings.", "enum": ["home", "test", "connect", "settings"] },
+        "symbol": { "type": "string", "description": "Optional market to show on the home chart, e.g. 'bitcoin'." }
+      },
+      "required": ["view"]
+    }
+  }
+]

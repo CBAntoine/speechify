@@ -1,0 +1,22 @@
+{
+  "name": "kestrel-trading",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kestrel: a self-adapting trading bot you can talk to. Practice with pretend money or trade for real through Alpaca, Coinbase, Kraken and 100+ exchanges, with an ElevenLabs voice co-pilot that knows everything the bot is doing.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.mjs",
+    "demo": "node server.mjs --demo",
+    "backtest": "node scripts/backtest.mjs",
+    "test": "node --test --test-concurrency=1"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "1.35.0",
+    "ccxt": "4.5.91",
+    "lightweight-charts": "5.2.1"
+  }
+}

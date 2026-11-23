@@ -1,0 +1,5 @@
+# Your settings, exchange keys, ElevenLabs key, trade journal and price cache stay on your computer.
+.data/
+.data-demo/
+.env
+node_modules/
