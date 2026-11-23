@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dashcam_background">#FF0A0C10</color>
+    <color name="ic_launcher_background">#FF101318</color>
+    <color name="dashcam_amber">#FFFFC53D</color>
+    <color name="dashcam_red">#FFFF453A</color>
+</resources>

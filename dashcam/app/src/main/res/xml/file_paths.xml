@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Clips on the phone's primary storage. -->
+    <external-files-path
+        name="clips"
+        path="Dashcam/" />
+    <!-- Clips on a removable SD card live outside the primary volume. -->
+    <root-path
+        name="volumes"
+        path="storage/" />
+</paths>
