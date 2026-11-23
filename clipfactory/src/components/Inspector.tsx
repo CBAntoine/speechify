@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TOOL, type JobState, type ToolId } from "@/lib/types";
+import { fileUrl, TOOL, type JobState, type ToolId } from "@/lib/types";
 
 const AUDIO_TOOLS: ToolId[] = ["autoeditor", "demucs", "deepfilter", "f5tts"];
 
@@ -15,6 +15,7 @@ export function Inspector({ job, video }: { job: JobState | null; video: HTMLVid
   else if (job?.activeTool === "deepfilter" && l?.wave) body = <Denoise wave={l.wave} noise={l.noise} />;
   else if (job?.activeTool === "f5tts" && l?.dub) body = <Dub job={job} />;
   else if (job?.activeTool === "whisperx") body = <Transcript caption={l?.caption} t={l?.t} />;
+  else if (job?.activeTool === "shortsgen" && l?.sheet) body = <Watching job={job} sheet={l.sheet} tag={l.tag} />;
   else if (job?.activeTool === "shortsgen" || (job?.stage === "moment" && job.shorts.length && !job.activeTool)) body = <Scores job={job} />;
   else body = <Histogram video={video} />;
   return (
@@ -201,12 +202,33 @@ function Transcript({ caption, t }: { caption?: string; t?: number }) {
   );
 }
 
+/** Claude's second look: the contact sheet of the candidate it is rating. */
+function Watching({ job, sheet, tag }: { job: JobState; sheet: string; tag?: string }) {
+  return (
+    <div className="watching">
+      <img src={fileUrl(job.id, sheet)} alt="Six frames across the candidate clip" />
+      <span className="pill violet">{tag ?? "WATCHING"}</span>
+    </div>
+  );
+}
+
 function Scores({ job }: { job: JobState }) {
-  if (!job.shorts.length) return <div className="note">{job.live.tag ?? "Scoring every moment…"}</div>;
+  const audience = job.analysis.audience;
+  if (!job.shorts.length && !audience?.length) return <div className="note">{job.live.tag ?? "Scoring every moment…"}</div>;
   const shorts = [...job.shorts].sort((a, b) => a.start - b.start);
   const dur = job.source?.duration || 1;
+  // Where viewers reacted (replays, chat, comments), under the scores.
+  const curve = audience?.length
+    ? `M0,150 ${audience.map((v, i) => `L${((i / Math.max(1, audience.length - 1)) * 1000).toFixed(1)},${(150 - v * 110).toFixed(1)}`).join(" ")} L1000,150 Z`
+    : null;
   return (
     <svg viewBox="0 0 1000 170" preserveAspectRatio="none">
+      {curve && <path d={curve} fill="rgba(62,224,255,0.16)" stroke="rgba(62,224,255,0.6)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+      {curve && (
+        <text x={998} y={14} fill="rgba(62,224,255,0.8)" fontSize={11} textAnchor="end" fontFamily="JetBrains Mono Variable, monospace">
+          AUDIENCE · {(job.analysis.audienceSources ?? []).join(" · ")}
+        </text>
+      )}
       <line x1={0} x2={1000} y1={150} y2={150} stroke="rgba(255,255,255,0.15)" />
       {shorts.map((s) => {
         const x = (s.start / dur) * 1000;

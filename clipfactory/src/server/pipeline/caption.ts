@@ -1,14 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { COLORS, type Short } from "../../lib/types.ts";
+import { COLORS, type Short, type Word } from "../../lib/types.ts";
 import { FONTS } from "../paths.ts";
-import { ffmpeg, py } from "../proc.ts";
+import { ffmpeg, ffprobe, py } from "../proc.ts";
 import { buildAss, remapWords } from "./ass.ts";
 import type { Ctx } from "./ctx.ts";
-import { composeGraph, OUT_H, OUT_W, splitHeights } from "./layout.ts";
+import { bleepSpans, editPlan, isProfane, maskWord, planPunches, storyTime, stressedWords, teaserTrack } from "./edit.ts";
+import { composeGraph, OUT_H, OUT_W, sourceColor, splitHeights, type SourceColor } from "./layout.ts";
 import { frameAt } from "./media.ts";
-import { readTranscript } from "./moment.ts";
+import { readLevels, readTranscript } from "./moment.ts";
 import { sourcePath } from "./reframe.ts";
+import type { Cue } from "./sfx.ts";
 
 // Stage 05 · CAPTIONS — word-timed captions, batch.
 
@@ -17,13 +19,77 @@ export const FONT_NAME = "Anton";
 export const REPLAY_SPEED = 0.35;
 const REPLAY_BEFORE = 0.8;
 const REPLAY_AFTER = 0.7;
+/** Stressed caption words: a warm yellow next to the lime of the word being said. */
+export const STRESS = "#ffd426";
 
 export async function captionStage(c: Ctx, shorts: Short[] = c.s.shorts) {
   c.stage("caption");
   ensureFonts(c);
+  planEdits(c, shorts);
   await typeCaptions(c, shorts);
   await batch(c, shorts);
   c.endStage("caption");
+}
+
+/** What the export pass needs to finish the sound: where the effects land and what gets bleeped. */
+export interface EditNotes {
+  body: number;
+  teaser: number;
+  total: number;
+  cues: Cue[];
+  bleeps: [number, number][];
+}
+
+export function readEditNotes(c: Ctx, short: Short): EditNotes | null {
+  try {
+    return JSON.parse(fs.readFileSync(c.path("shorts", short.id, "edit.json"), "utf8")) as EditNotes;
+  } catch {
+    return null;
+  }
+}
+
+/** "what the fuck" → "what the f***". */
+export function maskText(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((tok) => (isProfane(tok) ? maskWord(tok) : tok))
+    .join("");
+}
+
+/** Source-time words of a short, with the ones that carry the moment marked. */
+function markedWords(words: Word[], short: Short): Word[] {
+  const inside = words.filter((w) => w.e > short.start - 0.5 && w.s < short.end + 0.5);
+  const stressed = stressedWords(inside, short.emphasis);
+  return inside.map((w, i) => (stressed.has(i) ? { ...w, em: true } : w));
+}
+
+// ── The edit: punch-ins, and clean titles when censoring ───────────────────
+
+function planEdits(c: Ctx, shorts: Short[]) {
+  const o = c.s.options;
+  const transcript = readTranscript(c);
+  const levels = readLevels(c);
+  for (const short of shorts) {
+    const sh = c.s.shorts.find((x) => x.id === short.id)!;
+    const plan = editPlan(sh);
+    const words = markedWords(transcript.words, sh);
+    const stressed = new Set(words.flatMap((w, i) => (w.em ? [i] : [])));
+    const punches = o.punchIns ? planPunches({ plan, keep: sh.keep, layout: sh.layout?.kind ?? "crop", climax: sh.replayAt, tenths: levels.tenths, words, stressed }) : [];
+    c.update((s) => {
+      const x = s.shorts.find((y) => y.id === sh.id)!;
+      x.punches = punches;
+      if (o.censor) {
+        x.title = maskText(x.title);
+        x.hook = maskText(x.hook);
+        x.description = maskText(x.description);
+        if (x.headline) x.headline = maskText(x.headline);
+      }
+    });
+    if (plan.teaser || punches.length) {
+      const bits = [plan.teaser ? `cold open ${plan.teaser.toFixed(1)} s` : "", punches.length ? `${punches.length} punch-in${punches.length === 1 ? "" : "s"}` : ""].filter(Boolean);
+      c.log(`${sh.id}: ${bits.join(", ")}`, "info", "remotion");
+    }
+  }
 }
 
 /** The caption font, copied into the job so FFmpeg can use a short relative path. */
@@ -37,6 +103,8 @@ export function ensureFonts(c: Ctx) {
 /** Where in the output the replay sits, and how long it is (0 = no replay). */
 export function replayPlan(c: Ctx, short: Short): { at: number; from: number; to: number; length: number } | null {
   if (!c.s.options.slowmo || short.replayAt === undefined) return null;
+  // A cold open already shows the payoff; showing it a third time drags.
+  if (editPlan(short).teaser) return null;
   let acc = 0;
   let outAt: number | null = null;
   for (const [a, b] of short.keep) {
@@ -76,13 +144,22 @@ async function typeCaptions(c: Ctx, shorts: Short[]) {
   for (const short of shorts) {
     c.check();
     const sh = c.s.shorts.find((x) => x.id === short.id)!;
-    const words = o.captions ? remapWords(transcript.words, sh.keep) : [];
-    const main = sh.keep.reduce((a, [x, y]) => a + (y - x), 0);
+    const plan = editPlan(sh);
     const replay = replayPlan(c, sh);
+    const total = plan.body + (replay?.length ?? 0);
+    // Words on the output timeline: the cold open's, then the story's.
+    const spoken = remapWords(markedWords(transcript.words, sh), plan.segs.map((g) => [g.a, g.b]));
+    const replayWords = replay
+      ? spoken.filter((w) => w.s >= replay.from && w.e <= replay.to).map((w) => ({ ...w, s: plan.body + (w.s - replay.from) / REPLAY_SPEED, e: plan.body + (w.e - replay.from) / REPLAY_SPEED }))
+      : [];
+    const bleeps = o.censor ? bleepSpans([...spoken, ...replayWords]) : [];
+    const shown = o.censor ? spoken.map((w) => (isProfane(w.w) ? { ...w, w: maskWord(w.w) } : w)) : spoken;
+    // The hook rides the cold open (and stays up long enough to read).
+    const hookUntil = plan.teaser >= 1.2 ? plan.teaser : Math.min(2.4, plan.body);
     const { captionY, hookY } = positions(c, sh);
     const ass = buildAss({
-      words,
-      duration: main + (replay?.length ?? 0),
+      words: o.captions ? shown : [],
+      duration: total,
       style: o.captionStyle,
       width: OUT_W,
       height: OUT_H,
@@ -90,21 +167,37 @@ async function typeCaptions(c: Ctx, shorts: Short[]) {
       hookY,
       font: FONT_NAME,
       accent: COLORS.LIME,
+      stress: STRESS,
       speakerColors: speakers,
       hook: o.hook ? sh.hook : undefined,
-      hookUntil: Math.min(2.4, main),
-      replay: replay ? { start: main, end: main + replay.length, label: "SLOW-MO REPLAY" } : undefined,
+      hookUntil,
+      replay: replay ? { start: plan.body, end: total, label: "SLOW-MO REPLAY" } : undefined,
+      title: o.titleBar ? { text: sh.headline || sh.title, from: 0, to: total, y: Math.round(OUT_H * 0.055) } : undefined,
+      progress: o.progressBar ? { color: COLORS.LIME } : undefined,
     });
     fs.writeFileSync(c.path("shorts", sh.id, "captions.ass"), ass);
-    const mid = words[Math.floor(words.length / 2)];
+
+    // Sound design cues: a whoosh into each cut of the edit, a hit under the payoff zoom.
+    const cues: Cue[] = [];
+    if (o.sfx) {
+      if (plan.teaser) cues.push({ at: plan.teaser, kind: "whoosh" });
+      else if (replay) cues.push({ at: plan.body, kind: "whoosh" });
+      const pay = (sh.punches ?? []).find((p) => p.why === "payoff");
+      if (pay) cues.push({ at: pay.s + 0.15, kind: "impact" });
+    }
+    const notes: EditNotes = { body: plan.body, teaser: plan.teaser, total, cues, bleeps };
+    fs.writeFileSync(c.path("shorts", sh.id, "edit.json"), JSON.stringify(notes));
+
+    const mid = shown[Math.floor(shown.length / 2)];
     c.live({ t: sh.start + (mid ? mid.s : 1), shortId: sh.id, caption: sh.hook });
     c.update((s) => {
       const x = s.shorts.find((y) => y.id === sh.id)!;
-      x.duration = Math.round((main + (replay?.length ?? 0)) * 100) / 100;
+      x.duration = Math.round(total * 100) / 100;
       x.status = "queued";
     });
   }
-  c.end("remotion", { note: o.captions ? `${o.captionStyle} captions${speakers ? ", coloured by speaker" : ""}` : "hook only" });
+  const extras = [o.titleBar && "title bar", o.progressBar && "progress bar", o.censor && "censored"].filter(Boolean).join(", ");
+  c.end("remotion", { note: `${o.captions ? `${o.captionStyle} captions${speakers ? ", coloured by speaker" : ""}` : "hook only"}${extras ? `, ${extras}` : ""}` });
 }
 
 // ── 13 Batch: render every plate, then the covers ───────────────────────
@@ -119,11 +212,27 @@ export function upscalePlan(c: Ctx): { plateW: number; plateH: number; factor: n
   return { plateW: OUT_W, plateH: OUT_H, factor: 1, outW: OUT_W, outH: OUT_H, ai: false };
 }
 
+/** How the source's colour gets to BT.709 SDR (probed once per job). */
+async function colorOf(c: Ctx): Promise<SourceColor> {
+  try {
+    const p = await ffprobe(sourcePath(c), c.signal);
+    const v = p.streams.find((st) => st.codec_type === "video");
+    return v ? sourceColor(v, c.m.ffmpegToneMap) : "bt709";
+  } catch {
+    return "bt709";
+  }
+}
+
+/** Every encode of ours says what it is, so players and YouTube don't guess. */
+export const BT709 = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"];
+
 async function batch(c: Ctx, shorts: Short[]) {
   const moviepy = Boolean(c.m.py.modules?.moviepy);
   c.begin("moviepy", moviepy ? "native" : "builtin", moviepy ? `FFmpeg plates + ${c.m.report.items.moviepy.engine} covers` : "FFmpeg plates + drawtext covers", `batch ×${shorts.length}`);
   const plan = upscalePlan(c);
   const src = c.s.source!;
+  const color = await colorOf(c);
+  if (color !== "bt709") c.log(color === "hdr" ? "HDR source: tone-mapping to SDR (BT.709)" : "SD source: converting BT.601 colour to BT.709", "info", "moviepy");
   // Sharpen when the crop is blown up a lot and no AI upscale follows.
   const sharpen = c.s.options.upscale !== "off" && !plan.ai && src.height < 900;
   const covers: { image: string; text: string; out: string; y: number }[] = [];
@@ -146,6 +255,7 @@ async function batch(c: Ctx, shorts: Short[]) {
       matteIn = `${audioIn === "1:a" ? 2 : 1}:v`;
     }
     const layout = sh.layout ?? { kind: "crop" as const, crop: { w: 0.316, h: 1 }, track: [{ t: 0, cx: 0.5, cy: 0.5 }], why: "" };
+    const edit = editPlan(sh);
     const graph = composeGraph({
       kind: layout.kind,
       srcW: src.width,
@@ -153,17 +263,20 @@ async function batch(c: Ctx, shorts: Short[]) {
       facecamShare: c.s.options.facecamShare,
       facecam: layout.facecam,
       crop: layout.crop,
-      track: layout.track,
-      segments: sh.keep.map(([a, b]) => [Math.max(0, a - sh.start), Math.min(span, b - sh.start)]),
+      track: teaserTrack(layout.track, edit, sh.keep),
+      segments: edit.segs.map((g) => [Math.max(0, g.a - sh.start), Math.min(span, g.b - sh.start)]),
       sharpen,
       audioIn,
       matteIn,
       fps: src.fps,
       outW: plan.plateW,
       outH: plan.plateH,
+      zooms: sh.punches,
+      flashAt: edit.teaser || undefined,
+      color,
     });
     fs.writeFileSync(path.join(dir, "plate.graph.txt"), graph);
-    const main = sh.keep.reduce((a, [x, y]) => a + (y - x), 0);
+    const main = edit.body;
     c.update((s) => {
       const x = s.shorts.find((y) => y.id === sh.id)!;
       x.status = "rendering";
@@ -177,7 +290,7 @@ async function batch(c: Ctx, shorts: Short[]) {
         "-filter_complex", graph,
         "-map", "[v]", ...(audioIn ? ["-map", "[a]"] : []),
         "-r", String(fpsOut),
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "15", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p", ...BT709,
         ...(audioIn ? ["-c:a", "flac", "-ar", "48000", "-ac", "2"] : []),
         path.join(dir, "plate.mkv"),
       ],
@@ -191,8 +304,9 @@ async function batch(c: Ctx, shorts: Short[]) {
           }),
       },
     );
-    const replay = replayPlan(c, sh);
-    const coverAt = replay ? replay.at : Math.min(main / 2, 3);
+    // The cover is the payoff frame: in the cold open, or where the story reaches it.
+    const climax = sh.replayAt !== undefined ? storyTime(sh.keep, sh.replayAt) : null;
+    const coverAt = edit.teaser ? edit.teaser * 0.55 : climax !== null ? Math.min(main - 0.1, climax + 0.1) : Math.min(main / 2, 3);
     await frameAt(path.join(dir, "plate.mkv"), coverAt, path.join(dir, "frame.jpg"), plan.plateW, c.signal);
     covers.push({ image: path.join(dir, "frame.jpg"), text: sh.hook, out: path.join(dir, "cover.jpg"), y: sh.layout?.kind === "split" ? splitHeights(c.s.options.facecamShare).top / OUT_H : 0.3 });
     c.update((s) => {

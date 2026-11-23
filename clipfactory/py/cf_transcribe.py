@@ -1,7 +1,7 @@
 """03 Transcribe: word-level transcript.
 
     python cf_transcribe.py --audio audio16k.wav --out transcript.json
-        [--engine auto|whisperx|faster-whisper|whisper] [--model small] [--language en]
+        [--engine auto|whisperx|faster-whisper|whisper] [--model small] [--language en] [--no-diarize]
 
 auto tries WhisperX, then faster-whisper, then OpenAI Whisper.
 Writes {"engine","language","words":[{"w","s","e"}],"segments":[{"s","e","text"}]}.
@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cf_common import emit, fail, log, progress, result, torch_device  # noqa: E402
 
 ENGINES = ["whisperx", "faster-whisper", "whisper"]
+DIARIZE = True
 MODULE = {"whisperx": "whisperx", "faster-whisper": "faster_whisper", "whisper": "whisper"}
 
 
@@ -81,7 +82,8 @@ def run_whisperx(path, model_name, language, device, duration):
         out = whisperx.align(out["segments"], align_model, meta, audio, dev, return_char_alignments=False)
     except Exception as err:  # no alignment model for this language
         log(f"WhisperX alignment unavailable ({err}); using segment timings")
-    out = diarize(whisperx, audio, out, dev)
+    if DIARIZE:
+        out = diarize(whisperx, audio, out, dev)
     raw, segments = [], []
     for seg in out["segments"]:
         segments.append({"s": round(seg["start"], 3), "e": round(seg["end"], 3), "text": seg.get("text", "").strip()})
@@ -148,7 +150,10 @@ def main():
     ap.add_argument("--model", default="")
     ap.add_argument("--language", default="")
     ap.add_argument("--duration", type=float, default=0)
+    ap.add_argument("--no-diarize", action="store_true", help="skip speaker labels (the caller already has them)")
     args = ap.parse_args()
+    global DIARIZE
+    DIARIZE = not args.no_diarize
 
     order = ENGINES if args.engine == "auto" else [args.engine]
     available = [e for e in order if importlib.util.find_spec(MODULE[e]) is not None]

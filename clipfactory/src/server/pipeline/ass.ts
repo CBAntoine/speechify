@@ -18,10 +18,16 @@ export interface CaptionPlan {
   accent: string;
   /** Highlight colour per speaker ("who's talking"); speaker 0 uses the first. */
   speakerColors?: string[];
+  /** Colour of stressed words (Word.em), which stay lit for the whole page. */
+  stress?: string;
   hook?: string;
   hookUntil?: number;
   /** Output-time span of the slow-motion replay, which gets a tag instead of captions. */
   replay?: { start: number; end: number; label: string };
+  /** A headline in a white box across the top. */
+  title?: { text: string; from: number; to: number; y: number };
+  /** A thin bar along the top edge that fills up over the short. */
+  progress?: { color: string };
 }
 
 export interface Page {
@@ -119,6 +125,8 @@ export function buildAss(plan: CaptionPlan): string {
     `Style: Word,${font},${size},${white},${accent},${black},${shadow},0,0,0,0,100,100,1,0,1,${outline},3,5,60,60,0,1`,
     `Style: Hook,${font},${hookSize},${white},${accent},${black},${shadow},0,0,0,0,100,100,1,0,1,10,4,5,50,50,0,1`,
     `Style: Tag,${font},${Math.round(W * 0.05)},${black},${black},${accent},${shadow},0,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1`,
+    `Style: Title,${font},${Math.round(W * 0.074)},${black},${black},${white},${assColor("#000000", 0xa0)},0,0,0,0,100,100,1,0,3,${Math.round(W * 0.02)},0,8,60,60,0,1`,
+    `Style: Bar,${font},20,${white},${white},${black},${black},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -137,15 +145,29 @@ export function buildAss(plan: CaptionPlan): string {
   }
 
   if (plan.replay) {
-    ev(3, plan.replay.start, plan.replay.end, "Tag", `{\\pos(${cx},${Math.round(H * 0.07)})}${assText(plan.replay.label)}`);
+    ev(3, plan.replay.start, plan.replay.end, "Tag", `{\\pos(${cx},${Math.round(H * (plan.title ? 0.2 : 0.07))})}${assText(plan.replay.label)}`);
+  }
+
+  if (plan.title && plan.title.text.trim()) {
+    const text = assText(plan.title.text).toUpperCase();
+    ev(4, plan.title.from, plan.title.to, "Title", `{\\pos(${cx},${plan.title.y})\\fad(180,0)}${lineBreak(text.split(" "), 22)}`);
+  }
+
+  if (plan.progress && plan.duration > 1) {
+    const h = Math.max(6, Math.round(H * 0.0055));
+    const bar = `m 0 0 l ${W} 0 ${W} ${h} 0 ${h}`;
+    ev(5, 0, plan.duration, "Bar", `{\\an7\\pos(0,0)\\1c${black}\\1a&H80&\\p1}${bar}{\\p0}`);
+    ev(6, 0, plan.duration, "Bar", `{\\an7\\pos(0,0)\\1c${assColor(plan.progress.color)}\\fscx0\\t(0,${Math.round(plan.duration * 1000)},\\fscx100)\\p1}${bar}{\\p0}`);
   }
 
   const words = plan.words.filter((w) => w.s >= hookUntil - 0.05 && w.e <= plan.duration + 0.05 && !(plan.replay && w.s >= plan.replay.start));
+  const stress = plan.stress ? assColor(plan.stress) : null;
+  const lit = (t: string, w: Word) => (stress && w.em ? `{\\c${stress}}${t}{\\c${white}}` : t);
   for (const page of paginate(words)) {
     const tokens = page.words.map((w) => assText(upper ? w.w.toUpperCase() : w.w));
     const end = plan.replay ? Math.min(page.e, plan.replay.start) : page.e;
     if (style === "clean") {
-      ev(1, page.s, end, "Word", `{\\pos(${cx},${plan.captionY})}${lineBreak(tokens)}`);
+      ev(1, page.s, end, "Word", `{\\pos(${cx},${plan.captionY})}${joinWithBreak(tokens.map((t, k) => lit(t, page.words[k])), tokens)}`);
       continue;
     }
     page.words.forEach((w, i) => {
@@ -153,9 +175,11 @@ export function buildAss(plan: CaptionPlan): string {
       const e = i === page.words.length - 1 ? end : page.words[i + 1].s;
       const parts = tokens.map((t, k) => {
         const color = speakerAccent(page.words[k]);
-        if (style === "karaoke") return k <= i ? `{\\c${color}}${t}{\\c${white}}` : t;
-        if (k !== i) return t;
-        return `{\\c${color}\\fscx112\\fscy112\\t(0,110,\\fscx100\\fscy100)}${t}{\\c${white}\\fscx100\\fscy100}`;
+        if (style === "karaoke") return k <= i ? `{\\c${color}}${t}{\\c${white}}` : lit(t, page.words[k]);
+        if (k !== i) return lit(t, page.words[k]);
+        // The word being said pops; a stressed one pops harder.
+        const pop = page.words[k].em ? 124 : 112;
+        return `{\\c${color}\\fscx${pop}\\fscy${pop}\\t(0,${page.words[k].em ? 150 : 110},\\fscx100\\fscy100)}${t}{\\c${white}\\fscx100\\fscy100}`;
       });
       // First word of a page slides up a touch as the page appears.
       const enter = i === 0 ? `\\move(${cx},${plan.captionY + 18},${cx},${plan.captionY},0,90)` : `\\pos(${cx},${plan.captionY})`;
@@ -173,7 +197,7 @@ function joinWithBreak(parts: string[], plain: string[]): string {
   return `${parts.slice(0, firstLine).join(" ")}\\N${parts.slice(firstLine).join(" ")}`;
 }
 
-/** Map source-time words into output time, given the kept source ranges in order. */
+/** Map source-time words into output time, given the source ranges in output order (a cold open first, then the kept ranges). */
 export function remapWords(words: Word[], keep: [number, number][]): Word[] {
   const out: Word[] = [];
   let offset = 0;
@@ -184,7 +208,7 @@ export function remapWords(words: Word[], keep: [number, number][]): Word[] {
       const e = Math.min(w.e, b);
       // Words chopped mostly away by a cut are dropped.
       if (e - s < Math.min(0.08, (w.e - w.s) * 0.5)) continue;
-      out.push({ w: w.w, s: Math.round((s - a + offset) * 1000) / 1000, e: Math.round((e - a + offset) * 1000) / 1000, ...(w.sp !== undefined ? { sp: w.sp } : {}) });
+      out.push({ w: w.w, s: Math.round((s - a + offset) * 1000) / 1000, e: Math.round((e - a + offset) * 1000) / 1000, ...(w.sp !== undefined ? { sp: w.sp } : {}), ...(w.em ? { em: true } : {}) });
     }
     offset += b - a;
   }

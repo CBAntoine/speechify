@@ -5,6 +5,7 @@ import { pythonExe } from "../paths.ts";
 import { ffmpeg, py, run } from "../proc.ts";
 import { claudeEnabled, describeError, translateLines } from "./claude.ts";
 import type { Ctx } from "./ctx.ts";
+import { editPlan } from "./edit.ts";
 import { atempoChain } from "./layout.ts";
 import { audioLevels, envelope } from "./media.ts";
 import { readTranscript } from "./moment.ts";
@@ -213,18 +214,21 @@ async function dubs(c: Ctx, shorts: Short[], split: boolean) {
   const transcript = readTranscript(c);
   const lang0 = transcript.language || "en";
   for (const short of shorts) {
-    const lines = shortLines(transcript, c.s.shorts.find((x) => x.id === short.id)!.keep);
-    if (!lines.length) continue;
+    const sh = c.s.shorts.find((x) => x.id === short.id)!;
+    const plan = editPlan(sh);
+    const story = shortLines(transcript, sh.keep);
+    if (!story.length) continue;
     const done: string[] = [];
-    // Voice reference: the first ~8 s of clean speech in this moment.
+    // Voice reference: the first ~8 s of clean speech in this moment (voice_clean.wav is the whole window).
     const ref = sdir(c, short, "dub_ref.wav");
-    const refEnd = Math.min(lines[0].s + 8, lines[lines.length - 1].e);
-    const refText = lines.filter((l) => l.e <= refEnd + 0.5).map((l) => l.text).join(" ");
-    await ffmpeg(["-i", sdir(c, short, "voice_clean.wav"), "-ss", lines[0].s.toFixed(2), "-to", refEnd.toFixed(2), "-ac", "1", "-ar", "24000", ref], { signal: c.signal });
-    // The game bed on the output timeline (dead air cut the same way).
-    const keep = c.s.shorts.find((x) => x.id === short.id)!.keep;
+    const firstWord = transcript.words.find((w) => w.s >= sh.keep[0][0] && w.e <= sh.end);
+    const refStart = Math.max(0, (firstWord?.s ?? sh.start) - sh.start);
+    const refText = transcript.words.filter((w) => w.s >= sh.start + refStart && w.e <= sh.start + refStart + 8).map((w) => w.w).join(" ");
+    await ffmpeg(["-i", sdir(c, short, "voice_clean.wav"), "-ss", refStart.toFixed(2), "-t", "8", "-ac", "1", "-ar", "24000", ref], { signal: c.signal });
+    // The game bed on the output timeline: the cold open (game only), then the story with dead air cut the same way.
     const bed = sdir(c, short, "game_out.wav");
-    await cutAudio(c, sdir(c, short, "game.wav"), keep.map(([a, b]) => [a - short.start, b - short.start]), bed);
+    await cutAudio(c, sdir(c, short, "game.wav"), plan.segs.map((g) => [g.a - short.start, g.b - short.start]), bed);
+    const lines = story.map((l) => ({ ...l, s: l.s + plan.teaser, e: l.e + plan.teaser }));
     for (const lang of langs) {
       c.check();
       c.live({ t: short.start, shortId: short.id, dub: { from: lang0.toUpperCase(), to: langs.map((l) => l.toUpperCase()), done: [...done] } });

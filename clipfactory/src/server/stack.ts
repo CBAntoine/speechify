@@ -20,6 +20,8 @@ export interface Machine {
   py: PyDoctor;
   bins: Record<string, string | null>;
   ffmpegHasLibass: boolean;
+  /** zscale + tonemap, for HDR sources. */
+  ffmpegToneMap: boolean;
   ytdlp: string[] | null;
   autoEditor: string[] | null;
   deepFilter: string[] | null;
@@ -86,9 +88,11 @@ function findLosslessCut(): string | null {
 async function detect(): Promise<Machine> {
   const ffmpegVersion = await firstLine("ffmpeg", ["-version"]);
   let ffmpegHasLibass = false;
+  let ffmpegToneMap = false;
   if (ffmpegVersion) {
     const r = await run("ffmpeg", ["-hide_banner", "-filters"], { allowFail: true });
     ffmpegHasLibass = /\bsubtitles\b/.test(r.stdout);
+    ffmpegToneMap = /\bzscale\b/.test(r.stdout) && /\btonemap\b/.test(r.stdout);
   }
 
   let py: PyDoctor = { modules: {}, models: { face: false, selfie: false, yolo: false, sam2: false } };
@@ -169,7 +173,7 @@ async function detect(): Promise<Machine> {
     stars: readStars(),
   };
   void refreshStars();
-  return { report, py, bins, ffmpegHasLibass, ytdlp, autoEditor, deepFilter, losslessCut, esrgan, rife, cuda };
+  return { report, py, bins, ffmpegHasLibass, ffmpegToneMap, ytdlp, autoEditor, deepFilter, losslessCut, esrgan, rife, cuda };
 }
 
 // ── GitHub stars (for the header's "753K★"), cached for a day ───────────

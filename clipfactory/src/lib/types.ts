@@ -167,6 +167,20 @@ export interface JobOptions {
   /** auto: AI-upscale low-res sources to 1080p. 4k: export 2160×3840. */
   upscale: "auto" | "4k" | "off";
   slowmo: boolean;
+  /** Open on 1–2 s of the payoff, then rewind to the setup (cold open). */
+  teaser: boolean;
+  /** Hard zoom-ins on reactions and the climax. */
+  punchIns: boolean;
+  /** A headline box at the top for the whole short. */
+  titleBar: boolean;
+  /** A thin progress bar along the bottom. */
+  progressBar: boolean;
+  /** Mask swear words in captions and bleep them in the audio. */
+  censor: boolean;
+  /** Whoosh on the cold-open cut, boom on the climax zoom. */
+  sfx: boolean;
+  /** Use YouTube's Most replayed graph, live-chat replay and timestamped comments when the VOD has them. */
+  audience: boolean;
   /** Transcription language hint (ISO 639-1). Empty = detect. */
   language?: string;
   /** Extra direction for picking moments, e.g. "only funny fails". */
@@ -190,6 +204,13 @@ export const DEFAULT_OPTIONS: JobOptions = {
   dub: [],
   upscale: "auto",
   slowmo: true,
+  teaser: true,
+  punchIns: true,
+  titleBar: false,
+  progressBar: false,
+  censor: false,
+  sfx: true,
+  audience: true,
 };
 
 /** Normalised rectangle: 0..1 of the source frame. */
@@ -220,6 +241,8 @@ export interface Word {
   e: number;
   /** Speaker index from WhisperX diarization ("who's talking"), when available. */
   sp?: number;
+  /** Stressed in the captions (a word that carries the moment). */
+  em?: boolean;
 }
 
 export interface Transcript {
@@ -261,6 +284,16 @@ export interface YouTubePost {
   postedAt?: number;
 }
 
+/** A hard zoom-in, in source seconds. */
+export interface Punch {
+  s: number;
+  e: number;
+  /** cam: the facecam panel, game: the gameplay panel, all: the whole frame. */
+  panel: "cam" | "game" | "all";
+  zoom: number;
+  why: string;
+}
+
 export interface Short {
   id: string;
   n: number;
@@ -282,6 +315,17 @@ export interface Short {
   duration: number;
   /** Source time to replay in slow motion at the end. */
   replayAt?: number;
+  /** Cold open: source span of the payoff shown first. */
+  teaser?: [number, number];
+  punches?: Punch[];
+  /** Words to keep highlighted in the captions. */
+  emphasis?: string[];
+  /** Text for the optional title bar. */
+  headline?: string;
+  /** What kind of moment: fail, clutch, funny, reaction… */
+  category?: string;
+  /** Claude's score after watching the moment (0–100). */
+  watched?: number;
   layout?: ResolvedLayout;
   status: ShortStatus;
   progress: number;
@@ -333,6 +377,8 @@ export interface LiveInfo {
   stems?: { name: string; peaks: number[] }[];
   noise?: { before: number; after: number };
   silence?: { peaks: number[]; regions: [number, number][]; span: [number, number] };
+  /** Contact sheet Claude is looking at (job-relative path). */
+  sheet?: string;
   wave?: number[];
 }
 
@@ -346,7 +392,11 @@ export interface Analysis {
   sprite?: { file: string; count: number; w: number; h: number };
   cuts: number[];
   facecam?: Box | null;
-  transcript?: { engine: string; language?: string; words: number; speakers?: number };
+  /** refined: the model of the second, captions-only pass. whisperError: why Whisper couldn't run. */
+  transcript?: { engine: string; language?: string; words: number; speakers?: number; refined?: string; whisperError?: string };
+  /** Audience interest over the VOD, 0..1 (same length as peaks), and where it came from. */
+  audience?: number[];
+  audienceSources?: string[];
 }
 
 export interface LogLine {

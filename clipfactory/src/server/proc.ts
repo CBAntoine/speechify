@@ -159,6 +159,11 @@ export interface ProbeStream {
   sample_rate?: string;
   channels?: number;
   duration?: string;
+  pix_fmt?: string;
+  color_space?: string;
+  color_transfer?: string;
+  color_primaries?: string;
+  color_range?: string;
   tags?: Record<string, string>;
 }
 

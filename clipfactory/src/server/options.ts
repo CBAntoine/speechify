@@ -26,6 +26,13 @@ export function parseOptions(raw: unknown): Partial<JobOptions> {
     denoise: bool("denoise"),
     stems: bool("stems"),
     slowmo: bool("slowmo"),
+    teaser: bool("teaser"),
+    punchIns: bool("punchIns"),
+    titleBar: bool("titleBar"),
+    progressBar: bool("progressBar"),
+    censor: bool("censor"),
+    sfx: bool("sfx"),
+    audience: bool("audience"),
     upscale: pick("upscale", UPSCALE, DEFAULT_OPTIONS.upscale),
     dub: Array.isArray(o.dub) ? (o.dub as unknown[]).filter((d): d is string => typeof d === "string" && /^[a-z]{2}$/.test(d)).slice(0, 6) : [],
   };

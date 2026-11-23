@@ -6,7 +6,8 @@
 // Options: --count 6  --min 15  --max 45  --layout auto|split|crop|fit|cutout
 //          --style pop|karaoke|clean  --no-captions  --no-hook  --keep-silence
 //          --no-denoise  --no-stems  --dub es,de,ja  --upscale auto|4k|off
-//          --no-slowmo  --name NAME  --lang en  --direction "only the funny fails"
+//          --no-slowmo  --no-teaser  --no-punch  --no-sfx  --title-bar  --progress-bar
+//          --censor  --no-audience  --name NAME  --lang en  --direction "only the funny fails"
 //          --post public|unlisted|private  --every 6  --start 2026-11-24T18:00
 //          (posting needs a channel connected once in the dashboard)
 import path from "node:path";
@@ -32,6 +33,13 @@ const { values, positionals } = parseArgs({
     dub: { type: "string" },
     upscale: { type: "string" },
     "no-slowmo": { type: "boolean" },
+    "no-teaser": { type: "boolean" },
+    "no-punch": { type: "boolean" },
+    "no-sfx": { type: "boolean" },
+    "title-bar": { type: "boolean" },
+    "progress-bar": { type: "boolean" },
+    censor: { type: "boolean" },
+    "no-audience": { type: "boolean" },
     name: { type: "string" },
     lang: { type: "string" },
     direction: { type: "string" },
@@ -95,6 +103,13 @@ const opts = Object.fromEntries(
     dub: values.dub ? values.dub.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
     upscale: values.upscale,
     slowmo: values["no-slowmo"] ? false : undefined,
+    teaser: values["no-teaser"] ? false : undefined,
+    punchIns: values["no-punch"] ? false : undefined,
+    sfx: values["no-sfx"] ? false : undefined,
+    titleBar: values["title-bar"] ? true : undefined,
+    progressBar: values["progress-bar"] ? true : undefined,
+    censor: values.censor ? true : undefined,
+    audience: values["no-audience"] ? false : undefined,
     language: values.lang,
     instructions: values.direction,
     publish: values.post

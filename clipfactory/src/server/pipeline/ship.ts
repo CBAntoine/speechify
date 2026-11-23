@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Short } from "../../lib/types.ts";
 import { ffmpeg, ffprobe, run } from "../proc.ts";
-import { REPLAY_SPEED, replayPlan, upscalePlan } from "./caption.ts";
+import { BT709, readEditNotes, REPLAY_SPEED, replayPlan, upscalePlan } from "./caption.ts";
 import type { Ctx } from "./ctx.ts";
+import { editPlan } from "./edit.ts";
 import { atempoChain } from "./layout.ts";
 import { loudness } from "./media.ts";
 import { sourcePath } from "./reframe.ts";
+import { renderCues, writeWav } from "./sfx.ts";
 
 // Stage 06 · CUT & SHIP — trim, arrange, upscale, render.
 
@@ -65,7 +67,7 @@ export function edl(c: Ctx, order: Short[]): string {
   let rec = 3600; // 01:00:00:00
   let n = 1;
   for (const s of order) {
-    for (const [a, b] of s.keep) {
+    for (const { a, b } of editPlan(s).segs) {
       lines.push(`${String(n).padStart(3, "0")}  ${reel}       AA/V  C        ${tcode(a, fps)} ${tcode(b, fps)} ${tcode(rec, fps)} ${tcode(rec + (b - a), fps)}`);
       lines.push(`* FROM CLIP NAME: ${name}`);
       lines.push(`* COMMENT: ${fileName(s)} ${s.hook}`);
@@ -188,7 +190,7 @@ async function upscale(c: Ctx, short: Short): Promise<string> {
       },
     });
     const up = sdir(c, short, "plate_up.mkv");
-    await ffmpeg(["-framerate", String(fps), "-i", path.join(outDir, "f%06d.png"), "-i", plate, "-map", "0:v", "-map", "1:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15", "-pix_fmt", "yuv420p", "-c:a", "copy", up], { signal: c.signal });
+    await ffmpeg(["-framerate", String(fps), "-i", path.join(outDir, "f%06d.png"), "-i", plate, "-map", "0:v", "-map", "1:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p", ...BT709, "-c:a", "copy", up], { signal: c.signal });
     c.end("esrgan", { note: `×${plan.factor} AI upscale` });
     return up;
   } catch (err) {
@@ -227,7 +229,7 @@ async function slowmo(c: Ctx, short: Short, plate: string): Promise<string | nul
       const frames = fs.readdirSync(path.join(work, "in")).length;
       await run(c.m.rife!.bin, ["-i", path.join(work, "in"), "-o", path.join(work, "out"), "-m", c.m.rife!.model, "-n", String(Math.round(frames / REPLAY_SPEED))], { signal: c.signal });
       await ffmpeg(
-        ["-framerate", String(fps), "-i", path.join(work, "out", "%08d.png"), "-ss", plan.from.toFixed(3), "-i", plate, "-filter_complex", `[1:a]${audio}[a]`, "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15", "-pix_fmt", "yuv420p", "-c:a", "flac", "-shortest", out],
+        ["-framerate", String(fps), "-i", path.join(work, "out", "%08d.png"), "-ss", plan.from.toFixed(3), "-i", plate, "-filter_complex", `[1:a]${audio}[a]`, "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p", ...BT709, "-c:a", "flac", "-shortest", out],
         { signal: c.signal },
       );
       c.end("rife", { note: `×${REPLAY_SPEED} replay` });
@@ -250,7 +252,7 @@ async function slowmo(c: Ctx, short: Short, plate: string): Promise<string | nul
     ...(hasAudio ? [`[0:a]${audio}[a]`] : []),
   ].join(";");
   await ffmpeg(
-    ["-ss", plan.from.toFixed(3), "-t", len.toFixed(3), "-i", plate, "-filter_complex", graph, "-map", "[v]", ...(hasAudio ? ["-map", "[a]", "-c:a", "flac"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "15", out],
+    ["-ss", plan.from.toFixed(3), "-t", len.toFixed(3), "-i", plate, "-filter_complex", graph, "-map", "[v]", ...(hasAudio ? ["-map", "[a]", "-c:a", "flac"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", ...BT709, out],
     { signal: c.signal, duration: plan.length },
   );
   c.end("rife", { note: `×${REPLAY_SPEED} replay` });
@@ -259,8 +261,63 @@ async function slowmo(c: Ctx, short: Short, plate: string): Promise<string | nul
 
 // ── 18 Export: captions, loudness, platform-ready MP4 ─────────────────────
 
+/** x264 for the final file: slow preset, CRF 18 at 1080p, adaptive quantisation that keeps dark scenes clean. */
+export function x264Args(outH: number, fps: number): string[] {
+  const big = outH > 1920;
+  return [
+    "-c:v", "libx264",
+    "-preset", big ? "medium" : "slow",
+    "-crf", big ? "19" : "18",
+    "-profile:v", "high",
+    "-pix_fmt", "yuv420p",
+    "-x264-params", "aq-mode=3:aq-strength=0.9",
+    "-g", String(Math.max(12, Math.round(fps * 2))),
+    "-bf", "3",
+    ...BT709,
+  ];
+}
+
+const enable = (spans: [number, number][]) => spans.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+");
+
+/** The integrated loudness (LUFS) of [mix], optionally through a chain, exactly as the export will hear it. */
+async function mixLoudness(c: Ctx, inputs: string[], audioGraph: string, cwd: string, chain = "anull"): Promise<number | null> {
+  const r = await run("ffmpeg", ["-hide_banner", "-nostdin", ...inputs, "-filter_complex", `${audioGraph};[mix]${chain},ebur128[m]`, "-map", "[m]", "-f", "null", "-"], { cwd, signal: c.signal, allowFail: true });
+  const m = /I:\s+(-?[\d.]+) LUFS/.exec(r.stderr.split("Summary:").pop() ?? "");
+  const v = m ? Number(m[1]) : NaN;
+  return Number.isFinite(v) && v > -70 ? v : null;
+}
+
+export const TARGET_LUFS = -14;
+
+/** One fixed gain and a look-ahead peak limiter (about −1.5 dBFS). */
+export function gainChain(gain: number): string {
+  const g = Math.max(-24, Math.min(24, gain));
+  return `volume=${g.toFixed(2)}dB,alimiter=limit=0.84:attack=3:release=80:level=false:latency=true`;
+}
+
+/**
+ * Loudness the way mastering does it: measure the mix, apply one gain to
+ * −14 LUFS (where Shorts, TikTok and Reels play back), limit the peaks, and
+ * measure again, since limiting a loud scream costs a little loudness;
+ * correct until it lands within 0.3 LU. Unlike one-pass loudnorm, nothing pumps.
+ */
+async function loudnessChainFor(c: Ctx, inputs: string[], audioGraph: string, cwd: string): Promise<string> {
+  const first = await mixLoudness(c, inputs, audioGraph, cwd);
+  if (first === null) return "loudnorm=I=-14:TP=-1.5:LRA=11";
+  // Each dB of gain buys less than a dB of loudness once the limiter works, so step along the measured slope.
+  let g0 = TARGET_LUFS - first;
+  const i0 = await mixLoudness(c, inputs, audioGraph, cwd, gainChain(g0));
+  if (i0 === null || Math.abs(TARGET_LUFS - i0) < 0.3) return gainChain(g0);
+  const g1 = g0 + (TARGET_LUFS - i0);
+  const i1 = await mixLoudness(c, inputs, audioGraph, cwd, gainChain(g1));
+  if (i1 === null || Math.abs(TARGET_LUFS - i1) < 0.3) return gainChain(g1);
+  const slope = Math.max(0.2, Math.min(1, (i1 - i0) / (g1 - g0 || 1)));
+  g0 = g1 + Math.max(-3, Math.min(3, (TARGET_LUFS - i1) / slope));
+  return gainChain(g0);
+}
+
 async function exportShort(c: Ctx, short: Short, plate: string, replay: string | null) {
-  step(c, "ffmpeg", "native", c.m.report.items.ffmpeg.engine, "H.264 + AAC, −14 LUFS, faststart");
+  step(c, "ffmpeg", "native", c.m.report.items.ffmpeg.engine, "H.264 high (x264 slow, CRF 18) + AAC, measured −14 LUFS, BT.709, faststart");
   const sh = c.s.shorts.find((x) => x.id === short.id)!;
   const plan = upscalePlan(c);
   const dir = sdir(c, sh);
@@ -275,28 +332,62 @@ async function exportShort(c: Ctx, short: Short, plate: string, replay: string |
   const probe = await ffprobe(plate, c.signal);
   const hasAudio = probe.streams.some((s) => s.codec_type === "audio");
   const pv = probe.streams.find((s) => s.codec_type === "video")!;
+  const total = sh.duration;
+  const fpsOut = Math.min(60, Math.round(c.s.source?.fps ?? 30) || 30);
+
+  // Sound design and bleeps, laid out by the caption pass.
+  const notes = readEditNotes(c, sh);
+  const fx = path.join(dir, "fx.wav");
+  const sfxOnly = path.join(dir, "sfx.wav");
+  const bleeps = hasAudio ? (notes?.bleeps ?? []) : [];
+  const cues = hasAudio ? (notes?.cues ?? []) : [];
+  if (cues.length || bleeps.length) writeWav(fx, renderCues([...cues, ...bleeps.map(([a, b]) => ({ at: a, kind: "bleep" as const, length: b - a }))], total + 0.5));
+  if (cues.length) writeWav(sfxOnly, renderCues(cues, total + 0.5));
+
   const inputs = ["-i", path.basename(plate)];
   if (replay) inputs.push("-i", path.basename(replay));
+  const fxIn = cues.length || bleeps.length ? inputs.length / 2 : -1;
+  if (fxIn >= 0) inputs.push("-i", path.basename(fx));
   const parts: string[] = [];
   let v = "[0:v]";
-  let a = hasAudio ? "[0:a]" : "";
   if (replay) {
-    parts.push(`[0:v]${hasAudio ? "[0:a]" : ""}[1:v]${hasAudio ? "[1:a]" : ""}concat=n=2:v=1:a=${hasAudio ? 1 : 0}[cv]${hasAudio ? "[ca]" : ""}`);
+    parts.push(`[0:v][1:v]concat=n=2:v=1:a=0[cv]`);
     v = "[cv]";
-    a = hasAudio ? "[ca]" : "";
   }
   const needScale = (pv.width ?? plan.outW) !== plan.outW;
   const scale = needScale ? `scale=${plan.outW}:${plan.outH}:flags=lanczos,unsharp=5:5:0.5:5:5:0,` : "";
   const subs = c.m.ffmpegHasLibass ? `subtitles=captions.ass:fontsdir=../../fonts,` : "";
   parts.push(`${v}${scale}${subs}format=yuv420p[vo]`);
-  if (a) parts.push(`${a}loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[ao]`);
-  const total = sh.duration;
+  // The sound: story (+ replay), swearing muted under the bleep, effects on top, then to −14 LUFS.
+  const audio: string[] = [];
+  let a = hasAudio ? "[0:a]" : "";
+  if (a) {
+    if (replay) {
+      audio.push(`[0:a][1:a]concat=n=2:v=0:a=1[ca]`);
+      a = "[ca]";
+    }
+    if (bleeps.length) {
+      audio.push(`${a}volume=0:enable='${enable(bleeps)}'[am]`);
+      a = "[am]";
+    }
+    if (fxIn >= 0) {
+      audio.push(`[${fxIn}:a]aformat=sample_rates=48000:channel_layouts=stereo[fx]`);
+      audio.push(`${a}aformat=sample_rates=48000:channel_layouts=stereo[ab]`);
+      audio.push(`[ab][fx]amix=inputs=2:normalize=0:duration=first[amx]`);
+      a = "[amx]";
+    }
+    audio.push(`${a}anull[mix]`);
+    const level = await loudnessChainFor(c, inputs, audio.join(";"), dir);
+    audio.push(`[mix]${level},aresample=48000[ao]`);
+    parts.push(...audio);
+  }
   await ffmpeg(
     [
       ...inputs,
       "-filter_complex", parts.join(";"),
       "-map", "[vo]", ...(a ? ["-map", "[ao]"] : []),
-      "-c:v", "libx264", "-preset", "medium", "-crf", plan.outH > 1920 ? "20" : "19", "-profile:v", "high", "-pix_fmt", "yuv420p",
+      "-r", String(fpsOut),
+      ...x264Args(plan.outH, fpsOut),
       ...(a ? ["-c:a", "aac", "-b:a", "192k"] : []),
       "-movflags", "+faststart",
       "-metadata", `title=${sh.title}`,
@@ -316,14 +407,21 @@ async function exportShort(c: Ctx, short: Short, plate: string, replay: string |
   );
   if (fs.existsSync(path.join(dir, "cover.jpg"))) fs.copyFileSync(path.join(dir, "cover.jpg"), exp(c, `${name}.jpg`));
 
-  // Dubbed versions: same picture, the dub on the main part, the replay's slowed game audio after it.
+  // Dubbed versions: same picture, the dub on the main part, the replay's slowed game audio after it, the same effects.
   const dubs = [...sh.dubs];
   for (const d of dubs) {
     const wav = path.join(dir, `dub_${d.lang}.wav`);
     if (d.error || !fs.existsSync(wav)) continue;
     const dubOut = exp(c, `${name}.${d.lang}.mp4`);
-    const audioGraph = replay && hasAudio ? `[1:a][2:a]concat=n=2:v=0:a=1,loudnorm=I=-14:TP=-1.5:LRA=11[a]` : `[1:a]loudnorm=I=-14:TP=-1.5:LRA=11[a]`;
-    await ffmpeg(["-i", out, "-i", wav, ...(replay && hasAudio ? ["-i", replay] : []), "-filter_complex", audioGraph, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", dubOut], { signal: c.signal });
+    const withReplay = Boolean(replay && hasAudio);
+    const dubInputs = ["-i", out, "-i", wav, ...(withReplay ? ["-i", replay!] : []), ...(cues.length ? ["-i", sfxOnly] : [])];
+    const sfxAt = withReplay ? 3 : 2;
+    let audioGraph = withReplay ? `[1:a][2:a]concat=n=2:v=0:a=1[d]` : `[1:a]anull[d]`;
+    if (cues.length) audioGraph += `;[d]aformat=sample_rates=48000:channel_layouts=stereo[db];[${sfxAt}:a]aformat=sample_rates=48000:channel_layouts=stereo[sx];[db][sx]amix=inputs=2:normalize=0:duration=first[dm]`;
+    audioGraph += `;[${cues.length ? "dm" : "d"}]anull[mix]`;
+    const level = await loudnessChainFor(c, dubInputs, audioGraph, dir);
+    audioGraph += `;[mix]${level},aresample=48000[a]`;
+    await ffmpeg([...dubInputs, "-filter_complex", audioGraph, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", dubOut], { signal: c.signal });
     d.file = path.relative(c.dir, dubOut).split(path.sep).join("/");
   }
 
@@ -355,7 +453,7 @@ async function qaCheck(c: Ctx, file: string, expected: number, w: number, h: num
     if (!p.streams.some((s) => s.codec_type === "audio")) notes.push("no audio");
     else {
       const l = await loudness(file, c.signal);
-      if (l && Math.abs(l.lufs + 14) > 2.5) notes.push(`loudness ${l.lufs.toFixed(1)} LUFS`);
+      if (l && Math.abs(l.lufs + 14) > 1.5) notes.push(`loudness ${l.lufs.toFixed(1)} LUFS`);
       if (l && l.lufs < -40) notes.push("audio is near silent");
     }
   }

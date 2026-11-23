@@ -1,4 +1,4 @@
-import type { Box, LayoutKind, TrackKey } from "../../lib/types.ts";
+import type { Box, LayoutKind, Punch, TrackKey } from "../../lib/types.ts";
 
 // Geometry for the 9:16 frame, and the FFmpeg filtergraph that builds it.
 // Boxes are normalised (0..1 of the source frame) until the very end.
@@ -225,8 +225,9 @@ export interface ComposeSpec {
   facecamShare: number;
   facecam?: Box;
   crop: { w: number; h: number };
+  /** The virtual camera, on the output timeline. */
   track: TrackKey[];
-  /** Kept ranges relative to the start of the input (seconds). */
+  /** Source ranges in output order, relative to the start of the input (seconds). */
   segments: [number, number][];
   /** Extra sharpening when the source is upscaled a lot (Lanczos fallback for Real-ESRGAN). */
   sharpen: boolean;
@@ -242,11 +243,40 @@ export interface ComposeSpec {
   /** Output size; 1080×1920 unless a later AI upscale takes it from a smaller plate. */
   outW?: number;
   outH?: number;
+  /** Punch-in zooms, output time. */
+  zooms?: Punch[];
+  /** Output second of a two-frame white flash (the cut out of the cold open). */
+  flashAt?: number;
+  /** What the source is, so the plate comes out BT.709 SDR: convert SD colour, tone-map HDR. */
+  color?: SourceColor;
+}
+
+export type SourceColor = "bt709" | "bt601" | "hdr";
+
+/** Players assume BT.709 for HD; SD sources are BT.601, HDR needs tone mapping. */
+export function sourceColor(stream: { color_space?: string; color_transfer?: string; height?: number }, canToneMap: boolean): SourceColor {
+  if (/smpte2084|arib-std-b67/.test(stream.color_transfer ?? "")) return canToneMap ? "hdr" : "bt709";
+  const cs = stream.color_space ?? "";
+  if (/smpte170m|bt470bg|bt601/.test(cs)) return "bt601";
+  if (/bt709|bt2020/.test(cs)) return "bt709";
+  return (stream.height ?? 1080) < 720 ? "bt601" : "bt709";
+}
+
+const enableExpr = (spans: { s: number; e: number }[]) => spans.map((z) => `between(t,${z.s.toFixed(3)},${z.e.toFixed(3)})`).join("+");
+
+/** The same panel crop, tighter by z around its centre (a touch high, where the eyes are). */
+function tighter(f: { x: number; y: number; w: number; h: number }, z: number, srcW: number, srcH: number) {
+  const w = even(f.w / z);
+  const h = even(f.h / z);
+  const x = clamp(Math.round((f.x + (f.w - w) / 2) / 2) * 2, 0, srcW - w);
+  const y = clamp(Math.round((f.y + (f.h - h) * 0.42) / 2) * 2, 0, srcH - h);
+  return { x, y, w, h };
 }
 
 /**
- * The filter graph for one short (or its replay): cut out the dead air,
- * crop and stack the panels, track the action. Outputs [v] and, with audio, [a].
+ * The filter graph for one short: the cold open and the kept ranges in
+ * order, colour brought to BT.709, panels cropped and stacked, the camera
+ * tracking the action, hard punch-ins on top. Outputs [v] and, with audio, [a].
  */
 export function composeGraph(spec: ComposeSpec): string {
   const n = spec.segments.length;
@@ -269,53 +299,80 @@ export function composeGraph(spec: ComposeSpec): string {
       concatIn.push(`[a${i}]`);
     }
   });
-  parts.push(`${concatIn.join("")}concat=n=${n}:v=1:a=${hasAudio ? 1 : 0}[vc]${hasAudio ? "[ac]" : ""}`);
+  const raw = spec.color === "hdr" || spec.color === "bt601" ? "[vraw]" : "[vc]";
+  parts.push(`${concatIn.join("")}concat=n=${n}:v=1:a=${hasAudio ? 1 : 0}${raw}${hasAudio ? "[ac]" : ""}`);
   if (spec.matteIn) {
     const mIn = n > 1 ? Array.from({ length: n }, (_, i) => `[ms${i}]`) : [`[${spec.matteIn}]`];
     spec.segments.forEach(([a, b], i) => parts.push(`${mIn[i]}trim=start=${a.toFixed(3)}:end=${b.toFixed(3)},setpts=PTS-STARTPTS[m${i}]`));
     parts.push(`${spec.segments.map((_, i) => `[m${i}]`).join("")}concat=n=${n}:v=1:a=0,format=gray[mc]`);
   }
+  if (spec.color === "hdr") parts.push(`[vraw]zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p[vc]`);
+  else if (spec.color === "bt601") parts.push(`[vraw]scale=iw:ih:in_color_matrix=bt601:out_color_matrix=bt709[vc]`);
 
   const { srcW, srcH } = spec;
   const W = spec.outW ?? OUT_W;
   const H = spec.outH ?? OUT_H;
   const cw = Math.min(even(spec.crop.w * srcW), srcW - (srcW % 2));
   const ch = Math.min(even(spec.crop.h * srcH), srcH - (srcH % 2));
-  const x = trackExpr(spec.track, "x", cw, srcW);
-  const y = ch >= srcH - 1 ? "0" : trackExpr(spec.track, "y", ch, srcH);
   const sharpen = spec.sharpen ? ",unsharp=5:5:0.55:5:5:0" : "";
-  const gameCrop = `crop=w=${cw}:h=${ch}:x='${x}':y='${y}'`;
+  const gameCrop = (z = 1) => {
+    const w = z === 1 ? cw : even(cw / z);
+    const h = z === 1 ? ch : even(ch / z);
+    const x = trackExpr(spec.track, "x", w, srcW);
+    const y = h >= srcH - 1 ? "0" : trackExpr(spec.track, "y", h, srcH);
+    return `crop=w=${w}:h=${h}:x='${x}':y='${y}'`;
+  };
+  const zooms = spec.kind === "fit" ? [] : (spec.zooms ?? []).filter((z) => z.e > z.s && z.zoom > 1);
+  const camZ = spec.kind === "split" ? zooms.filter((z) => z.panel === "cam") : [];
+  const gameZ = spec.kind === "split" ? zooms.filter((z) => z.panel !== "cam") : zooms.filter((z) => z.panel !== "cam" || spec.kind === "crop");
+  const zoomOf = (zs: Punch[]) => Math.max(...zs.map((z) => z.zoom));
 
-  let out = "[vc]";
+  /** A panel, with its punch-in version switched in during the zoom spans. */
+  const panel = (input: string, crop: (z: number) => string, w: number, h: number, zs: Punch[], label: string, extra = "") => {
+    if (!zs.length) {
+      parts.push(`${input}${crop(1)},scale=${w}:${h}:flags=lanczos${extra},setsar=1[${label}]`);
+      return;
+    }
+    parts.push(`${input}split=2[${label}_n][${label}_zi]`);
+    parts.push(`[${label}_n]${crop(1)},scale=${w}:${h}:flags=lanczos${extra},setsar=1[${label}_0]`);
+    parts.push(`[${label}_zi]${crop(zoomOf(zs))},scale=${w}:${h}:flags=lanczos${extra},setsar=1[${label}_z]`);
+    parts.push(`[${label}_0][${label}_z]overlay=0:0:enable='${enableExpr(zs)}'[${label}]`);
+  };
+
   if (spec.kind === "split" && spec.facecam) {
     const top = even((splitHeights(spec.facecamShare).top * H) / OUT_H);
     const bottom = H - top;
     const f = pxBox(spec.facecam, srcW, srcH);
+    const camCrop = (z: number) => {
+      const b = z === 1 ? f : tighter(f, z, srcW, srcH);
+      return `crop=${b.w}:${b.h}:${b.x}:${b.y}`;
+    };
     parts.push(`[vc]split=2[vf][vg]`);
-    parts.push(`[vf]crop=${f.w}:${f.h}:${f.x}:${f.y},scale=${W}:${top}:flags=lanczos${sharpen},setsar=1[top]`);
-    parts.push(`[vg]${gameCrop},scale=${W}:${bottom}:flags=lanczos${sharpen},setsar=1[bot]`);
+    panel("[vf]", camCrop, W, top, camZ, "top", sharpen);
+    panel("[vg]", gameCrop, W, bottom, gameZ, "bot", sharpen);
     parts.push(`[top][bot]vstack=inputs=2[lay]`);
-    out = "[lay]";
   } else if (spec.kind === "cutout" && spec.facecam && spec.matteIn) {
     const f = pxBox(spec.facecam, srcW, srcH);
     const fgW = even(W * 0.86);
     const fgH = even((fgW * f.h) / f.w);
     parts.push(`[vc]split=2[vf][vg]`);
-    parts.push(`[vg]${gameCrop},scale=${W}:${H}:flags=lanczos${sharpen},setsar=1[bg]`);
+    panel("[vg]", gameCrop, W, H, gameZ, "bg", sharpen);
     parts.push(`[vf]crop=${f.w}:${f.h}:${f.x}:${f.y},scale=${fgW}:${fgH}:flags=lanczos,format=yuva420p[cam]`);
     parts.push(`[mc]scale=${fgW}:${fgH}[mat]`);
     parts.push(`[cam][mat]alphamerge[fg]`);
     parts.push(`[bg][fg]overlay=x=(W-w)/2:y=H-h:format=auto[lay]`);
-    out = "[lay]";
   } else if (spec.kind === "fit") {
     parts.push(`[vc]split=2[vb][vf]`);
     parts.push(`[vb]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=24:2,eq=brightness=-0.12:saturation=1.15[bg]`);
     parts.push(`[vf]scale=${W}:-2:flags=lanczos${sharpen}[fg]`);
     parts.push(`[bg][fg]overlay=x=0:y=(H-h)/2,setsar=1[lay]`);
-    out = "[lay]";
   } else {
-    parts.push(`[vc]${gameCrop},scale=${W}:${H}:flags=lanczos${sharpen},setsar=1[lay]`);
-    out = "[lay]";
+    panel("[vc]", gameCrop, W, H, gameZ, "lay", sharpen);
+  }
+  let out = "[lay]";
+  if (spec.flashAt !== undefined && spec.flashAt > 0) {
+    parts.push(`${out}drawbox=x=0:y=0:w=iw:h=ih:color=white@0.55:t=fill:enable='between(t,${spec.flashAt.toFixed(3)},${(spec.flashAt + 0.07).toFixed(3)})'[flash]`);
+    out = "[flash]";
   }
 
   const speed = spec.speed ?? 1;

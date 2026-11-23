@@ -8,6 +8,7 @@ import { rel } from "../paths.ts";
 import { ffmpeg, ffprobe, fps, py, run, ToolError } from "../proc.ts";
 import type { Ctx } from "./ctx.ts";
 import { audioLevels, envelope, thumbStrip } from "./media.ts";
+import { audienceScore, commentMentions, parseHeatmap, parseLiveChat, type Signals } from "./signals.ts";
 
 // Stage 01 · SOURCE — pull the VOD, find every cut.
 
@@ -16,9 +17,103 @@ const VIDEO_EXT = /\.(mp4|m4v|mov|mkv|webm|avi|flv|ts)$/i;
 export async function sourceStage(c: Ctx) {
   c.stage("source");
   const file = await download(c);
+  // Audience signals come down while FFmpeg ingests the video.
+  const audience = fetchAudience(c).catch((err) => {
+    if (c.signal.aborted) throw err;
+    c.log(`Couldn't read audience signals: ${(err as Error).message}`, "warn", "ytdlp");
+  });
   await ingest(c, file);
   await cuts(c);
+  await audience;
   c.endStage("source");
+}
+
+// ── Audience signals (YouTube): Most replayed, live chat, comments ─────────
+
+interface InfoJson {
+  extractor_key?: string;
+  heatmap?: { start_time: number; end_time: number; value: number }[];
+  chapters?: { start_time: number; end_time: number; title: string }[];
+  comments?: { text?: string; like_count?: number }[];
+  duration?: number;
+}
+
+async function fetchAudience(c: Ctx) {
+  const o = c.s.options;
+  if (!o.audience || !o.url || !c.m.ytdlp) return;
+  const read = (f: string) => {
+    try {
+      return JSON.parse(fs.readFileSync(c.path(f), "utf8")) as InfoJson;
+    } catch {
+      return null;
+    }
+  };
+  const info = read("source.info.json");
+  if (info?.extractor_key !== "Youtube") return;
+  c.log("Reading what viewers did: Most replayed, live chat, comments", "info", "ytdlp");
+  // Chat replay of a long stream can take minutes; give up after eight.
+  await run(
+    c.m.ytdlp[0],
+    [
+      ...c.m.ytdlp.slice(1),
+      "--skip-download",
+      "--no-playlist",
+      "--write-subs",
+      "--sub-langs",
+      "live_chat",
+      "--write-comments",
+      "--extractor-args",
+      "youtube:max_comments=400,60,0,0;comment_sort=top",
+      "--write-info-json",
+      "-o",
+      "signals.%(ext)s",
+      o.url,
+    ],
+    { cwd: c.dir, signal: c.signal, allowFail: true, timeoutMs: 8 * 60_000 },
+  );
+  const more = read("signals.info.json");
+  const duration = Math.max(c.s.source?.duration ?? 0, info.duration ?? 0, 1);
+  const s: Signals = { duration, sources: [] };
+  s.replay = parseHeatmap(info, duration) ?? parseHeatmap(more, duration);
+  if (s.replay) s.sources.push("Most replayed");
+  const chatFile = fs.readdirSync(c.dir).find((f) => f.startsWith("signals.") && f.endsWith(".live_chat.json"));
+  if (chatFile) {
+    const chat = parseLiveChat(fs.readFileSync(c.path(chatFile), "utf8"), duration);
+    if (chat.messages) {
+      Object.assign(s, { chat: chat.chat, react: chat.react, samples: chat.samples });
+      s.sources.push(`live chat (${chat.messages.toLocaleString()} messages)`);
+    }
+  }
+  s.mentions = commentMentions(more?.comments, duration);
+  if (s.mentions.length) s.sources.push(`${s.mentions.length} timestamped comments`);
+  s.chapters = (info.chapters ?? []).map((ch) => ({ start: ch.start_time, end: ch.end_time, title: ch.title }));
+  fs.writeFileSync(c.path("signals.json"), JSON.stringify(s));
+  if (!s.sources.length) {
+    c.log("No audience signals on this video (not enough views for Most replayed, no chat replay, no timestamped comments)", "info", "ytdlp");
+    return;
+  }
+  const score = audienceScore(s, duration);
+  // A reduce, not Math.min(...score): a day-long stream has 86,400 values.
+  const lo = score.reduce((m, v) => Math.min(m, v), Infinity);
+  const hi = score.reduce((m, v) => Math.max(m, v), -Infinity);
+  const curve = envelopeOf(score.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0)), 1200);
+  c.update((st) => {
+    st.analysis.audience = curve;
+    st.analysis.audienceSources = s.sources;
+    st.tools.ytdlp = { ...st.tools.ytdlp, note: `Downloaded + ${s.sources.join(", ")}` };
+  });
+  c.log(`Audience signals: ${s.sources.join(", ")}`, "info", "ytdlp");
+}
+
+/** Max-pool a 0..1 series down to n points. */
+function envelopeOf(values: number[], n: number): number[] {
+  if (!values.length) return [];
+  const step = values.length / n;
+  return Array.from({ length: Math.min(n, values.length) }, (_, i) => {
+    let m = 0;
+    for (let k = Math.floor(i * step); k < Math.max(Math.floor(i * step) + 1, Math.floor((i + 1) * step)) && k < values.length; k++) m = Math.max(m, values[k]);
+    return Math.round(m * 1000) / 1000;
+  });
 }
 
 // ── 01 Download ──────────────────────────────────────────────────────

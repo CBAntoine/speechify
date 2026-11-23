@@ -73,8 +73,9 @@ export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus
     xhr.send(file);
   };
 
-  const toggle = (k: "hook" | "removeSilence" | "stems" | "denoise" | "slowmo", label: string) => (
-    <button type="button" className={`chipbtn${opts[k] ? " on" : ""}`} aria-pressed={opts[k]} onClick={() => set(k, !opts[k])}>
+  type Flag = "hook" | "removeSilence" | "stems" | "denoise" | "slowmo" | "teaser" | "punchIns" | "sfx" | "titleBar" | "progressBar" | "censor" | "audience";
+  const toggle = (k: Flag, label: string, title?: string) => (
+    <button type="button" className={`chipbtn${opts[k] ? " on" : ""}`} aria-pressed={opts[k]} onClick={() => set(k, !opts[k])} title={title}>
       {label}
     </button>
   );
@@ -191,8 +192,22 @@ export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus
         {toggle("removeSilence", "Cut dead air")}
         {toggle("stems", "Split stems")}
         {toggle("denoise", "Clean voice")}
-        {toggle("slowmo", "Slow-mo replay")}
-        <span className="hint" style={{ alignSelf: "center", margin: "0 4px 0 6px" }}>
+        {toggle("slowmo", "Slow-mo replay", "Replays the payoff at 0.35× when there's no cold open")}
+        {toggle("audience", "Audience signals", "YouTube's Most replayed graph, live-chat replay and timestamped comments, when the VOD has them")}
+      </div>
+      <div className="toggles">
+        <span className="hint" style={{ alignSelf: "center", margin: "0 4px 0 0" }}>
+          Edit:
+        </span>
+        {toggle("teaser", "Cold open", "Open on 1–3 s of the payoff, then rewind to the setup")}
+        {toggle("punchIns", "Punch-ins", "Hard zoom-ins on the payoff and the loudest reactions")}
+        {toggle("sfx", "Sound FX", "A whoosh into each cut, a hit under the payoff zoom")}
+        {toggle("titleBar", "Title bar", "A headline in a white box across the top")}
+        {toggle("progressBar", "Progress bar", "A thin bar along the top that fills up")}
+        {toggle("censor", "Bleep swearing", "Masks swear words in captions and titles and bleeps them. Strong swearing early in a video can limit ads on YouTube.")}
+      </div>
+      <div className="toggles">
+        <span className="hint" style={{ alignSelf: "center", margin: "0 4px 0 0" }}>
           Dub:
         </span>
         {DUB_LANGS.map(([code, label]) => (

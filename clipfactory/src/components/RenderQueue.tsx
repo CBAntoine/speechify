@@ -1,7 +1,7 @@
 "use client";
 
 import { pad2 } from "@/lib/format";
-import { fileUrl, type JobState } from "@/lib/types";
+import { fileUrl, type JobState, type Short } from "@/lib/types";
 
 export function RenderQueue({ job, selected, onSelect }: { job: JobState | null; selected: string | null; onSelect: (id: string) => void }) {
   const hot = job?.activeTool === "moviepy" || job?.activeTool === "ffmpeg";
@@ -34,7 +34,7 @@ export function RenderQueue({ job, selected, onSelect }: { job: JobState | null;
                 className={`qrow${active ? " active" : ""}${selected === s.id ? " sel" : ""}`}
                 onClick={() => onSelect(s.id)}
                 data-cur={working ? "queue-active" : undefined}
-                title={`${s.title}\n${s.reason}`}
+                title={[s.title, s.reason, s.headline && `Headline: ${s.headline}`, s.emphasis?.length ? `Stressed: ${s.emphasis.join(", ")}` : ""].filter(Boolean).join("\n")}
               >
                 <span className="thumb" style={thumb} />
                 <span style={{ minWidth: 0 }}>
@@ -42,6 +42,7 @@ export function RenderQueue({ job, selected, onSelect }: { job: JobState | null;
                   <span className="bar" style={{ display: "block" }}>
                     <i style={{ width: `${Math.round((done ? 1 : s.progress) * 100)}%` }} />
                   </span>
+                  <EditTags s={s} />
                 </span>
                 <span className={`pct${done ? " ok" : ""}`}>{done ? (s.qa && !s.qa.ok ? "!" : "✓") : s.status === "failed" ? "✕" : s.progress > 0 ? `${Math.round(s.progress * 100)}%` : "—"}</span>
               </button>
@@ -50,5 +51,24 @@ export function RenderQueue({ job, selected, onSelect }: { job: JobState | null;
         </div>
       </div>
     </section>
+  );
+}
+
+/** What the edit does to this short, in a line: cold open, zooms, category, how it looked to Claude. */
+function EditTags({ s }: { s: Short }) {
+  const tags: { text: string; title: string }[] = [];
+  if (s.category) tags.push({ text: s.category.toUpperCase(), title: "Category" });
+  if (s.teaser) tags.push({ text: "COLD OPEN", title: `Opens on ${(s.teaser[1] - s.teaser[0]).toFixed(1)} s of the payoff` });
+  if (s.punches?.length) tags.push({ text: `ZOOM ×${s.punches.length}`, title: s.punches.map((p) => `${p.s.toFixed(1)} s ${p.why} (${p.panel})`).join("\n") });
+  if (s.watched !== undefined) tags.push({ text: `👁 ${s.watched}`, title: "How it looked to Claude, from six frames across the clip" });
+  if (!tags.length) return null;
+  return (
+    <span className="qtags">
+      {tags.map((t) => (
+        <span key={t.text} title={t.title}>
+          {t.text}
+        </span>
+      ))}
+    </span>
   );
 }

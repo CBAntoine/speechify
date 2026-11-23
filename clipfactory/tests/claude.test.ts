@@ -9,9 +9,9 @@ test("Claude picks moments: request shape, streaming, structured output", async 
   let seen: { headers: http.IncomingHttpHeaders; body: Record<string, unknown> } | null = null;
   const answer = {
     moments: [
-      { start: 57.5, end: 80, replay_at: 61, score: 93, hook: "no way", title: "The building blew up", reason: "Huge reaction to the explosion.", description: "Chat lost it.", hashtags: ["#gta", "Gaming"] },
-      { start: 70, end: 90, replay_at: 75, score: 70, hook: "overlaps.", title: "x", reason: "x", description: "x", hashtags: [] },
-      { start: 10, end: 12, replay_at: 11, score: 50, hook: "SHORT ONE!", title: "Too short", reason: "x", description: "x", hashtags: [] },
+      { start: 57.5, end: 80, replay_at: 61, score: 93, category: "Chaos", hook: "no way", headline: "The whole building went up.", title: "The building blew up", reason: "Huge reaction to the explosion.", description: "Chat lost it.", hashtags: ["#gta", "Gaming"], emphasis: ["no way", " building "], use_teaser: true, teaser_start: 62.5, teaser_end: 60.5 },
+      { start: 70, end: 90, replay_at: 75, score: 70, category: "funny", hook: "overlaps.", headline: "", title: "x", reason: "x", description: "x", hashtags: [], emphasis: [], use_teaser: false, teaser_start: 0, teaser_end: 0 },
+      { start: 10, end: 12, replay_at: 11, score: 50, category: "fail", hook: "SHORT ONE!", headline: "x", title: "Too short", reason: "x", description: "x", hashtags: [], emphasis: [], use_teaser: true, teaser_start: 10, teaser_end: 10.2 },
     ],
   };
   const server = http.createServer((req, res) => {
@@ -71,6 +71,12 @@ test("Claude picks moments: request shape, streaming, structured output", async 
     assert.equal(out.picks[0].hook, "NO WAY.");
     assert.deepEqual(out.picks[0].hashtags, ["gta", "gaming"]);
     assert.equal(out.picks[1].end - out.picks[1].start, 15);
+    // The edit notes: a cold open (ends put in order), headline, stressed words, category.
+    assert.deepEqual(out.picks[0].teaser, [60.5, 62.5]);
+    assert.equal(out.picks[0].headline, "The whole building went up");
+    assert.deepEqual(out.picks[0].emphasis, ["no way", "building"]);
+    assert.equal(out.picks[0].category, "chaos");
+    assert.equal(out.picks[1].teaser, undefined, "a 0.2 s tease is too short to use");
     assert.ok(out.usd > 0.04 && out.usd < 0.06, `cost ${out.usd}`);
     assert.equal(modelLabel("claude-opus-5-5"), "OPUS 5.5");
   } finally {

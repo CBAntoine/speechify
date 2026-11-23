@@ -70,11 +70,17 @@ const MomentsSchema = z.object({
       end: z.number(),
       replay_at: z.number(),
       score: z.number(),
+      category: z.string(),
       hook: z.string(),
+      headline: z.string(),
       title: z.string(),
       reason: z.string(),
       description: z.string(),
       hashtags: z.array(z.string()),
+      emphasis: z.array(z.string()),
+      use_teaser: z.boolean(),
+      teaser_start: z.number(),
+      teaser_end: z.number(),
     }),
   ),
 });
@@ -93,8 +99,15 @@ How to cut it:
 - End right after the payoff and the reaction; don't trail off.
 - replay_at is the second of the climax, the frame worth replaying in slow motion.
 
+Audience signals, when given, are the strongest evidence you have: chat spikes (laughs, hype, people typing "clip it"), the parts viewers replayed most, and comments that cite a time. Chat reacts a few seconds after the moment, so the moment itself starts earlier. Prefer moments the audience reacted to, and make sure the clip includes the cause of the reaction, not just the aftermath.
+
+Cold open: if the payoff is a sudden, visual or loud beat (a crash, a kill, a scream, a reveal) and the build-up is longer than a few seconds, set use_teaser and give teaser_start/teaser_end: 1–2.5 s of the payoff, inside the clip. The short opens on it, then rewinds to the setup. Don't tease conversations, slow reveals or jokes whose punch line needs the setup.
+
 Writing:
 - hook: 1 to 3 words in capitals ending in "." or "!" — the punch line on screen, like "FULL SEND." or "GOT HIM." It must describe what really happens or what is really said.
+- headline: up to 6 words for a title bar across the top, a curiosity gap that the clip pays off ("He trusted the wrong driver"). Honest, no emojis.
+- emphasis: 3–8 words that carry the moment, copied exactly as they appear in the transcript (names, numbers, the reaction words). They get highlighted in the captions.
+- category: one word: fail, clutch, funny, reaction, rage, skill, chaos, story or wholesome.
 - title: up to 70 characters, plain and specific, no clickbait the clip doesn't deliver.
 - description: one or two sentences for the post.
 - hashtags: 3 to 6, lowercase, no "#".
@@ -109,7 +122,11 @@ export interface ClaudeMomentInput {
   words: Word[];
   segments: { s: number; e: number; text: string }[];
   spikes: { t: number; db: number }[];
+  /** Chat spikes, most replayed, timestamped comments (describeSignals). */
+  audience?: string;
   count: number;
+  /** How many candidates to return (more than count when they'll be watched and narrowed). */
+  candidates?: number;
   minSec: number;
   maxSec: number;
   instructions?: string;
@@ -132,11 +149,12 @@ export async function claudeMoments(input: ClaudeMomentInput): Promise<{ picks: 
   const user = [
     `Stream: ${input.sourceTitle || "untitled"}${input.uploader ? ` by ${input.uploader}` : ""}`,
     `Length: ${stamp(input.duration)} (${Math.round(input.duration)} s)`,
-    `Pick the ${input.count} best moments, best first. Each must be ${input.minSec}–${input.maxSec} seconds long, and they must not overlap.`,
+    `Pick the ${input.candidates ?? input.count} best moments, best first. Each must be ${input.minSec}–${input.maxSec} seconds long, and they must not overlap.`,
     "Give start, end and replay_at in seconds from the start of the stream.",
     input.instructions ? `Direction from the creator: ${input.instructions}` : "",
     "",
     `<audio_spikes>\n${spikes || "none detected"}\n</audio_spikes>`,
+    input.audience ? `\n<audience_signals>\n${input.audience}\n</audience_signals>` : "",
     "",
     `<transcript>\n${transcript}\n</transcript>`,
   ]
@@ -178,6 +196,8 @@ export async function claudeMoments(input: ClaudeMomentInput): Promise<{ picks: 
     if (end - start < 3) continue;
     if (picks.some((p) => start < p.end && end > p.start)) continue;
     const hook = m.hook.trim().toUpperCase().split(/\s+/).slice(0, 3).join(" ");
+    const ts = Math.max(start, Math.min(m.teaser_start, m.teaser_end));
+    const te = Math.min(end, Math.max(m.teaser_start, m.teaser_end));
     picks.push({
       start,
       end,
@@ -188,10 +208,63 @@ export async function claudeMoments(input: ClaudeMomentInput): Promise<{ picks: 
       description: m.description.trim(),
       hashtags: m.hashtags.map((h) => h.replace(/^#/, "").trim().toLowerCase()).filter(Boolean).slice(0, 8),
       replayAt: Math.min(end - 0.5, Math.max(start + 0.5, m.replay_at)),
+      teaser: m.use_teaser && te - ts >= 0.6 && te - ts <= 3.5 ? [ts, te] : undefined,
+      emphasis: m.emphasis.map((w) => w.trim()).filter(Boolean).slice(0, 10),
+      headline: m.headline.trim().replace(/[.]+$/, "").slice(0, 60) || undefined,
+      category: m.category.trim().toLowerCase().slice(0, 20) || undefined,
     });
-    if (picks.length >= input.count) break;
+    if (picks.length >= (input.candidates ?? input.count)) break;
   }
   return { picks, usd: cost(model, final.usage), model };
+}
+
+const WatchSchema = z.object({
+  ratings: z.array(z.object({ id: z.number(), score: z.number(), keep: z.boolean(), note: z.string() })),
+});
+
+export interface WatchCandidate {
+  id: number;
+  title: string;
+  start: number;
+  end: number;
+  transcript: string;
+  /** JPEG contact sheet: frames across the clip, left to right, top to bottom. */
+  sheet: Buffer;
+}
+
+/**
+ * Claude looks at every candidate (a contact sheet of frames plus what is
+ * said) and rates how well it would hold a viewer, so the final picks are
+ * judged on the picture too, not only the transcript.
+ */
+export async function claudeWatch(cands: WatchCandidate[], signal?: AbortSignal): Promise<{ ratings: Map<number, { score: number; keep: boolean; note: string }>; usd: number }> {
+  const model = claudeModel();
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  for (const cand of cands) {
+    content.push({ type: "text", text: `Candidate ${cand.id}: "${cand.title}" (${stamp(cand.start)}–${stamp(cand.end)})\nSaid: ${cand.transcript.slice(0, 600) || "(nothing)"}` });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: cand.sheet.toString("base64") } });
+  }
+  content.push({
+    type: "text",
+    text: "Rate every candidate 0–100 for how well it would stop a viewer scrolling on a phone and hold them to the end. Judge the pictures and what is said together: visible action or a clear reaction, gameplay you can read on a small screen, a story that makes sense on its own. Set keep=false for clips that are mostly menus, loading screens, black or frozen frames, a static screen with nothing happening, or that make no sense without context. note: one short sentence on what you see.",
+  });
+  const stream = claude().beta.messages.stream(
+    {
+      model,
+      max_tokens: 16000,
+      ...FALLBACK,
+      output_config: { effort: "medium", format: betaZodOutputFormat(WatchSchema) },
+      system: "You are the quality editor of a clip factory that makes vertical gaming shorts. Each image is a contact sheet of six frames across one candidate clip, left to right, top to bottom.",
+      messages: [{ role: "user", content }],
+    },
+    { signal },
+  );
+  const final = await stream.finalMessage();
+  if (final.stop_reason === "refusal") throw new RefusalError("Claude declined to rate these clips.");
+  if (!final.parsed_output) throw new Error("Claude's ratings didn't match the expected format.");
+  const ratings = new Map<number, { score: number; keep: boolean; note: string }>();
+  for (const r of final.parsed_output.ratings) ratings.set(r.id, { score: Math.round(Math.min(100, Math.max(0, r.score))), keep: r.keep, note: r.note.trim() });
+  return { ratings, usd: cost(model, final.usage) };
 }
 
 const TranslationSchema = z.object({ lines: z.array(z.object({ i: z.number(), text: z.string() })) });
