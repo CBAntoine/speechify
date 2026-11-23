@@ -48,6 +48,7 @@ object RecordingNotifications {
         val title = when {
             state.phase == RecorderPhase.COOLING_DOWN -> context.getString(R.string.notif_cooling_title)
             state.phase == RecorderPhase.STARTING -> context.getString(R.string.notif_starting_title)
+            state.phase == RecorderPhase.WAITING -> context.getString(R.string.notif_waiting_title)
             state.muted || !state.audioEnabled -> context.getString(R.string.notif_recording_title_muted)
             else -> context.getString(R.string.notif_recording_title)
         }

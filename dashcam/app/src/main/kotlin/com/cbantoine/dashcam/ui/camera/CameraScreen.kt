@@ -2,6 +2,9 @@ package com.cbantoine.dashcam.ui.camera
 
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -74,7 +77,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
@@ -324,7 +326,7 @@ private fun ControlCluster(
         {
             RecordButton(
                 recording = recording,
-                busy = state.phase == RecorderPhase.STARTING || state.phase == RecorderPhase.STOPPING,
+                busy = state.phase == RecorderPhase.STOPPING,
                 onClick = onRecordClick,
             )
         },
@@ -413,7 +415,9 @@ private fun StatusPill(state: RecorderUiState) {
     )
     val (label, color) = when (state.phase) {
         RecorderPhase.RECORDING -> stringResource(R.string.status_rec) to DashcamPalette.Rec
-        RecorderPhase.STARTING, RecorderPhase.STOPPING -> stringResource(R.string.status_starting) to DashcamPalette.Amber
+        RecorderPhase.STARTING -> stringResource(R.string.status_starting) to DashcamPalette.Amber
+        RecorderPhase.STOPPING -> stringResource(R.string.status_stopping) to DashcamPalette.Amber
+        RecorderPhase.WAITING -> stringResource(R.string.status_waiting) to DashcamPalette.Amber
         RecorderPhase.COOLING_DOWN -> stringResource(R.string.status_cooling) to DashcamPalette.Amber
         RecorderPhase.IDLE -> stringResource(R.string.status_ready) to Color.White
     }
@@ -720,14 +724,24 @@ private fun LockOrientation(orientation: MountOrientation) {
 
 /**
  * Tells the engine which way is up. Only while this screen is visible (and not in
- * picture-in-picture, where the display follows whatever app is in front).
+ * picture-in-picture, where the display follows whatever app is in front). A display listener
+ * is used because a 180° flip (landscape to reverse landscape) causes no configuration change.
  */
 @Composable
 private fun ReportDisplayRotation(holder: RecorderStateHolder, enabled: Boolean) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    LaunchedEffect(configuration, enabled) {
-        if (enabled) holder.displayRotation.value = ContextCompat.getDisplayOrDefault(context).rotation
+    DisposableEffect(context, enabled) {
+        if (!enabled) return@DisposableEffect onDispose { }
+        val report = { holder.displayRotation.value = ContextCompat.getDisplayOrDefault(context).rotation }
+        val displayManager = context.getSystemService(DisplayManager::class.java)
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) = Unit
+            override fun onDisplayRemoved(displayId: Int) = Unit
+            override fun onDisplayChanged(displayId: Int) = report()
+        }
+        report()
+        displayManager?.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        onDispose { displayManager?.unregisterDisplayListener(listener) }
     }
 }
 

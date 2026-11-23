@@ -7,27 +7,34 @@ import kotlin.math.max
 object StoragePolicy {
     private const val GIB = 1L shl 30
 
-    data class LoopClip(val id: String, val sizeBytes: Long, val startedAtMs: Long)
+    /** [onActiveVolume]: on the volume new clips are written to (the one [freeBytes] measures). */
+    data class LoopClip(val id: String, val sizeBytes: Long, val startedAtMs: Long, val onActiveVolume: Boolean = true)
 
     /**
-     * Picks the oldest loop clips to delete until the loop folder fits [loopBudgetBytes] and the
-     * volume has at least [minFreeBytes] free. Never selects [activeId], the clip being written.
+     * Picks the oldest loop clips to delete until all loop clips fit [loopBudgetBytes] and the
+     * active volume has at least [minFreeBytes] free. Clips in [busyIds] (being recorded,
+     * finalized or moved) are never selected, and deleting a clip on another volume never
+     * counts as freeing space on the active one.
      */
     fun selectForDeletion(
         loopClips: List<LoopClip>,
         freeBytes: Long,
         loopBudgetBytes: Long,
         minFreeBytes: Long,
-        activeId: String? = null,
+        busyIds: Set<String> = emptySet(),
     ): List<LoopClip> {
         var loopTotal = loopClips.sumOf { it.sizeBytes }
         var free = freeBytes
         val victims = mutableListOf<LoopClip>()
-        for (clip in loopClips.filter { it.id != activeId }.sortedBy { it.startedAtMs }) {
-            if (loopTotal <= loopBudgetBytes && free >= minFreeBytes) break
+        for (clip in loopClips.filter { it.id !in busyIds }.sortedBy { it.startedAtMs }) {
+            val overBudget = loopTotal > loopBudgetBytes
+            val needSpace = free < minFreeBytes
+            if (!overBudget && !needSpace) break
+            // Only over budget clips, or clips whose deletion actually frees space, are removed.
+            if (!overBudget && !clip.onActiveVolume) continue
             victims += clip
             loopTotal -= clip.sizeBytes
-            free += clip.sizeBytes
+            if (clip.onActiveVolume) free += clip.sizeBytes
         }
         return victims
     }

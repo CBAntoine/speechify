@@ -195,17 +195,21 @@ class ClipRepository(
     }
 
     /**
-     * Deletes the oldest loop clips until the loop folder fits its budget and the volume keeps
-     * [minFreeBytes] free. [activeFile] (the clip being recorded) is never touched.
+     * Deletes the oldest loop clips until the loop folders fit their budget and the active volume
+     * keeps [minFreeBytes] free. Files in [busyPaths] (recording, finalizing, moving) are never
+     * touched.
      */
-    suspend fun enforceBudget(activeFile: File?, minFreeBytes: Long): Int = withContext(io) {
+    suspend fun enforceBudget(busyPaths: Set<String>, minFreeBytes: Long): Int = withContext(io) {
+        val activeRoot = activeRoot().absolutePath + File.separator
         val loopClips = allRoots().flatMap { scan(it.loopDir(), false) }
         val victims = StoragePolicy.selectForDeletion(
-            loopClips = loopClips.map { StoragePolicy.LoopClip(it.path, it.sizeBytes, it.startedAtMs) },
+            loopClips = loopClips.map {
+                StoragePolicy.LoopClip(it.path, it.sizeBytes, it.startedAtMs, onActiveVolume = it.path.startsWith(activeRoot))
+            },
             freeBytes = freeBytes(),
             loopBudgetBytes = settings.value.loopStorageBytes,
             minFreeBytes = minFreeBytes,
-            activeId = activeFile?.absolutePath,
+            busyIds = busyPaths,
         )
         victims.forEach { victim ->
             val file = File(victim.id)

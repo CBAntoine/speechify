@@ -32,7 +32,7 @@ background while you use Maps, Waze, Spotify or anything else, with the screen o
 
 ## Install the APK
 
-1. Copy `Dashcam-1.0.0.apk` to your phone, or download it straight onto the phone.
+1. Copy the APK (e.g. `Dashcam-1.0.1.apk`) to your phone, or download it straight onto the phone.
 2. Open it. If Android asks, allow your browser or file manager to **install unknown apps**.
 3. Open **Dashcam**, grant the camera (required), microphone, location and notification
    permissions, and allow background activity when asked.

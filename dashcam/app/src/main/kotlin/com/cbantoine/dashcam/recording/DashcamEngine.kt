@@ -101,6 +101,8 @@ class DashcamEngine(
         var finalized = false
         var protectRequested = false
         var impact = false
+        var bytes = 0L
+        var hasFootage = false
         val telemetry = SegmentTelemetry()
     }
 
@@ -129,8 +131,21 @@ class DashcamEngine(
     private var current: Segment? = null
     private var previous: Segment? = null
     private var cooling = false
-    private var unbindAfter: Segment? = null
+    private var cooldownUnbindPending = false
     private var storageRecovery = false
+    private var bindFailures = 0
+
+    /** Clips that were started but not finalized yet: at most one finishing plus one queued. */
+    private val unfinalized = LinkedHashSet<Segment>()
+
+    /** Files the storage cleanup must not delete (recording, finalizing or about to move), with use counts. */
+    private val busyFiles = mutableMapOf<String, Int>()
+
+    /** The newest clip that actually contains footage. */
+    private var lastFootage: Segment? = null
+    private var lastProgressAtMs = 0L
+    private var hadFootageThisSession = false
+    private var cameraOpen = false
 
     private var tickerJob: Job? = null
     private var rotationJob: Job? = null
@@ -165,7 +180,7 @@ class DashcamEngine(
         if (holder.controller === this) holder.controller = null
         session = null
         stopping = false
-        current?.recording?.stop()
+        unfinalized.forEach { it.recording?.stop() }
         listOf(tickerJob, rotationJob, retryJob, countdownJob, stopTimeoutJob, zoomSaveJob).forEach { it?.cancel() }
         location.stop()
         impacts.stop()
@@ -197,6 +212,7 @@ class DashcamEngine(
         } catch (e: Exception) {
             Log.e(TAG, "CameraX failed to initialize", e)
             holder.update { it.copy(issue = RecorderIssue.CAMERA_ERROR) }
+            onBindFailed()
             return
         }
         val settings = graph.settingsRepository.settings.first()
@@ -211,6 +227,7 @@ class DashcamEngine(
         } catch (e: Exception) {
             Log.e(TAG, "No back camera", e)
             holder.update { it.copy(issue = RecorderIssue.CAMERA_ERROR, cameraReady = false) }
+            onBindFailed()
             return false
         }
         val capabilities = Recorder.getVideoCapabilities(cameraInfo)
@@ -273,12 +290,14 @@ class DashcamEngine(
             holder.update { it.copy(issue = RecorderIssue.CAMERA_ERROR, cameraReady = false) }
             camera = null
             videoCapture = null
+            onBindFailed()
             return false
         }
         camera = bound
         preview = newPreview
         videoCapture = newVideo
         boundConfig = config
+        bindFailures = 0
         appliedRotation = rotation
         overlay.outputRotationDegrees = bound.cameraInfo.getSensorRotationDegrees(rotation)
         overlay.invalidate()
@@ -305,6 +324,13 @@ class DashcamEngine(
         return true
     }
 
+    /** Retries a failed camera bind during a session, then gives up rather than hang in STARTING. */
+    private fun onBindFailed() {
+        if (session == null) return
+        bindFailures++
+        if (bindFailures >= MAX_BIND_FAILURES) failSession(RecorderIssue.CAMERA_ERROR) else scheduleRetry(2_000L * bindFailures)
+    }
+
     private fun buildRecorder(quality: VideoQuality, hevc: Boolean): Pair<Recorder, Boolean> {
         fun builder() = Recorder.Builder()
             .setQualitySelector(
@@ -328,6 +354,7 @@ class DashcamEngine(
         }
         provider?.unbindAll()
         camera = null
+        cameraOpen = false
         preview = null
         videoCapture = null
         boundConfig = null
@@ -353,13 +380,13 @@ class DashcamEngine(
                 else -> RecorderIssue.CAMERA_ERROR
             }
         }
+        cameraOpen = state.type == CameraState.Type.OPEN
         holder.update { ui ->
             val cameraIssue = ui.issue in CAMERA_ISSUES
             ui.copy(issue = issue ?: ui.issue.takeUnless { cameraIssue })
         }
-        if (state.type == CameraState.Type.OPEN && session != null && current == null && !cooling) {
-            scheduleRetry(300)
-        }
+        if (cameraOpen && session != null && current == null && !cooling) scheduleRetry(300)
+        refreshPhase()
     }
 
     private fun onDisplayRotation(rotation: Int) {
@@ -410,6 +437,10 @@ class DashcamEngine(
         val newSession = Session(audio = settings.recordAudio && hasPermission(Manifest.permission.RECORD_AUDIO))
         session = newSession
         previous = null
+        lastFootage = null
+        hadFootageThisSession = false
+        lastProgressAtMs = 0L
+        bindFailures = 0
         graph.sessionMarker.markActive(true)
         holder.update {
             it.copy(
@@ -435,7 +466,8 @@ class DashcamEngine(
             // Make sure the camera reflects the latest settings before the first clip.
             val latest = graph.settingsRepository.settings.first()
             val cameraProvider = provider
-            if (session !== newSession) return@launch
+            // A cool-down may already have begun (hot car); it rebinds when it ends.
+            if (session !== newSession || cooling) return@launch
             when {
                 cameraProvider == null -> Unit // bindWhenReady() starts the first clip once bound.
                 boundConfig != CameraConfig.from(latest) || camera == null -> bindCamera(cameraProvider, CameraConfig.from(latest), latest)
@@ -454,29 +486,32 @@ class DashcamEngine(
         unregisterPowerReceiver()
         unregisterThermalListener()
         holder.update { it.copy(phase = RecorderPhase.STOPPING, stopCountdownSec = null) }
-        val seg = current
-        if (seg?.recording != null && !seg.finalized) {
-            seg.recording?.stop()
+        // Includes a clip still finishing from the last rotation. stop() on it is a no-op.
+        unfinalized.toList().forEach { it.recording?.stop() }
+        if (unfinalized.isEmpty()) {
+            current = null
+            finishSession()
+        } else {
             stopTimeoutJob = scope.launch {
                 delay(STOP_TIMEOUT_MS)
+                Log.w(TAG, "Clips didn't finalize in time; ending the session anyway")
+                unfinalized.clear()
                 current = null
                 finishSession()
             }
-        } else {
-            current = null
-            finishSession()
         }
     }
 
+    /** Ends a stopping session once every clip is safely finalized. */
     private fun finishSession() {
-        if (!stopping) return
+        if (!stopping || unfinalized.isNotEmpty()) return
         stopping = false
         stopTimeoutJob?.cancel()
         releaseWakeLock()
         graph.sessionMarker.markActive(false)
         val wasCooling = cooling
         cooling = false
-        unbindAfter = null
+        cooldownUnbindPending = false
         holder.update {
             it.copy(
                 phase = RecorderPhase.IDLE,
@@ -541,6 +576,8 @@ class DashcamEngine(
             seg.protectRequested = true
             s.protectNext = false
         }
+        unfinalized += seg
+        markBusy(seg.file.absolutePath)
         current = seg
         holder.update { it.copy(activeClipPath = file.absolutePath, currentClipProtected = seg.protectRequested) }
     }
@@ -549,7 +586,7 @@ class DashcamEngine(
         if (storageRecovery) return
         storageRecovery = true
         scope.launch {
-            clips.enforceBudget(current?.file, StoragePolicy.minFreeBytes(estimate))
+            clips.enforceBudget(busyFiles.keys.toSet(), StoragePolicy.minFreeBytes(estimate))
             storageRecovery = false
             if (session == null) return@launch
             if (StoragePolicy.canStartClip(clips.freeBytes(), estimate)) startClip() else failSession(RecorderIssue.STORAGE_FULL)
@@ -558,37 +595,62 @@ class DashcamEngine(
 
     private fun onRecordEvent(seg: Segment, event: VideoRecordEvent) {
         when (event) {
-            is VideoRecordEvent.Start -> onClipStarted(seg)
+            // CameraX reports Start as soon as the encoders run, before any frame arrives (for
+            // example while another app holds the camera), so footage is tracked from Status.
+            is VideoRecordEvent.Start -> refreshWakeLock()
+            is VideoRecordEvent.Status -> onClipProgress(seg, event.recordingStats.numBytesRecorded)
             is VideoRecordEvent.Finalize -> onClipFinalized(seg, event)
             else -> Unit
         }
     }
 
-    private fun onClipStarted(seg: Segment) {
+    /** Bytes only appear once the first video key frame is muxed, so this means real footage. */
+    private fun onClipProgress(seg: Segment, bytes: Long) {
+        if (bytes <= seg.bytes) return
+        seg.bytes = bytes
         val now = System.currentTimeMillis()
-        seg.startedAtMs = now
-        seg.telemetry.begin(now)
-        val s = session
-        if (s != null) {
-            s.clipCount++
-            s.failures = 0
+        lastProgressAtMs = now
+        if (!seg.hasFootage) {
+            seg.hasFootage = true
+            seg.startedAtMs = now
+            seg.telemetry.begin(now)
+            lastFootage = seg
+            hadFootageThisSession = true
+            val s = session
+            if (s != null) {
+                s.clipCount++
+                s.failures = 0
+            }
+            if (current === seg && s != null) scheduleRotation(seg)
+            holder.update {
+                it.copy(
+                    clipStartedAtMs = now,
+                    clipsThisSession = s?.clipCount ?: it.clipsThisSession,
+                    currentClipProtected = seg.protectRequested,
+                    issue = it.issue.takeUnless { issue -> issue == RecorderIssue.STORAGE_FULL },
+                )
+            }
+            launchStorageCleanup()
         }
-        if (current === seg && s != null) scheduleRotation(seg)
-        refreshWakeLock()
-        holder.update {
-            it.copy(
-                phase = if (s == null) it.phase else RecorderPhase.RECORDING,
-                clipStartedAtMs = now,
-                clipsThisSession = s?.clipCount ?: it.clipsThisSession,
-                currentClipProtected = seg.protectRequested,
-                issue = it.issue.takeUnless { issue -> issue == RecorderIssue.STORAGE_FULL || issue in CAMERA_ISSUES },
-            )
+        refreshPhase(now)
+    }
+
+    /** REC only while frames are really arriving; otherwise the session is waiting on the camera. */
+    private fun refreshPhase(now: Long = System.currentTimeMillis()) {
+        val phase = when {
+            stopping -> RecorderPhase.STOPPING
+            session == null -> return
+            cooling -> RecorderPhase.COOLING_DOWN
+            cameraOpen && now - lastProgressAtMs < PROGRESS_GRACE_MS -> RecorderPhase.RECORDING
+            hadFootageThisSession -> RecorderPhase.WAITING
+            else -> RecorderPhase.STARTING
         }
-        launchStorageCleanup()
+        if (holder.state.value.phase != phase) holder.update { it.copy(phase = phase) }
     }
 
     private fun onClipFinalized(seg: Segment, event: VideoRecordEvent.Finalize) {
         seg.finalized = true
+        unfinalized -= seg
         val error = event.error
         if (error != VideoRecordEvent.Finalize.ERROR_NONE) {
             Log.w(TAG, "Clip ${seg.file.name} finalized with error $error", event.cause)
@@ -599,27 +661,31 @@ class DashcamEngine(
         val track = seg.telemetry.build(System.currentTimeMillis())
         val protect = seg.protectRequested
         val impact = seg.impact
+        val path = seg.file.absolutePath
         // App scope: this must finish even if the service is destroyed right after the last clip.
         graph.appScope.launch {
             clips.completeClip(seg.file, track, protect, impact, keep)
+            markIdle(path)
             launchStorageCleanup()
         }
 
-        if (unbindAfter === seg) {
-            unbindAfter = null
-            releaseCamera()
+        if (cooldownUnbindPending && unfinalized.isEmpty()) {
+            cooldownUnbindPending = false
+            if (cooling) releaseCamera()
         }
-        if (current !== seg) return
+        if (current === seg) {
+            current = null
+            rotationJob?.cancel()
+            holder.update { it.copy(activeClipPath = null) }
+            val s = session
+            if (s != null && !cooling) restartAfter(error, s)
+        }
+        if (stopping) finishSession()
+        refreshPhase()
+    }
 
-        current = null
-        rotationJob?.cancel()
-        holder.update { it.copy(activeClipPath = null) }
-        val s = session
-        if (s == null) {
-            finishSession()
-            return
-        }
-        if (cooling) return
+    /** The clip being recorded ended on its own; start the next one or back off. */
+    private fun restartAfter(error: Int, s: Session) {
         when (error) {
             VideoRecordEvent.Finalize.ERROR_NONE,
             VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED,
@@ -629,7 +695,10 @@ class DashcamEngine(
             // The camera closed (another app took it, or the system reclaimed it). The camera
             // state observer restarts us when it reopens; this is a fallback.
             VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> scheduleRetry(3_000)
-            else -> {
+            // Without the camera there is nothing to count against: wait for it to come back.
+            else -> if (!cameraOpen) {
+                scheduleRetry(3_000)
+            } else {
                 s.failures++
                 if (s.failures >= MAX_CONSECUTIVE_FAILURES) {
                     failSession(RecorderIssue.CAMERA_ERROR)
@@ -688,9 +757,14 @@ class DashcamEngine(
         val now = System.currentTimeMillis()
         val s = session
         if (s == null) {
-            graph.appScope.launch {
-                clips.listClips().firstOrNull { !it.isProtected && it.path != holder.state.value.activeClipPath }
-                    ?.let { clips.protect(it) }
+            // Stopping or idle: protect the newest clip with footage (it may still be finalizing).
+            val newest = lastFootage
+            if (newest != null) {
+                protectSegment(newest)
+            } else {
+                graph.appScope.launch {
+                    clips.listClips().firstOrNull { !it.isProtected && it.path !in busyFiles }?.let { clips.protect(it) }
+                }
             }
             holder.update { it.copy(lastProtect = ProtectNotice(now, reason, g)) }
             return
@@ -714,8 +788,15 @@ class DashcamEngine(
     private fun protectSegment(seg: Segment?) {
         if (seg == null || seg.protectRequested) return
         seg.protectRequested = true
-        // Not finalized yet: onClipFinalized() moves it. Otherwise move it now.
-        if (seg.finalized) graph.appScope.launch { clips.protectByName(seg.root, seg.baseName, seg.impact) }
+        // Not finalized yet: onClipFinalized() moves it. Otherwise move it now, and keep the
+        // storage cleanup away from it until it has moved.
+        if (!seg.finalized) return
+        val path = seg.file.absolutePath
+        markBusy(path)
+        graph.appScope.launch {
+            clips.protectByName(seg.root, seg.baseName, seg.impact)
+            markIdle(path)
+        }
     }
 
     override fun setMuted(muted: Boolean) {
@@ -755,6 +836,7 @@ class DashcamEngine(
         val fix = location.fix.value?.takeIf { it.isFresh() }
         overlay.content = OverlayText.build(now, fix, graph.settings.value)
         if (fix != null) current?.telemetry?.addFix(fix, now)
+        refreshPhase(now)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -847,21 +929,21 @@ class DashcamEngine(
         retryJob?.cancel()
         wakeLock?.acquire(COOLDOWN_WAKELOCK_MS)
         holder.update { it.copy(phase = RecorderPhase.COOLING_DOWN, issue = RecorderIssue.OVERHEATING) }
-        val seg = current
-        if (seg?.recording != null && !seg.finalized) {
-            previous = seg
-            current = null
-            unbindAfter = seg
-            seg.recording?.stop()
-        } else {
-            current = null
+        current?.let { if (it.hasFootage) previous = it }
+        current = null
+        if (unfinalized.isEmpty()) {
             releaseCamera()
+        } else {
+            // Release the camera only once every clip (including one still finishing from the
+            // last rotation) is finalized.
+            cooldownUnbindPending = true
+            unfinalized.toList().forEach { it.recording?.stop() }
         }
     }
 
     private fun exitCooldown() {
         cooling = false
-        unbindAfter = null
+        cooldownUnbindPending = false
         holder.update {
             it.copy(
                 phase = RecorderPhase.STARTING,
@@ -880,8 +962,17 @@ class DashcamEngine(
     private fun launchStorageCleanup() {
         graph.appScope.launch {
             val estimate = estimateClipBytes(graph.settings.value, session?.audio ?: false)
-            clips.enforceBudget(current?.file, StoragePolicy.minFreeBytes(estimate))
+            clips.enforceBudget(busyFiles.keys.toSet(), StoragePolicy.minFreeBytes(estimate))
         }
+    }
+
+    private fun markBusy(path: String) {
+        busyFiles[path] = (busyFiles[path] ?: 0) + 1
+    }
+
+    private fun markIdle(path: String) {
+        val count = (busyFiles[path] ?: 1) - 1
+        if (count <= 0) busyFiles.remove(path) else busyFiles[path] = count
     }
 
     private fun estimateClipBytes(settings: DashcamSettings, audio: Boolean): Long {
@@ -922,6 +1013,8 @@ class DashcamEngine(
         const val POST_EVENT_MS = 10_000L
         const val STOP_TIMEOUT_MS = 8_000L
         const val MAX_CONSECUTIVE_FAILURES = 6
+        const val MAX_BIND_FAILURES = 4
+        const val PROGRESS_GRACE_MS = 3_000L
         const val AUTO_STOP_SECONDS = 60
         const val COOLDOWN_WAKELOCK_MS = 30 * 60_000L
         val CAMERA_ISSUES = setOf(

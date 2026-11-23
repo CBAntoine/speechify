@@ -16,6 +16,7 @@
     <string name="notif_recording_title_muted">Recording · mic off</string>
     <string name="notif_starting_title">Starting camera…</string>
     <string name="notif_cooling_title">Paused: phone too hot</string>
+    <string name="notif_waiting_title">Waiting for the camera…</string>
     <string name="notif_cooling_text">Recording resumes on its own when the phone cools down</string>
     <string name="notif_recording_text">%1$s · %2$d-min loop · tap to open</string>
     <string name="notif_protected_text">Current clip is protected</string>
@@ -36,6 +37,8 @@
     <string name="status_ready">READY</string>
     <string name="status_starting">STARTING</string>
     <string name="status_cooling">COOLING DOWN</string>
+    <string name="status_waiting">WAITING FOR CAMERA</string>
+    <string name="status_stopping">SAVING</string>
     <plurals name="clips_count">
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>

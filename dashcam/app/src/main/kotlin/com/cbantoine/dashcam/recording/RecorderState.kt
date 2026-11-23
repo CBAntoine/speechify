@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-enum class RecorderPhase { IDLE, STARTING, RECORDING, STOPPING, COOLING_DOWN }
+/** WAITING: a session that has recorded before but isn't getting frames right now (camera taken). */
+enum class RecorderPhase { IDLE, STARTING, RECORDING, WAITING, STOPPING, COOLING_DOWN }
 
 enum class RecorderIssue { CAMERA_IN_USE, CAMERA_DISABLED, CAMERA_ERROR, STORAGE_FULL, PERMISSION_MISSING, OVERHEATING }
 
@@ -44,7 +45,8 @@ data class RecorderUiState(
     val stabilizationSupported: Boolean = false,
 ) {
     val isSessionActive: Boolean
-        get() = phase == RecorderPhase.STARTING || phase == RecorderPhase.RECORDING || phase == RecorderPhase.COOLING_DOWN
+        get() = phase == RecorderPhase.STARTING || phase == RecorderPhase.RECORDING ||
+            phase == RecorderPhase.WAITING || phase == RecorderPhase.COOLING_DOWN
 }
 
 /** Commands the UI can send straight to a running engine. */

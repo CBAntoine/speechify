@@ -32,12 +32,32 @@ class StoragePolicyTest {
     }
 
     @Test
-    fun neverDeletesTheActiveClip() {
+    fun neverDeletesBusyClips() {
+        // clip10 is recording and clip9 is still being finalized after a rotation.
         val victims = StoragePolicy.selectForDeletion(
-            clips, freeBytes = 0, loopBudgetBytes = 0, minFreeBytes = Long.MAX_VALUE, activeId = "clip10",
+            clips, freeBytes = 0, loopBudgetBytes = 0, minFreeBytes = Long.MAX_VALUE, busyIds = setOf("clip9", "clip10"),
         )
-        assertThat(victims.map { it.id }).doesNotContain("clip10")
-        assertThat(victims).hasSize(9)
+        assertThat(victims.map { it.id }).containsNoneOf("clip9", "clip10")
+        assertThat(victims).hasSize(8)
+    }
+
+    @Test
+    fun clipsOnAnotherVolumeDoNotCountAsFreedSpace() {
+        val otherVolume = (1..3).map { LoopClip("sd$it", 100 * mb, startedAtMs = it.toLong(), onActiveVolume = false) }
+        val victims = StoragePolicy.selectForDeletion(
+            otherVolume + clips, freeBytes = 800 * mb, loopBudgetBytes = 50_000 * mb, minFreeBytes = 1_000 * mb,
+        )
+        // Under budget: only clips on the full volume help, so the SD card's older clips stay.
+        assertThat(victims.map { it.id }).containsExactly("clip1", "clip2").inOrder()
+    }
+
+    @Test
+    fun overBudgetDeletesOldestOnAnyVolume() {
+        val otherVolume = listOf(LoopClip("sd1", 100 * mb, startedAtMs = 1, onActiveVolume = false))
+        val victims = StoragePolicy.selectForDeletion(
+            otherVolume + clips, freeBytes = 50_000 * mb, loopBudgetBytes = 1_000 * mb, minFreeBytes = 1_000 * mb,
+        )
+        assertThat(victims.map { it.id }).containsExactly("sd1").inOrder()
     }
 
     @Test
