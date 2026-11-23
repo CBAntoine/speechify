@@ -10,51 +10,9 @@
 import net from "node:net";
 import tls from "node:tls";
 import { CMD, MAX_DATA, MessageParser, VERSION, encodeMessage } from "./adb.mjs";
+import { openPorts } from "./knock.mjs";
 
-/** The range Linux, and so Android, picks a listening port from when a program asks for any port. */
-export const PICKED_PORTS = { from: 32768, to: 60999 };
-
-/** How one port answers a knock: "open", "refused" (nothing there, but the device answered), or "silent". */
-function knock(ip, port, timeout) {
-  return new Promise((resolve) => {
-    const s = net.connect({ host: ip, port });
-    let settled = false;
-    const end = (state) => {
-      if (settled) return;
-      settled = true;
-      s.destroy();
-      resolve(state);
-    };
-    s.setTimeout(timeout, () => end("silent"));
-    s.once("connect", () => end("open"));
-    s.once("error", (e) => end(e.code === "ECONNREFUSED" ? "refused" : "silent"));
-  });
-}
-
-/**
- * The open TCP ports on one host between from and to: { open, answered }. answered is false when the
- * host said nothing at all (asleep, or out of reach), and then it stops early instead of waiting on
- * every port. budget caps the whole knock in milliseconds.
- */
-export async function openPorts(ip, { from = PICKED_PORTS.from, to = PICKED_PORTS.to, concurrency = 384, timeout = 1500, budget = 45_000 } = {}) {
-  // First a few knocks: a device that's there turns a knock away at once.
-  const first = await Promise.all([from, Math.floor((from + to) / 2), to].map((p) => knock(ip, p, timeout)));
-  if (first.every((s) => s === "silent")) return { open: [], answered: false };
-  const open = [];
-  first.forEach((s, i) => s === "open" && open.push([from, Math.floor((from + to) / 2), to][i]));
-  const skip = new Set([from, Math.floor((from + to) / 2), to]);
-  const started = Date.now();
-  let next = from;
-  const worker = async () => {
-    while (next <= to && Date.now() - started < budget) {
-      const port = next++;
-      if (skip.has(port)) continue;
-      if ((await knock(ip, port, timeout)) === "open") open.push(port);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, to - from + 1) }, worker));
-  return { open: [...new Set(open)].sort((a, b) => a - b), answered: true, complete: next > to };
-}
+export { PICKED_PORTS } from "./knock.mjs";
 
 /** Whether this port is adb's pairing window: TLS 1.3 straight away, with adb's own certificate. */
 export function isPairingWindow(ip, port, { key, cert, timeout = 4000 } = {}) {

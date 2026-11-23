@@ -492,6 +492,45 @@ export function createVoice(ui) {
       }
     },
 
+    // A closer look at any device (what it is, and why), and talking to it: its web pages and APIs,
+    // and messages to its ports. Anything that could change it waits for the person's yes.
+    explore_device: async ({ device, action, deep, port, path, method, body, protocol, message, wait_seconds, confirmed } = {}) => {
+      const act = String(action || "identify").toLowerCase();
+      const req = {
+        device: device || undefined,
+        action: act,
+        deep: deep === true || deep === "true" || undefined,
+        port: port ? Number(port) : undefined,
+        path: path || undefined,
+        method: method || undefined,
+        body: body ?? undefined,
+        protocol: protocol || undefined,
+        message: message ?? undefined,
+        wait: wait_seconds ? Number(wait_seconds) : undefined,
+      };
+      const key = json(["explore", norm(req.device), act, req.port, req.path, req.method, req.body, req.protocol, req.message]);
+      if (confirmed === true || confirmed === "true") {
+        const c = takeConfirmation(key, `explore:${act}`);
+        if (c.wait) return json({ ok: false, waiting_for_person: true, message: "The person hasn't answered yet. Ask them, then wait for a clear yes before calling again with confirmed true." });
+        req.confirmToken = c.token;
+      }
+      if (act === "identify") toolLine("search", req.device ? `Looking closer at ${req.device}${req.deep ? ", every port" : ""}…` : "Looking closer at every device Patch couldn't name…");
+      const r = await ui.api("POST", "/api/explore", req);
+      if (r.needsConfirmation) {
+        pending.set(key, { key, token: r.confirmToken, at: Date.now(), action: `explore:${act}` });
+        const msg = r.message.replace(/\s*Ask the person to confirm.*$/, "");
+        confirmCard(msg, (yes) => reply(yes ? "Yes, go ahead." : "No, leave it."));
+        return json({ ok: false, needs_confirmation: true, reason: msg, instruction: "Say in one short sentence what this sends and that Patch can't tell exactly what it will do, then ask. Only after a clear yes, call explore_device again with the same arguments plus confirmed: true." });
+      }
+      if (r.device_record) {
+        ui.mergeDevice(r.device_record);
+        ui.flashDevice(r.device_record.id);
+      }
+      toolLine(r.ok === false ? "alert" : act === "identify" ? "eye" : "check", r.message || (r.ok === false ? "That didn't work." : "Done."));
+      const { device_record, confirmToken, ...answer } = r;
+      return json(answer);
+    },
+
     diagnose_device: async ({ device } = {}) => {
       const { device: d, error } = await resolve(device);
       if (error) return error;

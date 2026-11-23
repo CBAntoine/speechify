@@ -62,6 +62,28 @@ export function kindMatches(device, kinds) {
 const tokens = (s) => normalizeText(s).split(" ").filter(Boolean);
 const tokenHit = (t, fields) => fields.some((f) => f === t || (t.length >= 4 && f.length >= 4 && (f.startsWith(t) || t.startsWith(f) || levenshtein(f, t) <= 1)));
 
+const GENERIC_NAME = /^(unknown device|device|phone, tablet or laptop|.* (device|gadget)|uses a private wi-fi address)$/i;
+
+/**
+ * What a closer look found (the explore tool), for a device no driver knows: its best answer to "what
+ * is it?" stands, scan after scan, with the reasons. A device a driver knows keeps the driver's word.
+ */
+function applyExplored(d) {
+  const g = d.explored?.guess;
+  if (!g || !["generic", "upnp"].includes(d.driver) || g.confidence === "guess") return d;
+  if (g.kind && g.kind !== "unknown") d.kind = g.kind;
+  if (g.brand) d.brand = g.brand;
+  if (g.model) d.model = g.model;
+  // A name that only says "unknown" gives way to its own name, or what it is ("Tasmota smart plug").
+  const plain = !d.name || GENERIC_NAME.test(d.name) || Object.values(KIND_LABEL).includes(d.name);
+  if (plain) d.name = g.name || (g.brand && KIND_LABEL[g.kind] ? `${g.brand} ${KIND_LABEL[g.kind].toLowerCase()}` : g.model) || d.name;
+  // Waking over the network is for computers and storage, not plugs and cameras.
+  if (!["computer", "nas", "console", "unknown"].includes(d.kind)) d.actions = (d.actions || []).filter((a) => a !== "wake");
+  const { guess, ...info } = d.info || {};
+  d.info = { ...info, identity: { exact: g.confidence === "exact", evidence: g.reasons.slice(0, 3).map((r) => `a closer look: ${r}`) } };
+  return d;
+}
+
 export class Inventory extends EventEmitter {
   constructor(store) {
     super();
@@ -151,6 +173,7 @@ export class Inventory extends EventEmitter {
       online,
       scanId: scanId ?? prev?.scanId ?? null,
     };
+    applyExplored(merged);
     this.devices.set(dev.id, merged);
     this.changed(merged);
     return merged;
@@ -160,6 +183,7 @@ export class Inventory extends EventEmitter {
     const d = this.devices.get(id);
     if (!d) return null;
     const next = { ...d, ...fields, state: fields.state ? { ...d.state, ...fields.state } : d.state, info: fields.info ? { ...d.info, ...fields.info } : d.info };
+    if (fields.explored) applyExplored(next);
     if (fields.online) next.lastSeen = Date.now();
     this.devices.set(id, next);
     this.changed(next);
@@ -230,6 +254,7 @@ export class Inventory extends EventEmitter {
       ports: d.ports || [],
       webUrl: d.webUrl || null,
       setup: d.setup || null,
+      explored: d.explored ? { at: d.explored.at, deep: d.explored.deep, services: d.explored.services, talk: d.explored.talk, reasons: d.explored.guess?.reasons || [], confidence: d.explored.guess?.confidence || null } : null,
       hidden: !!m.hidden,
       hasPassword: !!this.store.data.credentials[d.parent || d.id],
       // The TV that "YouTube" or "the TV" means when no TV is named.

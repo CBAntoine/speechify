@@ -12,9 +12,10 @@ import { parseSsdpMessage } from "../src/net/ssdp.mjs";
 import * as H from "./http-devices.mjs";
 import * as S from "./socket-devices.mjs";
 import * as T from "./tv-devices.mjs";
+import * as M from "./mystery-devices.mjs";
 import { startPretendBrowser } from "./pretend-browser.mjs";
 
-export async function startSimulator({ prefix = "127.0.10", multicast = false } = {}) {
+export async function startSimulator({ prefix = "127.0.10", multicast = false, mystery = false } = {}) {
   const ip = (n) => `${prefix}.${n}`;
   const servers = [];
   const add = (x) => servers.push(...(Array.isArray(x) ? x : [x]));
@@ -38,6 +39,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     lg: T.lgState(),
     firetv: T.fireTvState(),
     calendar: T.wirelessAndroidState(),
+    mystery: M.mysteryState(),
   };
   // Port forwards point at the simulated camera and Raspberry Pi.
   state.router.mappings[0].NewInternalClient = ip(23);
@@ -82,6 +84,9 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
   add(await S.openPorts(ip(27), [8008]));
   add(await T.wsdResponder(ip(1), [{ ip: ip(22), uuid: "2419d68a-2dd2-21b2-a205-ec71dbe1a2b3", maker: "Reolink", model: "RLC-510A", location: "Driveway" }]));
   add(await T.youtubeApi(ip(1), 8099));
+  // Devices no driver knows, that only a closer look names (the explore tool): in demo mode and the
+  // explore tests (the other tests' "the printer" and "the camera" mean the ones above).
+  if (mystery) add(await M.mysteryDevices(ip, state.mystery));
 
   const arp = [
     [1, "a0:40:a0:11:22:33"], [2, "00:17:88:2a:3b:4c"], [3, "c8:3a:6b:12:34:56"], [4, "48:a6:b8:f1:c2:d3"], [5, "a8:03:2a:b1:c2:d3"],
@@ -90,6 +95,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     [21, "9a:4c:01:22:33:44"], [22, "bc:51:fe:44:55:66"], [23, "b8:27:eb:4d:5e:6f"], [30, "10:2c:6b:00:11:22"], [31, "6e:12:ab:cd:ef:01"],
     [15, "64:1c:ae:12:34:56"], [16, "44:be:8b:0a:1b:2c"], [17, "f0:4f:7c:3a:2b:1c"], [18, "a4:b1:c2:d3:e4:f5"], [19, "f0:b3:ec:12:9a:7b"],
     [24, "2a:91:fe:61:0c:33"], [25, "f4:d4:88:5e:21:9c"], [26, "08:df:1f:55:66:77"], [27, "56:3e:91:aa:20:4d"], [28, "ae:3f:12:9b:44:20"],
+    ...(mystery ? [[40, "24:62:ab:11:22:40"], [41, "e4:5f:01:22:33:41"], [42, "00:05:cd:42:42:42"], [43, "c0:56:e3:43:43:43"], [44, "00:11:32:44:44:44"], [45, "3c:2a:f4:45:45:45"]] : []),
   ].map(([n, mac]) => ({ ip: ip(n), mac, iface: "sim" }));
 
   // ── mDNS ──
@@ -243,6 +249,6 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const sim = await startSimulator();
+  const sim = await startSimulator({ mystery: true });
   console.log(`Simulated home network running on ${sim.network.cidr}. Router ${sim.network.gateway}. Ctrl+C to stop.`);
 }

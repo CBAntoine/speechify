@@ -916,15 +916,42 @@ function detailsHtml(d) {
     has(d, "reboot") && btn(id, "reboot", `${icon("refresh", 14)} Restart`),
     d.webUrl && `<a class="btn btn--sm" href="${esc(d.webUrl)}" target="_blank" rel="noopener noreferrer">${icon("external", 14)} Settings page</a>`,
     d.ip && `<button class="btn btn--sm" data-ui="diagnose" data-id="${id}">${icon("info", 14)} Diagnose</button>`,
+    d.ip && !d.self && `<button class="btn btn--sm" data-ui="explore" data-id="${id}">${icon("search", 14)} Look closer</button>`,
   ].filter(Boolean);
   const rooms = [...new Set(state.devices.map((x) => x.room).filter(Boolean))];
   return `
     <div class="panel"><h3>What it is</h3>${kv(identity)}</div>
     ${care.length ? `<div class="panel"><h3>Care</h3><div class="btns">${care.join("")}</div><div id="diagOut"></div></div>` : ""}
+    ${exploredHtml(d)}
     ${d.setup?.kind === "password" || d.hasPassword || (d.driver === "shelly" && !d.parent) ? `<div class="panel"><h3>Device password</h3><form class="inline-form" data-form="credentials" data-id="${id}"><input name="password" type="password" placeholder="${d.hasPassword ? "Saved. Type a new one to change it" : "The password set on the device"}" autocomplete="off"><button class="btn btn--sm">Save</button></form><p style="color:var(--muted);font-size:12.5px;margin:8px 0 0">Stored only on ${HERE}, in Patch's data folder.</p></div>` : ""}
     <div class="panel"><h3>Where</h3><div class="control-row"><label>Room</label><form class="inline-form" data-form="room" data-id="${id}"><input name="value" value="${esc(d.room || "")}" placeholder="e.g. Living room" list="roomList"><button class="btn btn--sm">Save</button></form><datalist id="roomList">${rooms.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></div>
       <div class="control-row"><label>Dashboard</label><button class="btn btn--sm btn--ghost" data-ui="hide" data-id="${id}">${icon("eyeOff", 14)} ${d.hidden ? "Show on dashboard" : "Hide from dashboard"}</button></div></div>
     ${network.length ? `<div class="panel"><h3>On the network</h3>${kv(network)}</div>` : ""}`;
+}
+
+/** What a closer look found: what answers on each port, why Patch thinks it is what it is. */
+function exploredHtml(d) {
+  const x = d.explored;
+  if (!x) return "";
+  const line = (s) => [s.service && !["quiet", "text"].includes(s.service) ? s.service.toUpperCase() : s.service === "quiet" ? "takes messages" : null, s.title && `“${s.title}”`, s.server, s.banner && `“${s.banner}”`, s.cert && `certificate: ${s.cert}`, s.auth && "asks for a password"].filter(Boolean).join(" · ");
+  return `<div class="panel"><h3>A closer look</h3>
+    ${x.reasons?.length ? `<p style="margin:0 0 8px">${esc(x.reasons.slice(0, 3).join("; ").replace(/^./, (c) => c.toUpperCase()))}.</p>` : ""}
+    ${x.services?.length ? `<dl class="kv">${x.services.map((s) => `<dt>Port ${s.port}</dt><dd>${esc(line(s) || "open")}</dd>`).join("")}</dl>` : `<p style="color:var(--muted);margin:0">No open ports${x.deep ? "" : " among the usual ones"}.</p>`}
+    <p style="color:var(--muted);font-size:12.5px;margin:8px 0 0">${x.deep ? "Every port" : "The usual ports"}, ${esc(ago(x.at))}.${x.deep ? "" : ` <button class="btn btn--sm btn--ghost" data-ui="explore" data-deep="1" data-id="${esc(d.id)}">Check every port</button>`}</p></div>`;
+}
+
+/** Look closer at a device (every port when deep), then show what was found. */
+async function lookCloser(id, deep) {
+  const out = $("#diagOut");
+  if (out) out.innerHTML = `<p style="color:var(--muted);margin:10px 0 0">${deep ? "Knocking on every port: up to a minute…" : "Looking closer…"}</p>`;
+  const r = await api("POST", `/api/devices/${encodeURIComponent(id)}/explore`, { action: "identify", deep: !!deep });
+  if (r.device_record) {
+    mergeDevice(r.device_record);
+    renderAll();
+  }
+  const box = $("#diagOut");
+  if (box) box.innerHTML = "";
+  toast(r.message || "No answer.", r.ok === false ? "bad" : "ok");
 }
 
 function renderDrawer(fresh = false) {
@@ -1289,6 +1316,7 @@ document.addEventListener("click", async (e) => {
       $("#scrim").classList.remove("for-modal");
       openDevice(ui.dataset.id);
     } else if (what === "diagnose") showDiagnosis(ui.dataset.id);
+    else if (what === "explore") lookCloser(ui.dataset.id, ui.dataset.deep === "1");
     else if (what === "hide") {
       const d = state.devices.find((x) => x.id === ui.dataset.id);
       const r = await api("POST", `/api/devices/${encodeURIComponent(ui.dataset.id)}/meta`, { hidden: !d?.hidden });

@@ -12,6 +12,7 @@ import { Inventory } from "./inventory.mjs";
 import { Controller } from "./controller.mjs";
 import { Scanner } from "./scanner.mjs";
 import { runTuneup } from "./tuneup.mjs";
+import { makeExplorer } from "./explore.mjs";
 import { speedTest, internetStatus } from "./net/internet.mjs";
 import { wifiInfo } from "./net/wifi.mjs";
 import { ACTIONS } from "./drivers/common.mjs";
@@ -155,6 +156,7 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
   const inventory = new Inventory(store);
   const controller = new Controller({ store, inventory, overrides });
   const scanner = new Scanner({ store, inventory, controller, overrides });
+  const explorer = makeExplorer({ inventory, controller, scanner, overrides });
   controller.scanner = scanner;
   // Files sent from the dashboard, and the TV apps the person makes.
   const uploads = new Uploads(path.join(store.dir, "uploads"));
@@ -367,6 +369,9 @@ export async function startApp({ port = DEFAULT_PORT, lan = false, demo = false,
     // A tap on the picture of a TV's screen (the picture itself is served below, as an image).
     ["POST", /^\/api\/devices\/([^/]+)\/screen\/tap$/, async (b, [id]) => controller.tapAt(id, Number(b.x), Number(b.y))],
     ["POST", /^\/api\/control$/, async (b) => control(b)],
+    // A closer look at any device, and talking to it (the assistant's explore_device; "Look closer").
+    ["POST", /^\/api\/explore$/, async (b) => explorer.explore(b)],
+    ["POST", /^\/api\/devices\/([^/]+)\/explore$/, async (b, [id]) => explorer.explore({ ...b, device: id })],
     ["POST", /^\/api\/resolve$/, async (b) => {
       const r = inventory.resolve(b.query, { kind: b.kind });
       if (r.device) return { device: await controller.refresh(r.device.id) };

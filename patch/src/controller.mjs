@@ -87,6 +87,15 @@ export class Controller {
     return token;
   }
 
+  /** The same confirmations for steps outside act() (the explore tool talking to a device). */
+  issueConfirmation(key, action, value) {
+    return this.#issueConfirmation(key, action, value);
+  }
+
+  checkConfirmation(token, key, action, value) {
+    return this.#checkConfirmation(token, key, action, value);
+  }
+
   #checkConfirmation(token, id, action, value) {
     const c = token && this.confirmations.get(token);
     if (!c || Date.now() - c.at > 5 * 60_000 || c.key !== this.#confirmKey(id, action, value)) return false;
