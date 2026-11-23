@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light: matches the dashboard's light colours. -->
+    <style name="Patch" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/patch_bg</item>
+        <item name="android:colorAccent">@color/patch_accent</item>
+        <item name="android:statusBarColor">@color/patch_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

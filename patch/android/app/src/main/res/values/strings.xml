@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Patch</string>
+    <string name="starting">Starting Patch…</string>
+    <string name="lost_patch">Patch stopped answering. Tap Try again.</string>
+    <string name="too_slow">Patch is taking too long to start. Tap Try again, or close Patch and open it again.</string>
+    <string name="try_again">Try again</string>
+    <string name="no_browser">There\'s no app on this phone that can open that.</string>
+    <string name="no_files">There\'s no app on this phone for choosing files.</string>
+    <string name="accessibility_label">Patch</string>
+    <string name="accessibility_description">Lets Patch see what\'s on your screen and tap, scroll and type for you when you ask, for example to choose a search result in your browser, pick a song in Spotify or send music to a speaker. Patch never reads or types passwords, and asks you before tapping anything that buys, sends or deletes something.</string>
+    <string name="listening_channel">Listening</string>
+    <string name="listening_title">Patch is listening</string>
+    <string name="listening_text">Keep talking to Patch while you use other apps.</string>
+    <string name="listening_stop">Stop</string>
+</resources>
