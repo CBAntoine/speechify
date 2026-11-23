@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+next-env.d.ts
+tsconfig.tsbuildinfo
+# Python tools, downloaded binaries and model weights (made by `npm run setup`)
+.venv/
+tools/
+models/
+__pycache__/
+# Every job's downloads, analysis and rendered shorts
+workspace/

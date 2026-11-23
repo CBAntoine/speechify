@@ -1,0 +1,37 @@
+{
+  "name": "clipfactory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clip Factory: turn a long gameplay VOD with a facecam into captioned 9:16 shorts, using up to 18 open-source repos orchestrated by Claude.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3200 --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --port 3200 --hostname 127.0.0.1",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/factory.ts --doctor",
+    "factory": "node scripts/factory.ts",
+    "demo-vod": "node scripts/demo-vod.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.10.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@fontsource/anton": "5.3.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}
