@@ -110,10 +110,16 @@ async function main() {
   const key = newAdbKey();
   const keys = { key, cert: certificatePem(certificateFor(key, "adb")) };
 
-  // 1. Before pairing, Android turns Patch's key away on the encrypted connection.
+  // 1. Before pairing, Android turns Patch's key away on the encrypted connection, where it checks
+  //    keys at all: adbd only does when ro.adb.secure is 1 (real devices); emulator images often set 0.
+  const secure = (await sh("getprop ro.adb.secure").catch(() => "")) === "1";
+  report.adbSecure = secure;
   try {
-    await AdbClient.connect("127.0.0.1", { port: TLS_LOCAL, privateKey: key, tls: keys, timeout: 10_000 });
-    return finish(false, "Android let in a key that never paired");
+    const c = await AdbClient.connect("127.0.0.1", { port: TLS_LOCAL, privateKey: key, tls: keys, timeout: 10_000 });
+    c.close();
+    report.beforePairing = "let in";
+    if (secure) return finish(false, "Android let in a key that never paired");
+    console.log("This emulator doesn't check keys (ro.adb.secure isn't 1), so it lets any key in; Patch's own tests check the refusal.");
   } catch (e) {
     report.beforePairing = e.code;
     if (e.code !== "EPAIR") return finish(false, `before pairing, expected Android to turn the key away, got ${e.code}: ${e.message}`);
