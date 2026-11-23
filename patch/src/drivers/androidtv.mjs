@@ -173,13 +173,28 @@ async function connectWireless(device, ctx) {
   }
 }
 
+const DIGIT_WORDS = { zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9" };
+
+/**
+ * The six-digit pairing code in what the person said or typed, as it may come from a voice: "482913",
+ * "482 913", "4-8-2-9-1-3", "four eight two nine one three". Gives { code, rest } (rest: the words around it).
+ */
+export function pairingCodeIn(value) {
+  const text = String(value ?? "").replace(/\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b/gi, (w) => DIGIT_WORDS[w.toLowerCase()]);
+  // An address or port read out with it ("192.168.1.42:37123", "port 37123") isn't part of the code.
+  const blank = (a) => " ".repeat(a.length);
+  const bare = text.replace(/\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?/g, blank).replace(/\bport\s*:?\s*\d{1,5}\b/gi, blank);
+  const m = bare.match(/(?<!\d)\d{6}(?!\d)/) || bare.match(/(?<!\d[ -]?)\d(?:[ -]?\d){5}(?!\d|[ -]\d)/);
+  if (!m) return { code: null, rest: text };
+  return { code: m[0].replace(/\D/g, ""), rest: text.slice(0, m.index) + text.slice(m.index + m[0].length) };
+}
+
 /** Pair with a device showing “Pair device with pairing code”, then connect: the code is the six digits it shows. */
 async function pairWireless(device, value, ctx) {
-  const text = String(value ?? "");
-  const code = text.match(/(?<!\d)(\d{6})(?!\d)/)?.[1];
+  const { code, rest } = pairingCodeIn(value);
   if (!code) throw new DeviceError(`${pairSteps(device.name)} Then tell me the code.`, { code: "ESETUP" });
   // The port under the code ("192.168.1.42:37123") if the person read it out; otherwise its announcement.
-  const said = text.replace(code, "").match(/(?:port\s*|:\s*)(\d{4,5})\b/i) || text.replace(code, "").match(/\b(\d{5})\b/);
+  const said = rest.match(/(?:port\s*|:\s*)(\d{4,5})\b/i) || rest.match(/\b(\d{5})\b/);
   const port = said ? Number(said[1]) : await announcedPort(device, PAIRING, ctx);
   if (!port) throw new DeviceError(`I can't find the pairing window on ${device.name}. Keep “Pair device with pairing code” open on it and try again, or tell me the port shown under the code (the number after the colon).`, { code: "ESETUP" });
   const tlsKeys = await adbTls(ctx);
@@ -187,8 +202,9 @@ async function pairWireless(device, value, ctx) {
   try {
     paired = await pairAdb(device.ref.ip, port, code, { privateKey: tlsKeys.key, cert: tlsKeys.cert });
   } catch (err) {
-    if (err.code === "EPAIRCODE") throw new DeviceError(`That code didn't match. ${device.name} shows a new code each time: read me the one on its screen now.`, { code: "ESETUP" });
-    if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT"].includes(err.code)) throw new DeviceError(`${device.name}'s pairing window has closed (it closes after a short while). Choose “Pair device with pairing code” again and tell me the new code.`, { code: "ESETUP" });
+    // Android keeps the pairing window, and its code, through a wrong try (up to 20), so the same digits again.
+    if (err.code === "EPAIRCODE") throw new DeviceError(`That code didn't match. Read me the six digits on ${device.name}'s screen again: they stay the same while its pairing window is open.`, { code: "ESETUP" });
+    if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT"].includes(err.code)) throw new DeviceError(`${device.name}'s pairing window has closed. Choose “Pair device with pairing code” on it again and tell me the new code.`, { code: "ESETUP" });
     throw err;
   }
   device.ref.guid = paired.guid || device.ref.guid;

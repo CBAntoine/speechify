@@ -85,6 +85,8 @@ async function startPairing(password, tlsPort) {
 }
 
 async function main() {
+  // Android's system process, before: pairing must never take it down (it holds the pairing server).
+  report.systemBefore = await sh("pidof system_server").catch(() => "");
   const supported = await sh("cmd adb is-wifi-supported").catch(() => "");
   report.supported = supported;
   if (supported !== "true") return finish(false, `this Android says it can't do Wireless debugging ("${supported}")`);
@@ -138,7 +140,7 @@ async function main() {
     report.tlsPortAfterRoot = tlsPort;
     await adb("forward", `tcp:${TLS_LOCAL}`, `tcp:${tlsPort}`).catch(() => {});
   }
-  let pairPort = await startPairing("patch-right-password-482913", tlsPort);
+  const pairPort = await startPairing("patch-right-password-482913", tlsPort);
   if (pairPort === -1) return finish(false, `the device's list of listening ports can't be read, so the pairing port can't be found (${JSON.stringify(await diagnose())})`);
   report.pairingPort = pairPort;
   if (!pairPort) return finish(false, "Android's pairing server didn't open a port");
@@ -151,16 +153,15 @@ async function main() {
     if (e.code !== "EPAIRCODE") return finish(false, `a wrong password should say the code didn't match, got ${e.code}: ${e.message}`);
   }
 
-  // 3. The right password (Android ends a session after one try, so a new one).
-  pairPort = await startPairing("patch-right-password-482913", tlsPort);
-  if (!pairPort) return finish(false, "Android's pairing server didn't open a port the second time");
-  await adb("forward", `tcp:${PAIR_LOCAL}`, `tcp:${pairPort}`);
+  // 3. The right password in the same pairing window, as when someone misreads the code and reads it again:
+  //    Android keeps the window open through a wrong try (up to 20). (Starting a second window while the first
+  //    still waits trips a bug in Android's own pairing service, which takes the whole system down.)
   let paired;
-    try {
-      paired = await pairAdb("127.0.0.1", PAIR_LOCAL, "patch-right-password-482913", { privateKey: key, cert: keys.cert });
-    } catch (e) {
-      return finish(false, `pairing with the right password failed: ${e.code} ${e.message}`);
-    }
+  try {
+    paired = await pairAdb("127.0.0.1", PAIR_LOCAL, "patch-right-password-482913", { privateKey: key, cert: keys.cert });
+  } catch (e) {
+    return finish(false, `after a wrong password, the right one in the same pairing window failed: ${e.code} ${e.message}`);
+  }
   report.guid = paired.guid;
   if (!/^adb-/.test(paired.guid || "")) return finish(false, `paired, but Android's name for itself looks wrong: ${paired.guid}`);
 
@@ -179,7 +180,10 @@ async function main() {
   client.close();
   if (release !== "14") return finish(false, `over the encrypted connection, Android said its version is "${release}"`);
   if (png.length < 1000 || png.readUInt32BE(0) !== 0x89504e47) return finish(false, "the picture of the screen over the encrypted connection wasn't a PNG");
-  return finish(true, `Wireless debugging works with Patch's own code on Android ${release}: a wrong password is refused, the right one pairs (${paired.guid}), and the encrypted connection runs commands and takes a ${png.length}-byte picture of the screen.`);
+  await sleep(1500);
+  report.systemAfter = await sh("pidof system_server").catch(() => "");
+  if (report.systemBefore && report.systemAfter !== report.systemBefore) return finish(false, `Android's system process restarted during pairing (${report.systemBefore} → ${report.systemAfter || "gone"})`);
+  return finish(true, `Wireless debugging works with Patch's own code on Android ${release}: a wrong password is refused, the right one then pairs in the same window (${paired.guid}), and the encrypted connection runs commands and takes a ${png.length}-byte picture of the screen.`);
 }
 
 await main();

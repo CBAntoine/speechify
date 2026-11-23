@@ -14,6 +14,7 @@ import { startSimulator } from "../sim/simulator.mjs";
 import { startApp } from "../src/app.mjs";
 import { AdbClient, newAdbKey, pairAdb, PAIR_EXPORT_LABEL } from "../src/net/adb.mjs";
 import { BASE, L, M, N, Spake2, encode, leToBig, multiply } from "../src/net/spake2.mjs";
+import { pairingCodeIn } from "../src/drivers/androidtv.mjs";
 import { certificateFor, certificatePem } from "../src/apk/sign.mjs";
 
 // BoringSSL's precomputed multiples of N and M (crypto/curve25519/spake25519.cc, kSpakeNSmallPrecomp
@@ -96,6 +97,18 @@ test("an Android wall calendar with Wireless debugging on is found as itself, wa
   assert.ok(d.actions.includes("pair") && !d.actions.includes("launch_app"));
 });
 
+test("the pairing code, however it's said or typed", () => {
+  const cases = [
+    ["482913", "482913"], ["The code is 482913.", "482913"], ["482 913", "482913"], ["4 8 2 9 1 3", "482913"],
+    ["4-8-2-9-1-3", "482913"], ["four eight two nine one three", "482913"], ["zero one two three four five", "012345"],
+    ["482913 port 37123", "482913"], ["192.168.1.42:37123 482 913", "482913"], ["port 37123 482 913", "482913"],
+    ["1234", null], ["48291", null], ["4829133", null], ["12 345 678", null],
+  ];
+  for (const [said, code] of cases) assert.equal(pairingCodeIn(said).code, code, said);
+  assert.match(pairingCodeIn("482 913 port 37123").rest, /port 37123/);
+  assert.match(pairingCodeIn("192.168.1.42:37123 482 913").rest, /:37123/);
+});
+
 test("pairing: the steps without a code, a closed window, a wrong code, then the right one", async () => {
   const cal = sim.state.calendar;
   let r = await act("pair");
@@ -109,10 +122,11 @@ test("pairing: the steps without a code, a closed window, a wrong code, then the
   cal.pairingOpen = true;
   r = await act("pair", "111111");
   assert.equal(r.ok, false);
-  assert.match(r.message, /didn't match/);
+  assert.match(r.message, /didn't match\. Read me the six digits .* again: they stay the same/);
   assert.deepEqual(cal.paired, [], "a wrong code gives the device nothing");
 
-  r = await act("pair", `The code is ${cal.pairingCode}`);
+  // The same window, read out again the way a voice gives it: in two groups.
+  r = await act("pair", `The code is ${cal.pairingCode.slice(0, 3)} ${cal.pairingCode.slice(3)}.`);
   assert.equal(r.ok, true, r.message);
   assert.match(r.message, /is connected/);
   assert.deepEqual(cal.pairings, ["wrong code", "paired"]);
