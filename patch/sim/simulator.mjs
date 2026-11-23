@@ -115,8 +115,8 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     { type: "_workstation._tcp", instance: "raspberrypi [b8:27:eb:4d:5e:6f]", host: "raspberrypi.local", ip: ip(23), port: 9, txt: {} },
     { type: "_plexmediasvr._tcp", instance: "raspberrypi", host: "raspberrypi.local", ip: ip(23), port: 32400, txt: {} },
     // Android announces Wireless debugging while it's on, and its pairing window while that's open.
-    { type: "_adb-tls-connect._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.connectPort, txt: {}, when: () => state.calendar.wireless },
-    { type: "_adb-tls-pairing._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.pairingPort, txt: {}, when: () => state.calendar.pairingOpen },
+    { type: "_adb-tls-connect._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.connectPort, txt: {}, when: () => state.calendar.announce && state.calendar.wireless },
+    { type: "_adb-tls-pairing._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.pairingPort, txt: {}, when: () => state.calendar.announce && state.calendar.pairingOpen },
   ];
   const fullName = (s) => joinName([s.instance, ...s.type.split("."), "local"]);
   const reverse = new Map([[reverseName(ip(21)), "Kitchen-iPad.local"], [reverseName(ip(23)), "raspberrypi.local"], [reverseName(ip(20)), "OFFICE-PC.local"], [reverseName(ip(27)), "Galaxy-S24-Ultra.local"], [reverseName(ip(28)), "Cozyla-Calendar-2.local"]]);

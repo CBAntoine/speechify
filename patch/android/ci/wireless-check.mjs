@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const PATCH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { AdbClient, newAdbKey, pairAdb } = await import(path.join(PATCH, "src/net/adb.mjs"));
+const { isPairingWindow, isWirelessAdb } = await import(path.join(PATCH, "src/net/adbfind.mjs"));
 const { certificateFor, certificatePem } = await import(path.join(PATCH, "src/apk/sign.mjs"));
 const [outDir] = process.argv.slice(2);
 const run = promisify(execFile);
@@ -145,6 +146,14 @@ async function main() {
   report.pairingPort = pairPort;
   if (!pairPort) return finish(false, "Android's pairing server didn't open a port");
   await adb("forward", `tcp:${PAIR_LOCAL}`, `tcp:${pairPort}`);
+  // How Patch tells Android's two ports apart when it has to knock on every port (no announcement heard):
+  // the pairing window speaks TLS at once with adb's own certificate; adbd asks for TLS after adb's hello.
+  report.pairingLooksRight = await isPairingWindow("127.0.0.1", PAIR_LOCAL, { key, cert: keys.cert });
+  report.pairingNotAdbd = !(await isWirelessAdb("127.0.0.1", PAIR_LOCAL));
+  report.adbdLooksRight = await isWirelessAdb("127.0.0.1", TLS_LOCAL);
+  report.adbdNotPairing = !(await isPairingWindow("127.0.0.1", TLS_LOCAL, { key, cert: keys.cert }));
+  if (!report.pairingLooksRight || !report.pairingNotAdbd) return finish(false, `Patch wouldn't recognise Android's pairing window by knocking (${JSON.stringify({ pairing: report.pairingLooksRight, notAdbd: report.pairingNotAdbd })})`);
+  if (!report.adbdLooksRight || !report.adbdNotPairing) return finish(false, `Patch wouldn't recognise Wireless debugging's encrypted port by knocking (${JSON.stringify({ adbd: report.adbdLooksRight, notPairing: report.adbdNotPairing })})`);
   try {
     await pairAdb("127.0.0.1", PAIR_LOCAL, "patch-wrong-password-000000", { privateKey: key, cert: keys.cert });
     return finish(false, "a wrong password paired");
@@ -183,7 +192,7 @@ async function main() {
   await sleep(1500);
   report.systemAfter = await sh("pidof system_server").catch(() => "");
   if (report.systemBefore && report.systemAfter !== report.systemBefore) return finish(false, `Android's system process restarted during pairing (${report.systemBefore} → ${report.systemAfter || "gone"})`);
-  return finish(true, `Wireless debugging works with Patch's own code on Android ${release}: a wrong password is refused, the right one then pairs in the same window (${paired.guid}), and the encrypted connection runs commands and takes a ${png.length}-byte picture of the screen.`);
+  return finish(true, `Wireless debugging works with Patch's own code on Android ${release}: Patch recognises its pairing window and its encrypted port by what answers on them, a wrong password is refused, the right one then pairs in the same window (${paired.guid}), and the encrypted connection runs commands and takes a ${png.length}-byte picture of the screen.`);
 }
 
 await main();

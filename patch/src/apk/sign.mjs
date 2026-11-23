@@ -37,7 +37,8 @@ function oid(dotted) {
 }
 const utcTime = (d) => tlv(0x17, Buffer.from(`${d.toISOString().replace(/[-:T]/g, "").slice(2, 14)}Z`, "latin1"));
 
-const OID = { sha256WithRsa: "1.2.840.113549.1.1.11", rsa: "1.2.840.113549.1.1.1", sha256: "2.16.840.1.101.3.4.2.1", commonName: "2.5.4.3", signedData: "1.2.840.113549.1.7.2", data: "1.2.840.113549.1.7.1" };
+const OID = { sha256WithRsa: "1.2.840.113549.1.1.11", rsa: "1.2.840.113549.1.1.1", sha256: "2.16.840.1.101.3.4.2.1", commonName: "2.5.4.3", countryName: "2.5.4.6", organizationName: "2.5.4.10", signedData: "1.2.840.113549.1.7.2", data: "1.2.840.113549.1.7.1" };
+const printableString = (s) => tlv(0x13, Buffer.from(s, "latin1"));
 const algorithm = (o) => seq(oid(o), nul());
 
 /** Read one DER element: { tag, start (of its content), end, next }. */
@@ -68,10 +69,16 @@ export function derChildren(buf, el) {
 // ── Patch's signing key ────────────────────────────────────────────────────
 
 /** A self-signed certificate (DER) for an RSA key: what app signing and Android's wireless debugging need. */
-export function certificateFor(key, commonName) {
+export function certificateFor(key, subject) {
   const privateKey = key instanceof crypto.KeyObject ? key : crypto.createPrivateKey(key);
   const spki = crypto.createPublicKey(privateKey).export({ type: "spki", format: "der" });
-  const name = seq(set(seq(oid(OID.commonName), utf8String(commonName))));
+  // A name, or { C, O, CN } (as Android's adb makes its own: C=US, O=Android, CN=Adb).
+  const parts = typeof subject === "string" ? { CN: subject } : subject;
+  const name = seq(
+    ...(parts.C ? [set(seq(oid(OID.countryName), printableString(parts.C)))] : []),
+    ...(parts.O ? [set(seq(oid(OID.organizationName), utf8String(parts.O)))] : []),
+    set(seq(oid(OID.commonName), utf8String(parts.CN))),
+  );
   const serial = crypto.randomBytes(8);
   serial[0] = (serial[0] & 0x7f) | 0x01;
   const tbs = seq(explicit0(integer([2])), integer(serial), algorithm(OID.sha256WithRsa), name, seq(utcTime(new Date(Date.now() - 86_400_000)), utcTime(new Date(Date.UTC(2049, 11, 31, 23, 59, 59)))), name, spki);

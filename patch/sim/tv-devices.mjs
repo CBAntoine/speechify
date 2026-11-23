@@ -716,6 +716,8 @@ export async function fireTv(ip, s, { port = 5555, wireless = null } = {}) {
     });
     sock.on("error", () => {});
   });
+  // Wireless debugging switched off: nothing answers on its port.
+  if (wireless) server.on("connection", (sock) => s.wireless === false && sock.destroy());
   await listen(server, port, ip);
   const close = server.close.bind(server);
   server.close = (cb) => {
@@ -742,6 +744,7 @@ export function wirelessAndroidState() {
     wireless: true, // Wireless debugging is on (Developer options)
     pairingOpen: false, // the "Pair device with pairing code" window is showing
     pairingCode: "482913",
+    announce: true, // false: its announcements never reach Patch (a network that drops them)
     paired: [], // keys that have paired (DER SubjectPublicKeyInfo, base64)
     pairings: [], // each pairing attempt: "paired" or "wrong code"
   });
@@ -749,7 +752,8 @@ export function wirelessAndroidState() {
 
 export async function wirelessAndroid(ip, s) {
   const key = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
-  const cert = certificatePem(certificateFor(key, "adb"));
+  // Android's adb makes its own certificate, the same for the pairing window and the encrypted port.
+  const cert = certificatePem(certificateFor(key, { C: "US", O: "Android", CN: "Adb" }));
   const [adb] = await fireTv(ip, s, { port: s.connectPort, wireless: { key, cert } });
   // The pairing window: TLS, then the code checked with SPAKE2, as Android's own pairing server does.
   const pairing = tls.createServer({ key, cert, requestCert: true, rejectUnauthorized: false, minVersion: "TLSv1.3" }, async (t) => {
@@ -786,6 +790,8 @@ export async function wirelessAndroid(ip, s) {
       t.destroy();
     }
   });
+  // A closed pairing window: nothing answers on its port.
+  pairing.on("connection", (sock) => !s.pairingOpen && sock.destroy());
   await listen(pairing, s.pairingPort, ip);
   return [adb, pairing];
 }

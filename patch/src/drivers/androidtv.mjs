@@ -8,6 +8,7 @@
 // it shows, and from then on everything here works on it the same way, over an encrypted connection.
 import fsp from "node:fs/promises";
 import { AdbClient, newAdbKey, pairAdb, shellQuote } from "../net/adb.mjs";
+import { findWirelessDebugging } from "../net/adbfind.mjs";
 import { browse } from "../net/mdns.mjs";
 import { certificateFor, certificatePem } from "../apk/sign.mjs";
 import { fireTvModel } from "../net/models.mjs";
@@ -19,6 +20,8 @@ import { apkInfo } from "../apk/index.mjs";
 import { fuzzyPick, normalizeText, prettyHostname, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
+import { classify } from "./generic.mjs";
+import { onPhone } from "../platform.mjs";
 import { APPS, buttonCodes, customAppNames, describeButtons, knownApp, parseButtons, parseChannel, pickIndex, pressPlan, settleAfter, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
 
 // The remote's buttons (named as in tv.mjs) as Android's key codes.
@@ -107,9 +110,32 @@ const PAIRING = "_adb-tls-pairing._tcp";
  * announcement: the port changes each time it's switched on.
  */
 async function announcedPort(device, type, ctx) {
-  const { services } = await browse({ types: [type], timeout: 2000, enumerate: false, ...(ctx.mdnsTarget ? { target: ctx.mdnsTarget } : {}) }).catch(() => ({ services: [] }));
+  const ask = (o) => browse({ types: [type], timeout: 2000, enumerate: false, ...o }).catch(() => ({ services: [] }));
+  // Asked of everyone, and of the device itself, which answers straight back (for networks that drop the group's replies).
+  const replies = await Promise.all([ask(ctx.mdnsTarget ? { target: ctx.mdnsTarget } : {}), ...(ctx.mdnsTarget ? [] : [ask({ target: device.ref.ip, qu: true })])]);
+  const services = replies.flatMap((r) => r.services);
   const mine = services.filter((x) => x.type === type && x.port && (x.addresses.includes(device.ref.ip) || (device.ref.guid && x.name === device.ref.guid)));
   return mine.find((x) => x.addresses.includes(device.ref.ip))?.port || mine[0]?.port || null;
+}
+
+/**
+ * Where its pairing window (PAIRING) or its encrypted connection (WIRELESS) listens now: its
+ * announcement, else (knock) a knock on each port Android picks from, for networks and phones that
+ * never hear the announcement. Gives { port, found }: found is what the knock turned up (both ports,
+ * and whether the device answered at all), kept for the next step.
+ */
+async function wirelessPort(device, type, ctx, { knock = true, found = null } = {}) {
+  const heard = await announcedPort(device, type, ctx);
+  if (heard || !knock) return { port: heard, found };
+  const keys = await adbTls(ctx);
+  const f = found || (await findWirelessDebugging(device.ref.ip, { key: keys.key, cert: keys.cert, ...(ctx.adbPorts || {}) }));
+  return { port: type === PAIRING ? f.pairing : f.connect, found: f };
+}
+
+/** It runs Android, by its name or what it is (a Cozyla or Skylight calendar, "android-…"), whether or not it has announced Wireless debugging. */
+export function looksAndroid(host) {
+  const c = classify(host);
+  return !c.weak && (/^(Cozyla|Skylight)$/.test(c.brand || "") || [...(host.hostnames || [])].some((h) => /^android[-_]/i.test(h)));
 }
 
 const pairSteps = (name) => `On ${name}, open Settings → About and tap “Build number” seven times (that turns on Developer options), then Settings → System → Developer options → Wireless debugging: switch it on, choose “Pair device with pairing code”, and give Patch the six-digit code it shows.`;
@@ -122,7 +148,7 @@ function setupMessage(device) {
     : `To let Patch open apps, YouTube and websites on ${device.name}: on the TV go to Settings → System → About and select "Android TV OS build" 7 times, then in Settings → System → Developer options turn on USB debugging and Network debugging. Then press Connect.`;
 }
 
-async function connect(device, ctx, { pairing = false } = {}) {
+async function connect(device, ctx, { pairing = false, knock = false } = {}) {
   const id = keyOf(device);
   const live = clients.get(id);
   if (live?.client.open) {
@@ -132,7 +158,7 @@ async function connect(device, ctx, { pairing = false } = {}) {
   const key = await adbKey(ctx);
   let client;
   try {
-    if (device.ref.tls) client = await connectWireless(device, ctx);
+    if (device.ref.tls) client = await connectWireless(device, ctx, { knock });
     else client = await AdbClient.connect(device.ref.ip, { port: device.ref.adbPort || 5555, privateKey: key, allowPrompt: pairing, promptTimeout: 45_000 });
   } catch (err) {
     if (err instanceof DeviceError) throw err;
@@ -150,13 +176,31 @@ async function connect(device, ctx, { pairing = false } = {}) {
   return client;
 }
 
-/** Over Wireless debugging: TLS with Patch's key; when the port has moved, it's looked up again. */
-async function connectWireless(device, ctx) {
+/**
+ * Over Wireless debugging: TLS with Patch's key. When the port has moved (it does each time Wireless
+ * debugging comes on), it's looked up again; knock (only for something the person asked for) also
+ * knocks on its ports when its announcement doesn't arrive.
+ */
+async function connectWireless(device, ctx, { knock = false } = {}) {
   const tlsKeys = await adbTls(ctx);
   const attempt = (port) => AdbClient.connect(device.ref.ip, { port, privateKey: tlsKeys.key, tls: tlsKeys });
-  const off = () => new DeviceError(`Wireless debugging is off on ${device.name}, or it's asleep. On ${device.name}, open Settings → System → Developer options and switch Wireless debugging on (Patch stays paired).`, { code: "ESETUP" });
-  if (!device.ref.adbPort) device.ref.adbPort = await announcedPort(device, WIRELESS, ctx);
-  if (!device.ref.adbPort) throw off();
+  const off = (found) =>
+    new DeviceError(
+      found && !found.answered
+        ? `${device.name} isn't answering: it may be off or asleep, or not on the same Wi-Fi as ${onPhone() ? "this phone" : "this computer"}.`
+        : `Wireless debugging is off on ${device.name}, or it's asleep. On ${device.name}, open Settings → System → Developer options and switch Wireless debugging on (Patch stays paired).`,
+      { code: "ESETUP" },
+    );
+  const lookUp = async () => {
+    const { port, found } = await wirelessPort(device, WIRELESS, ctx, { knock });
+    if (!port) throw off(found);
+    if (port !== device.ref.adbPort) {
+      device.ref.adbPort = port;
+      if (ctx.secrets.pairings?.[device.id]) await ctx.saveSecret(["pairings", device.id, "port"], port);
+    }
+    return port;
+  };
+  if (!device.ref.adbPort) await lookUp();
   try {
     return await attempt(device.ref.adbPort);
   } catch (err) {
@@ -165,10 +209,9 @@ async function connectWireless(device, ctx) {
       throw new DeviceError(`${device.name} doesn't know Patch any more (it was unpaired, or reset). ${pairSteps(device.name)}`, { code: "ESETUP" });
     }
     if (!["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH"].includes(err.code)) throw err;
-    const port = await announcedPort(device, WIRELESS, ctx);
-    if (!port || port === device.ref.adbPort) throw off();
-    device.ref.adbPort = port;
-    await ctx.saveSecret(["pairings", device.id, "port"], port);
+    const before = device.ref.adbPort;
+    const port = await lookUp();
+    if (port === before) throw off();
     return attempt(port);
   }
 }
@@ -193,10 +236,14 @@ export function pairingCodeIn(value) {
 async function pairWireless(device, value, ctx) {
   const { code, rest } = pairingCodeIn(value);
   if (!code) throw new DeviceError(`${pairSteps(device.name)} Then tell me the code.`, { code: "ESETUP" });
-  // The port under the code ("192.168.1.42:37123") if the person read it out; otherwise its announcement.
+  // The port under the code ("192.168.1.42:37123") if the person read it out; otherwise its
+  // announcement, or a knock on each of its ports when the announcement doesn't arrive.
   const said = rest.match(/(?:port\s*|:\s*)(\d{4,5})\b/i) || rest.match(/\b(\d{5})\b/);
-  const port = said ? Number(said[1]) : await announcedPort(device, PAIRING, ctx);
-  if (!port) throw new DeviceError(`I can't find the pairing window on ${device.name}. Keep “Pair device with pairing code” open on it and try again, or tell me the port shown under the code (the number after the colon).`, { code: "ESETUP" });
+  let port = said ? Number(said[1]) : null;
+  let found = null;
+  if (!port) ({ port, found } = await wirelessPort(device, PAIRING, ctx));
+  if (!port && found && !found.answered) throw new DeviceError(`${device.name} isn't answering on the network. Check it's on, and on the same Wi-Fi as ${onPhone() ? "this phone" : "this computer"}, then try again.`, { code: "ESETUP" });
+  if (!port) throw new DeviceError(`I can't find the pairing window on ${device.name}${found?.connect ? ", though Wireless debugging is on" : ""}. Keep “Pair device with pairing code” open on it, and tell me the code again with the numbers under it: the IP address and port, like 192.168.1.42:37123.`, { code: "ESETUP" });
   const tlsKeys = await adbTls(ctx);
   let paired;
   try {
@@ -208,9 +255,10 @@ async function pairWireless(device, value, ctx) {
     throw err;
   }
   device.ref.guid = paired.guid || device.ref.guid;
-  const connectPort = (await announcedPort(device, WIRELESS, ctx)) || device.ref.adbPort;
+  // Its encrypted connection: announced, found by the same knock, or knocked for now (the pairing window has closed).
+  const connectPort = (await wirelessPort(device, WIRELESS, ctx, { found: found?.connect ? found : null })).port || device.ref.adbPort;
   if (connectPort) device.ref.adbPort = connectPort;
-  await ctx.saveSecret(["pairings", device.id], { adb: true, paired: true, tls: true, guid: device.ref.guid || null, ip: device.ref.ip, port: device.ref.adbPort || null });
+  await ctx.saveSecret(["pairings", device.id], { adb: true, paired: true, tls: true, guid: device.ref.guid || null, ip: device.ref.ip, mac: device.mac || null, port: device.ref.adbPort || null });
 }
 
 const sh = (client, cmd, timeout) => client.shell(cmd, { timeout });
@@ -746,7 +794,8 @@ export function actionsFor({ kind, paired, cast: hasCast }) {
 async function wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore }) {
   const facts = host.facts || {};
   const guid = (wireless || pairingWindow)?.name || pairedBefore?.[1].guid || null;
-  const id = pairedBefore?.[0] || `android:${String(guid || host.mac || host.ip).replace(/:/g, "").toLowerCase()}`;
+  // The same id whether or not Wireless debugging is on, so its name and room stay with it.
+  const id = pairedBefore?.[0] || `android:${String(host.mac || host.ip).replace(/:/g, "").toLowerCase()}`;
   // Its name on the network: not Android's own "Android_…" announcement name, which says nothing.
   const hostname = [...(host.hostnames || [])].filter((h) => !/^android([-_ .]|$)/i.test(h)).map((h) => prettyHostname(h)).find(Boolean);
   const kind = ["display", "tablet", "phone", "tv", "streamer"].includes(facts.kind) ? facts.kind : "tablet";
@@ -764,7 +813,7 @@ async function wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore
     info: { os: "Android" },
     actions: [],
     // Until it has paired, what Patch knows comes from its announcement and its name, not from the device.
-    identity: { exact: false, evidence: ["its Wireless debugging announcement (it runs Android)"] },
+    identity: { exact: false, evidence: [wireless || pairingWindow ? "its Wireless debugging announcement (it runs Android)" : "its name on the network (it runs Android)"] },
   };
   const paired = !!ctx?.secrets.pairings?.[id]?.adb;
   device.setup = paired ? null : { kind: "code", message: setupMessage(device) };
@@ -803,8 +852,11 @@ export default {
     // Wireless debugging (Android 11 and later): on, or its pairing window open, or paired with Patch before.
     const wireless = svc(WIRELESS);
     const pairingWindow = svc(PAIRING);
-    const pairedBefore = Object.entries(ctx?.secrets.pairings || {}).find(([pid, p]) => p?.tls && p.ip === host.ip && pid.startsWith("android"));
-    const overWifi = !adbOpen && !!(wireless || pairingWindow || pairedBefore);
+    const guidNow = (wireless || pairingWindow)?.name || null;
+    const pairedBefore = Object.entries(ctx?.secrets.pairings || {}).find(([pid, p]) => p?.tls && pid.startsWith("android") && (p.ip === host.ip || (guidNow && p.guid === guidNow) || (host.mac && p.mac === host.mac)));
+    // Something that runs Android is worked through Wireless debugging even before Patch has heard it
+    // announce itself: pairing finds the device's ports by itself.
+    const overWifi = !adbOpen && !!(wireless || pairingWindow || pairedBefore || looksAndroid(host));
     if (!amzn && !atv && !dial && !overWifi && !(adbOpen && /amazon|google|nvidia|xiaomi|sony|tcl|hisense|philips|tp vision|onn|walmart/i.test(host.vendor || ""))) return null;
     if (overWifi && !amzn && !atv && !dial) return [await wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore })];
 
@@ -865,7 +917,7 @@ export default {
   /** A picture of the TV's screen as it is now (a PNG), for the person to look at in Patch. */
   async picture(device, ctx) {
     try {
-      const client = await connect(device, ctx);
+      const client = await connect(device, ctx, { knock: true });
       const png = await client.exec("screencap -p", { timeout: 30_000 });
       if (png.length < 100 || png.readUInt32BE(0) !== 0x89504e47) throw new DeviceError(`${device.name} didn't give a picture of its screen.`, { code: "ESCREEN" });
       return png;
@@ -877,7 +929,7 @@ export default {
   /** A tap at a spot on the screen (in the picture's own pixels): the person's own finger, from the dashboard. */
   async tapAt(device, x, y, ctx) {
     try {
-      const client = await connect(device, ctx);
+      const client = await connect(device, ctx, { knock: true });
       await sh(client, `input tap ${Math.round(x)} ${Math.round(y)}`);
       ctx.memory?.delete(`tv-screen:${device.id}`);
       return done(`Tapped ${device.name}'s screen.`);
@@ -895,7 +947,7 @@ export default {
       }
       if (action === "pair") {
         if (device.ref.tls) await pairWireless(device, value, ctx);
-        const client = await connect(device, ctx, { pairing: true });
+        const client = await connect(device, ctx, { pairing: true, knock: true });
         const facts = await deviceFacts(client).catch(() => ({}));
         const ft = fireTvModel(facts.model);
         const kind = ft?.kind || device.kind;
@@ -903,7 +955,7 @@ export default {
           devices: [{ id: device.id, setup: null, kind, actions: actionsFor({ kind, paired: true, cast: !!device.ref.cast }), ...(ft ? { model: ft.name } : facts.model ? { model: facts.model } : {}), info: { ...device.info, modelNumber: facts.model || device.info?.modelNumber || null } }],
         });
       }
-      const client = await connect(device, ctx);
+      const client = await connect(device, ctx, { knock: true });
       switch (action) {
         case "turn_on":
           await key(client, "KEYCODE_WAKEUP");

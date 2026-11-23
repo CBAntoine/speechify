@@ -116,7 +116,7 @@ Once per device:
 
 1. On the device, open **Settings → About** and tap **Build number** seven times. That turns on **Developer options**.
 2. Open **Settings → System → Developer options → Wireless debugging**, switch it on, and allow it on your Wi-Fi.
-3. Choose **Pair device with pairing code**. Patch finds the device by itself while that window is open.
+3. Choose **Pair device with pairing code**, and leave that window open. Patch finds it by itself: from the device's announcement, or, on networks and phones that never hear it, by knocking on the device's ports and recognising Android's pairing service (a few seconds). No new scan is needed.
 4. Give Patch the six-digit code: type it in the device's card in Patch (**Pair**), or read it to the assistant ("the calendar's code is 482913").
 
 From then on Patch connects by itself, over an encrypted connection only that device and your Patch share. If you switch Wireless debugging off, or after the device restarts, switch it back on: Patch stays paired, and finds its new port. Each copy of Patch pairs on its own (a new phone app needs pairing again).
@@ -124,6 +124,7 @@ From then on Patch connects by itself, over an encrypted connection only that de
 What to know:
 
 - **Some makers hide Developer options.** If tapping Build number does nothing, or there's no Wireless debugging, the device won't let anything in, and Patch can only list it. Some devices put their maker's own settings screen in front of Android's: look there for a way into Android's Settings, where Build number is.
+- **If Patch can't find the pairing window**, give it the numbers under the code as well (the IP address and port, like 192.168.1.42:37123), typed with the code or read to the assistant.
 - **It's a strong permission.** A paired Patch can do anything on the device that you could with its screen. Only pair your own devices. To withdraw it: **Wireless debugging → Paired devices**, choose Patch's entry and **Forget**, or switch Wireless debugging off.
 - How it works: Patch speaks Android's own pairing protocol (TLS, then SPAKE2 with the code, as in Android's adb source and Google's BoringSSL), so the code is never sent over the network.
 

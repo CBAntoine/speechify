@@ -15,6 +15,8 @@ import { startApp } from "../src/app.mjs";
 import { AdbClient, newAdbKey, pairAdb, PAIR_EXPORT_LABEL } from "../src/net/adb.mjs";
 import { BASE, L, M, N, Spake2, encode, leToBig, multiply } from "../src/net/spake2.mjs";
 import { pairingCodeIn } from "../src/drivers/androidtv.mjs";
+import { findWirelessDebugging } from "../src/net/adbfind.mjs";
+import tls from "node:tls";
 import { certificateFor, certificatePem } from "../src/apk/sign.mjs";
 
 // BoringSSL's precomputed multiples of N and M (crypto/curve25519/spake25519.cc, kSpakeNSmallPrecomp
@@ -163,39 +165,93 @@ test("a key that never paired is turned away, and Patch says how to pair", async
   cal.pairingOpen = false;
 });
 
-test("with Wireless debugging off, the calendar says how to switch it on; once on, the same device asks for its code", async () => {
+test("a calendar whose announcements never reach Patch: Pair is there from the start, and Patch finds its ports by knocking", async () => {
   const sim2 = await startSimulator({ prefix: "127.0.18" });
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "patch-wireless-off-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "patch-wireless-quiet-"));
   const app2 = await startApp({ port: 0, dataDir: dir, overrides: sim2.overrides, autoScan: false, log: () => {} });
   const call2 = async (method, p, body) => (await fetch(`http://127.0.0.1:${app2.port}${p}`, { method, headers: { "x-patch-token": app2.token, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined })).json();
   const at = async () => (await call2("GET", "/api/devices")).devices.filter((d) => d.ip === "127.0.18.28");
+  const act2 = (id, action, value) => call2("POST", `/api/devices/${encodeURIComponent(id)}/action`, { action, value });
+  const cal = sim2.state.calendar;
   try {
-    sim2.state.calendar.wireless = false;
+    // Wireless debugging off when Patch scans: it's an Android device from the start, ready to pair.
+    cal.wireless = false;
     await call2("POST", "/api/scan");
     let found = await at();
     assert.equal(found.length, 1);
+    assert.equal(found[0].driver, "androidtv");
     assert.equal(found[0].brand, "Cozyla");
-    assert.equal(found[0].setup?.kind, "android");
-    assert.match(found[0].setup.message, /runs Android.*Wireless debugging.*scan again/);
-    // Named by the person while it was a plain device: the name carries over.
-    await call2("POST", `/api/devices/${encodeURIComponent(found[0].id)}/meta`, { name: "Kitchen calendar" });
+    assert.equal(found[0].setup?.kind, "code");
+    assert.ok(found[0].actions.includes("pair"));
+    assert.match(found[0].setup.message, /Wireless debugging: switch it on, choose “Pair device with pairing code”/);
+    const id = found[0].id;
+    await call2("POST", `/api/devices/${encodeURIComponent(id)}/meta`, { name: "Kitchen calendar" });
 
-    sim2.state.calendar.wireless = true;
+    // Then switched on, on a network that drops its announcements, and no new scan.
+    cal.announce = false;
+    cal.wireless = true;
+    let r = await act2(id, "pair", cal.pairingCode);
+    assert.equal(r.ok, false);
+    assert.match(r.message, /can't find the pairing window on Kitchen calendar, though Wireless debugging is on\. .*IP address and port/);
+
+    cal.pairingOpen = true;
+    const t0 = Date.now();
+    r = await act2(id, "pair", cal.pairingCode);
+    assert.equal(r.ok, true, r.message);
+    assert.match(r.message, /is connected/);
+    assert.ok(Date.now() - t0 < 30_000, `found and paired in ${Date.now() - t0} ms`);
+    assert.deepEqual(cal.pairings, ["paired"], "only the real try is a try at the code");
+    r = await act2(id, "launch_app", "YouTube");
+    assert.equal(r.ok, true, r.message);
+
+    // A new scan, still unannounced: the same device, still paired, with the person's name for it.
     await call2("POST", "/api/scan");
     found = await at();
-    assert.equal(found.length, 1, `one device, not two: ${found.map((d) => d.id).join(", ")}`);
-    assert.equal(found[0].driver, "androidtv");
-    assert.equal(found[0].setup?.kind, "code");
+    assert.equal(found.length, 1, found.map((d) => d.id).join(", "));
+    assert.equal(found[0].id, id);
     assert.equal(found[0].name, "Kitchen calendar");
-    // Paired at the first try, with nothing made before: the key Patch makes for it is the one it keeps.
-    sim2.state.calendar.pairingOpen = true;
-    const r = await call2("POST", `/api/devices/${encodeURIComponent(found[0].id)}/action`, { action: "pair", value: sim2.state.calendar.pairingCode });
+    assert.equal(found[0].setup, null);
+    assert.ok(found[0].actions.includes("launch_app"));
+    r = await act2(id, "read_screen");
     assert.equal(r.ok, true, r.message);
-    const again = await call2("POST", `/api/devices/${encodeURIComponent(found[0].id)}/action`, { action: "launch_app", value: "YouTube" });
-    assert.equal(again.ok, true, again.message);
+
+    // Heard again: still the same device.
+    cal.announce = true;
+    await call2("POST", "/api/scan");
+    found = await at();
+    assert.equal(found.length, 1);
+    assert.equal(found[0].id, id);
+    assert.equal(found[0].setup, null);
   } finally {
     await app2.close();
     await sim2.stop();
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("knocking finds Android's two ports by what answers on them", async () => {
+  const cal = sim.state.calendar;
+  const key = newAdbKey();
+  const cert = certificatePem(certificateFor(key, "adb"));
+  cal.pairingOpen = true;
+  const seen = cal.pairings.length;
+  let f = await findWirelessDebugging("127.0.17.28", { key, cert });
+  assert.equal(f.answered, true);
+  assert.equal(f.pairing, cal.pairingPort);
+  assert.equal(f.connect, cal.connectPort);
+  assert.equal(cal.pairings.length, seen, "asking what a port is tries no code");
+  cal.pairingOpen = false;
+  f = await findWirelessDebugging("127.0.17.28", { key, cert });
+  assert.equal(f.pairing, null);
+  assert.equal(f.connect, cal.connectPort);
+  // Anything else that speaks TLS isn't taken for a pairing window.
+  const other = tls.createServer({ key, cert: certificatePem(certificateFor(key, { C: "US", O: "Someone", CN: "web" })) }, (s) => s.end()).listen(40123, "127.0.17.28");
+  await new Promise((resolve) => other.once("listening", resolve));
+  try {
+    f = await findWirelessDebugging("127.0.17.28", { key, cert });
+    assert.ok(f.open.includes(40123));
+    assert.equal(f.pairing, null);
+  } finally {
+    other.close();
   }
 });

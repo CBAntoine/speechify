@@ -69,9 +69,10 @@ function chunk(arr, n) {
 /**
  * Browse DNS-SD services. Returns { services, hosts } where each service is
  * { type, instance, name, host, port, txt, addresses, source }.
- * `target` defaults to the mDNS group; a unicast address (used by the device simulator) also works.
+ * `target` defaults to the mDNS group; a unicast address (one device, or the device simulator) also works.
+ * qu asks for answers straight back to Patch rather than to the group (RFC 6762 §5.4).
  */
-export async function browse({ types = SERVICE_TYPES, timeout = 2600, iface, target = GROUP, port = PORT, enumerate = true } = {}) {
+export async function browse({ types = SERVICE_TYPES, timeout = 2600, iface, target = GROUP, port = PORT, enumerate = true, qu = false } = {}) {
   const sockets = await openSockets({ iface, target });
   // All keyed by lower-cased name.
   const ptr = new Map(); // service type → Map(instance key → instance name as announced)
@@ -90,7 +91,7 @@ export async function browse({ types = SERVICE_TYPES, timeout = 2600, iface, tar
   const ask = (names) => {
     const fresh = names.map(local).filter((n) => !asked.has(n));
     fresh.forEach((n) => asked.add(n));
-    if (fresh.length) send(fresh.map((name) => ({ name, type: TYPE.PTR })));
+    if (fresh.length) send(fresh.map((name) => ({ name, type: TYPE.PTR, qu })));
   };
 
   const onMessage = (msg, rinfo) => {
@@ -131,11 +132,11 @@ export async function browse({ types = SERVICE_TYPES, timeout = 2600, iface, tar
     const qs = [];
     for (const instances of ptr.values()) {
       for (const [key, inst] of instances) {
-        if (!srv.has(key)) qs.push({ name: inst, type: TYPE.SRV });
-        if (!txt.has(key)) qs.push({ name: inst, type: TYPE.TXT });
+        if (!srv.has(key)) qs.push({ name: inst, type: TYPE.SRV, qu });
+        if (!txt.has(key)) qs.push({ name: inst, type: TYPE.TXT, qu });
       }
     }
-    for (const { target: host } of srv.values()) if (!addr.has(host.toLowerCase())) qs.push({ name: host, type: TYPE.A });
+    for (const { target: host } of srv.values()) if (!addr.has(host.toLowerCase())) qs.push({ name: host, type: TYPE.A, qu });
     if (qs.length) send(qs);
   };
   const t1 = setTimeout(followUp, Math.round(timeout * 0.45));
