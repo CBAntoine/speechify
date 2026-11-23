@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createJob, enqueue, removeJob } from "@/server/app";
+import { guard } from "@/server/guard";
 import { parseOptions } from "@/server/options";
 import { jobDir } from "@/server/paths";
 
@@ -15,6 +16,8 @@ const VIDEO = /\.(mp4|m4v|mov|mkv|webm|avi|flv|ts)$/i;
  * straight to disk): PUT /api/upload?name=stream.mp4&options={...}
  */
 export async function PUT(req: Request) {
+  const blocked = guard(req);
+  if (blocked) return blocked;
   const url = new URL(req.url);
   const name = path.basename(url.searchParams.get("name") ?? "");
   if (!req.body) return Response.json({ error: "Empty upload" }, { status: 400 });

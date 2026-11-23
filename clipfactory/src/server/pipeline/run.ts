@@ -1,5 +1,7 @@
 import { emptyStages, emptyTools } from "../../lib/types.ts";
 import { getJob, log, saveNow, setRunner, update } from "../jobs.ts";
+import { publishAll } from "../publish.ts";
+import { isConnected } from "../youtube.ts";
 import { CancelledError } from "../proc.ts";
 import { machine } from "../stack.ts";
 import { audioStage } from "./audio.ts";
@@ -48,6 +50,15 @@ export async function runPipeline(id: string): Promise<void> {
       s.live = { ...s.live, tag: undefined, boxes: undefined };
     });
     log(id, `Done in ${mins} min: ${c.s.shipped} shorts in workspace/${id}/export`, "info");
+    const plan = c.s.options.publish;
+    if (plan) {
+      if (isConnected()) {
+        const n = publishAll(id, plan);
+        log(id, `Posting ${n} shorts to YouTube (${plan.privacy}${plan.everyHours ? `, one every ${plan.everyHours} h` : ""})`, "info");
+      } else {
+        log(id, "Auto-post is on, but no YouTube channel is connected. Connect one, then press Post all.", "warn");
+      }
+    }
   } catch (err) {
     const canceled = err instanceof CancelledError || c.signal.aborted;
     update(id, (s) => {

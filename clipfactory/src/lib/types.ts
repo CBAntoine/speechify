@@ -131,6 +131,16 @@ export interface StackReport {
 // ── Jobs ─────────────────────────────────────────────────────────────
 
 export type Layout = "auto" | "split" | "crop" | "fit" | "cutout";
+export type Privacy = "public" | "unlisted" | "private";
+
+/** Post every shipped short when the job finishes: now, or one every N hours from startAt. */
+export interface PublishPlan {
+  privacy: Privacy;
+  /** ISO time of the first post. With it, shorts are scheduled (YouTube publishes them). */
+  startAt?: string;
+  /** Hours between scheduled posts. */
+  everyHours?: number;
+}
 export type CaptionStyle = "pop" | "karaoke" | "clean";
 
 export interface JobOptions {
@@ -161,6 +171,8 @@ export interface JobOptions {
   language?: string;
   /** Extra direction for picking moments, e.g. "only funny fails". */
   instructions?: string;
+  /** Post to the connected YouTube channel when the job finishes. */
+  publish?: PublishPlan;
 }
 
 export const DEFAULT_OPTIONS: JobOptions = {
@@ -234,6 +246,21 @@ export interface ResolvedLayout {
 
 export type ShortStatus = "planned" | "queued" | "rendering" | "done" | "failed";
 
+export interface YouTubePost {
+  status: "queued" | "uploading" | "processing" | "posted" | "scheduled" | "failed";
+  /** Upload progress 0..1. */
+  progress: number;
+  privacy: Privacy;
+  publishAt?: string;
+  title: string;
+  videoId?: string;
+  url?: string;
+  error?: string;
+  /** Something worth knowing that isn't a failure, e.g. the channel's defaults made it private. */
+  note?: string;
+  postedAt?: number;
+}
+
 export interface Short {
   id: string;
   n: number;
@@ -267,6 +294,8 @@ export interface Short {
   error?: string;
   /** Posting order after Arrange (1 = post first). */
   order?: number;
+  /** Where it was posted on YouTube. */
+  youtube?: YouTubePost;
 }
 
 export interface SourceInfo {
@@ -348,6 +377,27 @@ export interface JobState {
   shipped: number;
   live: LiveInfo;
   log: LogLine[];
+  error?: string;
+}
+
+export interface YouTubeChannel {
+  id: string;
+  title: string;
+  handle?: string;
+  thumbnail?: string;
+  subscribers?: number;
+  videos?: number;
+}
+
+export interface YouTubeStatus {
+  /** An OAuth client (ID + secret) is set up. */
+  configured: boolean;
+  connected: boolean;
+  /** The redirect URI to register on a "Web application" OAuth client. */
+  redirectUri: string;
+  clientType?: "web" | "installed";
+  channel?: YouTubeChannel;
+  /** Set when the saved login stopped working (revoked, expired). */
   error?: string;
 }
 

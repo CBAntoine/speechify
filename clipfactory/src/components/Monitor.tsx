@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { pad2, timecode } from "@/lib/format";
-import { fileUrl, TOOL, type Box, type JobState, type Short, type StackReport, type ToolId } from "@/lib/types";
+import { fileUrl, TOOL, type Box, type JobState, type Short, type StackReport, type ToolId, type YouTubeStatus } from "@/lib/types";
 import { SourceForm } from "./SourceForm";
 
 const ON_MONITOR: ToolId[] = ["ytdlp", "scenedetect", "whisperx", "mediapipe", "yolo", "sam2", "esrgan", "rife"];
@@ -15,6 +15,7 @@ export function Monitor(props: {
   stack: StackReport | null;
   focus: Short | null;
   showForm: boolean;
+  yt: YouTubeStatus | null;
   onCloseForm?: () => void;
   onStarted: (id: string) => void;
   onVideo: (v: HTMLVideoElement | null) => void;
@@ -73,7 +74,7 @@ export function Monitor(props: {
             <div className="empty">{job ? (job.status === "queued" ? "Queued…" : "Pulling the VOD…") : ""}</div>
           )}
           {job && !props.showForm && <Overlays job={job} short={short ?? null} />}
-          {props.showForm && <SourceForm stack={props.stack} onStarted={props.onStarted} onClose={props.onCloseForm} />}
+          {props.showForm && <SourceForm stack={props.stack} yt={props.yt} onStarted={props.onStarted} onClose={props.onCloseForm} />}
         </div>
         <div className="foot">
           <span>{tool ? `${tool.name} · ${tool.repo.split("/")[0]}` : (src?.title ?? "Paste a VOD link or drop a video")}</span>

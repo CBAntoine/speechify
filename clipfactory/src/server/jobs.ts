@@ -60,6 +60,11 @@ function load(rescan = false) {
         state.error = "The server stopped while this job was running. Start it again to redo it.";
         state.activeTool = null;
       }
+      for (const sh of state.shorts ?? []) {
+        if (sh.youtube && (sh.youtube.status === "queued" || sh.youtube.status === "uploading")) {
+          sh.youtube = { ...sh.youtube, status: "failed", error: "The server stopped during the upload. Post it again." };
+        }
+      }
       reg.jobs.set(state.id, { state, listeners: new Set(), abort: new AbortController(), broadcastTimer: null, saveTimer: null });
     } catch {
       /* skip unreadable job */

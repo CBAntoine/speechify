@@ -1,7 +1,8 @@
 "use client";
 
 import { compact, pad2 } from "@/lib/format";
-import { STAGES, TOOLS, type JobState, type JobSummary, type StackReport } from "@/lib/types";
+import { STAGES, TOOLS, type JobState, type JobSummary, type StackReport, type YouTubeStatus } from "@/lib/types";
+import { YouTubeButton } from "./YouTube";
 
 function modelLabel(model?: string): string {
   const m = /claude-([a-z]+)-(\d+)(?:-(\d+))?/.exec(model ?? "");
@@ -19,6 +20,9 @@ export function Header(props: {
   job: JobState | null;
   jobs: JobSummary[];
   stack: StackReport | null;
+  yt: YouTubeStatus | null;
+  onYouTubeSetup: () => void;
+  onYouTubeChanged: () => void;
   onNew: () => void;
   onOpen: (id: string) => void;
   onCancel: () => void;
@@ -29,6 +33,7 @@ export function Header(props: {
   const counts = Object.values(stack?.stars ?? {}).filter((v): v is number => typeof v === "number");
   const stars = counts.length >= 15 ? counts.reduce((a, b) => a + b, 0) : 0;
   const running = job?.status === "running" || job?.status === "queued";
+  const posted = job?.shorts.filter((s) => s.youtube && ["processing", "posted", "scheduled"].includes(s.youtube.status)).length ?? 0;
   const liveLabel = job?.status === "running" ? "LIVE RENDER" : job?.status === "queued" ? "QUEUED" : job?.status === "done" ? "RENDER DONE" : job?.status === "failed" ? "FAILED" : job?.status === "canceled" ? "CANCELED" : "READY";
   return (
     <header className="head">
@@ -73,6 +78,7 @@ export function Header(props: {
               Run again
             </button>
           )}
+          <YouTubeButton yt={props.yt} onSetup={props.onYouTubeSetup} onChanged={props.onYouTubeChanged} />
         </div>
       </div>
       <div className="shipped">
@@ -81,6 +87,7 @@ export function Header(props: {
         <div className="count" aria-live="polite">
           {pad2(job?.shipped ?? 0)}
         </div>
+        {posted > 0 && <div className="label" style={{ color: "var(--text)" }}>▶ {pad2(posted)} on YouTube</div>}
       </div>
     </header>
   );

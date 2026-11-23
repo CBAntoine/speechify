@@ -7,6 +7,8 @@
 //          --style pop|karaoke|clean  --no-captions  --no-hook  --keep-silence
 //          --no-denoise  --no-stems  --dub es,de,ja  --upscale auto|4k|off
 //          --no-slowmo  --name NAME  --lang en  --direction "only the funny fails"
+//          --post public|unlisted|private  --every 6  --start 2026-11-24T18:00
+//          (posting needs a channel connected once in the dashboard)
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -33,6 +35,9 @@ const { values, positionals } = parseArgs({
     name: { type: "string" },
     lang: { type: "string" },
     direction: { type: "string" },
+    post: { type: "string" },
+    every: { type: "string" },
+    start: { type: "string" },
     doctor: { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
@@ -92,8 +97,22 @@ const opts = Object.fromEntries(
     slowmo: values["no-slowmo"] ? false : undefined,
     language: values.lang,
     instructions: values.direction,
+    publish: values.post
+      ? {
+          privacy: ["public", "unlisted", "private"].includes(values.post) ? values.post : "public",
+          ...(values.every ? { everyHours: Number(values.every) } : {}),
+          ...(values.start ? { startAt: new Date(values.start).toISOString() } : {}),
+        }
+      : undefined,
   }).filter(([, v]) => v !== undefined),
 );
+if (values.post) {
+  const { isConnected } = await import("../src/server/youtube.ts");
+  if (!isConnected()) {
+    console.log(`\n${pink("✕")} No YouTube channel connected. Run npm run dev, press "Connect YouTube" once, then try again.\n`);
+    process.exit(1);
+  }
+}
 
 const job = createJob(opts);
 console.log(`\n${pink("CLIP FACTORY")} /18  job ${job.id}\n`);
@@ -123,6 +142,11 @@ const unsub = subscribe(job.id, (s) => {
 });
 
 await runPipeline(job.id);
+if (values.post) {
+  const { uploadsDone } = await import("../src/server/publish.ts");
+  console.log(`\n${pink("▶")} Posting to YouTube…`);
+  await uploadsDone();
+}
 unsub();
 saveNow(job.id);
 const done = getJob(job.id)!;
@@ -133,6 +157,10 @@ if (done.status !== "done") {
 console.log(`\n${lime("SHORTS SHIPPED")} ${done.shipped}\n`);
 for (const s of [...done.shorts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
   console.log(`  ${lime("✓")} ${s.file}  ${dim(`${s.duration.toFixed(1)} s · score ${s.score} · ${s.hook}`)}${s.qa && !s.qa.ok ? amber(`  QA: ${s.qa.notes.join("; ")}`) : ""}`);
+  if (s.youtube) {
+    const y = s.youtube;
+    console.log(`      ${y.status === "failed" ? pink(`YouTube: ${y.error}`) : lime(`YouTube: ${y.url ?? y.status}${y.publishAt ? ` (goes live ${new Date(y.publishAt).toLocaleString()})` : ""}`)}`);
+  }
 }
 console.log(`\n${dim(`Everything is in ${path.join(process.env.CF_WORKSPACE || path.join(root, "workspace"), job.id, "export")}`)}\n`);
 process.exit(0);

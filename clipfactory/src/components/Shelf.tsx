@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { pad2, seconds } from "@/lib/format";
-import { fileUrl, type JobState } from "@/lib/types";
+import { fileUrl, type JobState, type YouTubeStatus } from "@/lib/types";
+import { PostState } from "./YouTube";
 
 /** Finished shorts: watch, download, copy the post text. */
-export function Shelf({ job, onPlay }: { job: JobState | null; onPlay: (id: string) => void }) {
+export function Shelf({ job, yt, onPlay, onPost, onPostAll }: { job: JobState | null; yt: YouTubeStatus | null; onPlay: (id: string) => void; onPost: (id: string) => void; onPostAll: () => void }) {
   const [copied, setCopied] = useState<string | null>(null);
   if (!job) return null;
   const done = [...job.shorts].filter((s) => s.status === "done" && s.file).sort((a, b) => (a.order ?? a.n) - (b.order ?? b.n));
@@ -22,9 +23,15 @@ export function Shelf({ job, onPlay }: { job: JobState | null; onPlay: (id: stri
   };
   return (
     <section className="panel" aria-label="Shipped shorts">
-      <div className="ph">
-        <span className="name">SHIPPED / workspace/{job.id}/export</span>
-        <span className="right">posting order</span>
+      <div className="ph" style={{ overflow: "visible" }}>
+        <span className="name" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>SHIPPED / workspace/{job.id}/export</span>
+        {done.some((s) => !s.youtube || s.youtube.status === "failed") ? (
+          <button className="btn yt" onClick={onPostAll} title={yt?.connected ? `Post to ${yt.channel?.title ?? "YouTube"}` : "Connect a YouTube channel first"}>
+            ▶ Post all to YouTube
+          </button>
+        ) : (
+          <span className="right">posting order</span>
+        )}
       </div>
       <div className="pb" style={{ display: "grid", gap: 12 }}>
         <div className="shelf">
@@ -43,6 +50,7 @@ export function Shelf({ job, onPlay }: { job: JobState | null; onPlay: (id: stri
                   </span>
                   <span className="tt">{s.title}</span>
                   {s.qa && !s.qa.ok && <span className="hint" style={{ color: "var(--amber)" }}>QA: {s.qa.notes.join("; ")}</span>}
+                  <PostState short={s} onPost={() => onPost(s.id)} />
                   <div className="acts">
                     <a className="btn lime" href={dl(s.file!)}>
                       ↓ MP4

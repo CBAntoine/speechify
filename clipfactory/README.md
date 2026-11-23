@@ -1,6 +1,6 @@
 # Clip Factory /18
 
-Turn a long gameplay VOD with a facecam into captioned 9:16 shorts. Paste a YouTube, Twitch or Kick link (or drop a recording), and Clip Factory pulls it, finds the moments worth posting, puts the facecam on top and the action below, cleans the audio, adds word-timed captions and a hook, and exports platform-ready MP4s with titles and hashtags.
+Turn a long gameplay VOD with a facecam into captioned 9:16 shorts, and post them to your YouTube channel. Paste a YouTube, Twitch or Kick link (or drop a recording), and Clip Factory pulls it, finds the moments worth posting, puts the facecam on top and the action below, cleans the audio, adds word-timed captions and a hook, exports platform-ready MP4s with titles and hashtags, and can post them as Shorts, right away or on a schedule.
 
 Up to 18 open-source repos do the work, with Claude (Opus 5.5) as the orchestrator that picks the moments. Every step shows up live in a dashboard modelled on the "Clip Factory /18" video: program monitor, 9:16 output, inspector, render queue, timeline and the 18-repo stack.
 
@@ -53,7 +53,33 @@ Everything lands in `workspace/<job>/export/`:
 | `selects.edl` | Every kept range in posting order, for DaVinci Resolve or Premiere |
 | `project.llc` | LosslessCut project; a copy sits next to the source so LosslessCut opens it automatically |
 
-The dashboard's **Shipped** shelf has download buttons and a "Copy post" button for each short.
+The dashboard's **Shipped** shelf has download buttons, a "Copy post" button and a **Post** button for each short.
+
+## Post to YouTube
+
+Clip Factory can post straight to your channel: one short at a time (edit the title and description first), all of them at once, spaced out on a schedule, or automatically when a job finishes.
+
+### Connect your channel (once, about five minutes)
+
+It uses your own Google OAuth client, so your login stays on your computer:
+
+1. In Google Cloud Console, create a project and enable the [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com).
+2. In [Google Auth Platform](https://console.cloud.google.com/auth/overview), set up the OAuth consent screen: user type **External**, and add your Google account as a test user. While the app is in **Testing**, Google ends the login after 7 days. Press **Publish app** under Audience to stay connected. Google will warn that it hasn't verified the app; it's your own app, so choose Advanced → continue.
+3. [Create an OAuth client ID](https://console.cloud.google.com/auth/clients) of type **Desktop app** and download its JSON. A Web application client works too; register `http://127.0.0.1:3200/` as its redirect URI.
+4. In the dashboard, press **Connect YouTube**, drop the JSON in, and sign in with Google.
+
+The login is saved in `.secrets/` (git-ignored, readable only by your user). Disconnect from the channel menu in the header.
+
+### Posting
+
+- **Post** on a shipped short: edit the title and description, pick Public, Unlisted or Private, and post now or schedule it.
+- **Post all to YouTube** posts every short not posted yet, in posting order (best first): all now, one now and the rest spaced out, or starting at a time you pick. Scheduled videos stay private until their time and then YouTube publishes them, so your computer can be off.
+- **Post to YouTube when done** on the new-VOD form does the same automatically when the job finishes.
+- From the terminal: `npm run factory -- <link> --post public --every 6`. Connect once in the dashboard first.
+
+Each post uses the title, description and hashtags Clip Factory wrote, with `#Shorts` and a link to the full stream, in the Gaming category, marked not made for kids. Vertical videos up to 3 minutes count as Shorts on YouTube. Uploads go in resumable 8 MiB chunks, so a dropped connection carries on where it stopped. The card shows progress, then the link once YouTube has the video.
+
+Uploads count against your Google Cloud project's YouTube API quota and YouTube's own daily upload limit for the channel. If you hit either, the short shows why and you can post it again later.
 
 ## The 18 repos, and what runs when one isn't installed
 
@@ -109,11 +135,13 @@ All optional. Put them in `.env.local`.
 | `CF_WORKSPACE` | Where jobs are stored (default `./workspace`). |
 | `CF_PYTHON` | A different Python for the helper scripts. |
 | `CF_GITHUB_TOKEN` | Raises the GitHub rate limit for the star counts in the header. |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | Your Google OAuth client, instead of dropping its JSON into the dashboard. |
+| `CF_ALLOWED_HOSTS` | Other hostnames allowed to use the server (for example your computer's LAN name). |
 
 ## Notes
 
-- The server listens on 127.0.0.1 only. To use it from your phone on the same WiFi, run `npx next dev --port 3200 --hostname 0.0.0.0`. Don't expose it to the internet: anyone who can reach it can make it download and process videos.
+- The server listens on 127.0.0.1 only, and only Clip Factory's own pages can make changes: requests from other websites are refused, so a page you visit can't post to your channel. To use it from your phone on the same WiFi, run `npx next dev --port 3200 --hostname 0.0.0.0` and add your computer's address to `CF_ALLOWED_HOSTS`. Don't expose it to the internet: anyone who can reach it can post to your channel.
 - On a CPU, a 90-second test VOD becomes 3 shorts in about 3 minutes. Most of the time goes to the slow-motion replay (minterpolate) and the final encodes. A GPU and `--full` make the AI steps fast.
 - On headless Linux, MediaPipe needs `sudo apt install libegl1 libgles2`. Without them it falls back to OpenCV.
 - Only clip streams you have the rights to post.
-- Tests: `npm test` covers the captions, layout and tracking maths, moment picking, dead-air cutting, subtitle parsing and the Claude request (against a mock API).
+- Tests: `npm test` covers the captions, layout and tracking maths, moment picking, dead-air cutting, subtitle parsing, the Claude request, and YouTube login, upload and scheduling (both against mock servers).

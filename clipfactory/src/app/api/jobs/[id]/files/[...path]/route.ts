@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { guard } from "@/server/guard";
 import { insideJob } from "@/server/paths";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,8 @@ const TYPES: Record<string, string> = {
 
 /** Files inside a job folder, with byte ranges so videos can seek. ?download=1 saves instead of playing. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
+  const blocked = guard(req, "read");
+  if (blocked) return blocked;
   const { id, path: parts } = await params;
   let file: string;
   try {

@@ -15,3 +15,6 @@ models/
 __pycache__/
 # Every job's downloads, analysis and rendered shorts
 workspace/
+
+# YouTube login and OAuth client (made by the dashboard)
+.secrets/

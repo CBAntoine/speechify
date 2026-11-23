@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DEFAULT_OPTIONS, TOOLS, type JobOptions, type StackReport } from "@/lib/types";
+import { DEFAULT_OPTIONS, TOOLS, type JobOptions, type Privacy, type StackReport, type YouTubeStatus } from "@/lib/types";
 
 const DUB_LANGS = [
   ["es", "ES"],
@@ -13,7 +13,7 @@ const DUB_LANGS = [
 
 type Opts = Omit<JobOptions, "url" | "file">;
 
-export function SourceForm(props: { stack: StackReport | null; onStarted: (id: string) => void; onClose?: () => void }) {
+export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus | null; onStarted: (id: string) => void; onClose?: () => void }) {
   const [url, setUrl] = useState("");
   const [opts, setOpts] = useState<Opts>({ ...DEFAULT_OPTIONS });
   const [busy, setBusy] = useState(false);
@@ -206,6 +206,38 @@ export function SourceForm(props: { stack: StackReport | null; onStarted: (id: s
             {label}
           </button>
         ))}
+      </div>
+      <div className="toggles" style={{ alignItems: "center" }}>
+        <button
+          type="button"
+          className={`chipbtn${opts.publish ? " on" : ""}`}
+          aria-pressed={Boolean(opts.publish)}
+          disabled={!props.yt?.connected}
+          onClick={() => set("publish", opts.publish ? undefined : { privacy: "public", everyHours: 6 })}
+          title={props.yt?.connected ? undefined : "Connect a YouTube channel first (top of the page)"}
+        >
+          ▶ Post to YouTube when done
+        </button>
+        {opts.publish && (
+          <>
+            <select className="chipbtn" value={opts.publish.privacy} onChange={(e) => set("publish", { ...opts.publish!, privacy: e.target.value as Privacy })} aria-label="Who can see them">
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="private">Private</option>
+            </select>
+            {opts.publish.privacy === "public" && (
+              <select className="chipbtn" value={opts.publish.everyHours ?? 0} onChange={(e) => set("publish", { ...opts.publish!, everyHours: Number(e.target.value) || undefined })} aria-label="Spacing">
+                <option value={0}>all at once</option>
+                <option value={3}>one every 3 h</option>
+                <option value={6}>one every 6 h</option>
+                <option value={12}>one every 12 h</option>
+                <option value={24}>one a day</option>
+              </select>
+            )}
+          </>
+        )}
+        {!props.yt?.connected && <span className="hint">Connect YouTube at the top to post automatically.</span>}
+        {props.yt?.connected && opts.publish && <span className="hint">to {props.yt.channel?.title ?? "your channel"}</span>}
       </div>
       <label className="field">
         Direction for the orchestrator (optional)

@@ -32,5 +32,12 @@ export function parseOptions(raw: unknown): Partial<JobOptions> {
   if (typeof o.language === "string" && /^[a-z]{2}$/.test(o.language)) out.language = o.language;
   if (typeof o.instructions === "string" && o.instructions.trim()) out.instructions = o.instructions.trim().slice(0, 500);
   if (typeof o.name === "string" && o.name.trim()) out.name = o.name.trim().slice(0, 40);
+  if (o.publish && typeof o.publish === "object") {
+    const p = o.publish as Record<string, unknown>;
+    const privacy = (["public", "unlisted", "private"] as const).find((v) => v === p.privacy) ?? "public";
+    const startAt = typeof p.startAt === "string" && Number.isFinite(new Date(p.startAt).getTime()) ? new Date(p.startAt).toISOString() : undefined;
+    const everyHours = typeof p.everyHours === "number" && Number.isFinite(p.everyHours) ? clamp(p.everyHours, 0, 24 * 30) : undefined;
+    out.publish = { privacy, ...(startAt ? { startAt } : {}), ...(everyHours ? { everyHours } : {}) };
+  }
   return out;
 }

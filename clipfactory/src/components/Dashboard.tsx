@@ -11,6 +11,7 @@ import { RenderQueue } from "./RenderQueue";
 import { Sequence } from "./Sequence";
 import { Shelf } from "./Shelf";
 import { ClippingStack } from "./Stack";
+import { PostAllDialog, PostDialog, useYouTube, YouTubeSetup } from "./YouTube";
 
 function jobFromUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -26,7 +27,22 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<string | null>(null);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [yt, refreshYt] = useYouTube();
+  const [setup, setSetup] = useState(false);
+  const [posting, setPosting] = useState<string | null>(null);
+  const [postAll, setPostAll] = useState(false);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const root = useRef<HTMLDivElement>(null);
+
+  // Coming back from Google's consent screen.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const r = url.searchParams.get("youtube");
+    if (!r) return;
+    setNotice(r === "connected" ? { ok: true, text: `YouTube connected${url.searchParams.get("channel") ? `: ${url.searchParams.get("channel")}` : ""}. Shipped shorts now have a Post button.` } : { ok: false, text: url.searchParams.get("message") ?? "The YouTube login didn't finish." });
+    for (const k of ["youtube", "message", "channel"]) url.searchParams.delete(k);
+    window.history.replaceState(null, "", url);
+  }, []);
 
   const refreshJobs = useCallback(async () => {
     const r = await fetch("/api/jobs", { cache: "no-store" }).catch(() => null);
@@ -99,12 +115,23 @@ export default function Dashboard() {
         job={job}
         jobs={jobs}
         stack={stack}
+        yt={yt}
+        onYouTubeSetup={() => setSetup(true)}
+        onYouTubeChanged={() => void refreshYt()}
         onNew={() => setShowForm(true)}
         onOpen={openJob}
         onCancel={() => action("cancel")}
         onRestart={() => action("restart")}
       />
       <StageBar job={job} />
+      {notice && (
+        <div className={`error-banner${notice.ok ? " ok" : ""}`} role="status">
+          <span>{notice.text}</span>
+          <button className="btn" onClick={() => setNotice(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
       {job?.status === "failed" && (
         <div className="error-banner" role="alert">
           <span>{job.error ?? "The job failed."}</span>
@@ -119,6 +146,7 @@ export default function Dashboard() {
           stack={stack}
           focus={selected ? current : null}
           showForm={showForm || (loaded && !jobId)}
+          yt={yt}
           onCloseForm={jobId ? () => setShowForm(false) : undefined}
           onStarted={(id) => {
             void refreshJobs();
@@ -134,7 +162,24 @@ export default function Dashboard() {
       </div>
       <Sequence job={job} selected={current?.id ?? null} onSelect={setSelected} />
       <ClippingStack job={job} stack={stack} />
-      <Shelf job={job} onPlay={setSelected} />
+      <Shelf
+        job={job}
+        yt={yt}
+        onPlay={setSelected}
+        onPost={(id) => (yt?.connected ? setPosting(id) : setSetup(true))}
+        onPostAll={() => (yt?.connected ? setPostAll(true) : setSetup(true))}
+      />
+      {setup && (
+        <YouTubeSetup
+          yt={yt}
+          onClose={() => setSetup(false)}
+          onChanged={() => void refreshYt()}
+        />
+      )}
+      {job && yt?.connected && posting && job.shorts.find((s) => s.id === posting) && (
+        <PostDialog job={job} short={job.shorts.find((s) => s.id === posting)!} yt={yt} onClose={() => setPosting(null)} />
+      )}
+      {job && yt?.connected && postAll && <PostAllDialog job={job} yt={yt} onClose={() => setPostAll(false)} />}
       {job && running && <Cursors root={root} job={job} />}
     </div>
   );

@@ -1,9 +1,12 @@
 import { getJob, subscribe } from "@/server/app";
+import { guard } from "@/server/guard";
 
 export const dynamic = "force-dynamic";
 
 /** Server-sent events: the whole job state, at most ~8 times a second. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const blocked = guard(req, "read");
+  if (blocked) return blocked;
   const id = (await params).id;
   const job = getJob(id);
   if (!job) return Response.json({ error: "No such job" }, { status: 404 });
