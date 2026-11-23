@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Only settings are backed up; video clips are far too large. -->
+    <include
+        domain="file"
+        path="datastore/" />
+</full-backup-content>

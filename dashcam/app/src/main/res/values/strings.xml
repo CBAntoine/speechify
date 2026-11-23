@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dashcam</string>
+    <string name="tile_label">Dashcam</string>
+    <string name="shortcut_record_short">Record</string>
+    <string name="shortcut_record_long">Start recording</string>
+    <string name="shortcut_clips_short">Clips</string>
+    <string name="shortcut_clips_long">Open saved clips</string>
+
+    <!-- Notifications -->
+    <string name="channel_recording_name">Recording</string>
+    <string name="channel_recording_desc">Shown while the dashcam is recording</string>
+    <string name="channel_alerts_name">Alerts</string>
+    <string name="channel_alerts_desc">Incidents, storage and camera problems</string>
+    <string name="notif_recording_title">Recording</string>
+    <string name="notif_recording_title_muted">Recording · mic off</string>
+    <string name="notif_starting_title">Starting camera…</string>
+    <string name="notif_cooling_title">Paused: phone too hot</string>
+    <string name="notif_cooling_text">Recording resumes on its own when the phone cools down</string>
+    <string name="notif_recording_text">%1$s · %2$d-min loop · tap to open</string>
+    <string name="notif_protected_text">Current clip is protected</string>
+    <string name="notif_countdown_text">Charger unplugged. Stopping in %d s</string>
+    <string name="notif_action_protect">Protect clip</string>
+    <string name="notif_action_stop">Stop</string>
+    <string name="notif_action_mute">Mute mic</string>
+    <string name="notif_action_unmute">Unmute</string>
+    <string name="notif_action_keep">Keep recording</string>
+    <string name="alert_impact_title">Impact detected</string>
+    <string name="alert_impact_text">Clips around the impact were protected (%.1f g)</string>
+    <string name="alert_stopped_title">Recording stopped</string>
+    <string name="alert_storage_text">Storage is full. Free up space or lower the loop storage limit.</string>
+    <string name="alert_camera_text">The camera stopped responding. Open Dashcam to try again.</string>
+
+    <!-- Camera screen -->
+    <string name="status_rec">REC</string>
+    <string name="status_ready">READY</string>
+    <string name="status_starting">STARTING</string>
+    <string name="status_cooling">COOLING DOWN</string>
+    <plurals name="clips_count">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="action_start_recording">Start recording</string>
+    <string name="action_stop_recording">Stop recording</string>
+    <string name="action_protect">Protect clip</string>
+    <string name="action_mute">Mute microphone</string>
+    <string name="action_unmute">Unmute microphone</string>
+    <string name="action_clips">Clips</string>
+    <string name="action_settings">Settings</string>
+    <string name="notice_protected">Clip protected</string>
+    <string name="notice_impact">Impact detected. Clip protected</string>
+    <string name="unit_kmh">km/h</string>
+    <string name="unit_mph">mph</string>
+    <string name="gps_searching">GPS…</string>
+    <string name="gps_off">No GPS</string>
+    <string name="g_force">%.1f g</string>
+    <string name="loop_chip">%1$s · %2$d min</string>
+    <string name="camera_preparing">Starting camera…</string>
+    <string name="preview_unavailable">This phone can\'t show a live preview while recording in the background, so the preview is off. Recording works normally.</string>
+    <string name="issue_camera_in_use">Another app is using the camera. Recording resumes when it\'s free.</string>
+    <string name="issue_camera_disabled">The camera is disabled by the system.</string>
+    <string name="issue_camera_error">The camera ran into a problem. Retrying…</string>
+    <string name="issue_storage_full">Storage full. Recording stopped.</string>
+    <string name="issue_overheating">Phone is too hot. Recording paused to cool down.</string>
+    <string name="issue_permission">Camera permission is missing.</string>
+    <string name="thermal_warning">Phone is getting hot</string>
+    <string name="countdown_banner">Charger unplugged. Stopping in %d s</string>
+    <string name="keep_recording">Keep recording</string>
+    <string name="battery_banner">Allow background activity so Android never stops a recording.</string>
+    <string name="battery_banner_action">Allow</string>
+    <string name="interrupted_banner">Android stopped your last recording. Allowing background activity prevents this.</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="zoom_value">%sx</string>
+
+    <!-- Library -->
+    <string name="library_title">Clips</string>
+    <string name="filter_all">All</string>
+    <string name="filter_protected">Protected</string>
+    <string name="filter_impacts">Impacts</string>
+    <string name="storage_loop">Loop %1$s of %2$s</string>
+    <string name="storage_protected">Protected %s</string>
+    <string name="storage_free">%s free</string>
+    <string name="empty_clips_title">No clips yet</string>
+    <string name="empty_clips_text">Recordings show up here. Protected clips are kept until you delete them; everything else loops.</string>
+    <string name="empty_filtered">Nothing here yet</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="action_unprotect">Unprotect</string>
+    <string name="action_save_to_gallery">Save to Gallery</string>
+    <string name="action_share">Share</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_more">More</string>
+    <string name="delete_confirm_title">Delete clip?</string>
+    <string name="delete_confirm_text">This can\'t be undone.</string>
+    <string name="cancel">Cancel</string>
+    <string name="saved_to_gallery">Saved to Movies/Dashcam</string>
+    <string name="save_failed">Couldn\'t save to Gallery</string>
+    <string name="badge_protected">Protected</string>
+    <string name="badge_impact">Impact</string>
+    <string name="badge_in_gallery">In Gallery</string>
+    <string name="back">Back</string>
+    <string name="share_chooser">Share clip</string>
+
+    <!-- Player -->
+    <string name="telemetry_speed">Speed</string>
+    <string name="telemetry_position">Position</string>
+    <string name="telemetry_peak">Peak g-force</string>
+    <string name="open_in_maps">Open in Maps</string>
+    <string name="no_gps_data">No GPS data for this clip</string>
+    <string name="events_title">Events</string>
+    <string name="event_impact">Impact · %.1f g</string>
+    <string name="event_manual">Protected manually</string>
+    <string name="clip_missing">This clip is no longer available.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="section_video">Video</string>
+    <string name="section_overlay">Burned-in overlay</string>
+    <string name="section_incidents">Incident detection</string>
+    <string name="section_storage">Storage</string>
+    <string name="section_behavior">Behavior</string>
+    <string name="section_reliability">Reliability</string>
+    <string name="section_about">About</string>
+    <string name="setting_quality">Resolution</string>
+    <string name="setting_clip_length">Clip length</string>
+    <plurals name="minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <string name="setting_audio">Record audio</string>
+    <string name="setting_audio_summary">Adds sound from the microphone</string>
+    <string name="setting_hevc">Smaller files (HEVC)</string>
+    <string name="setting_hevc_summary" formatted="false">About 40% smaller. Some older computers can\'t play it.</string>
+    <string name="setting_unsupported">Not supported on this phone</string>
+    <string name="setting_stabilization">Video stabilization</string>
+    <string name="setting_stabilization_summary">Smooths vibration from the mount</string>
+    <string name="setting_orientation">Mount orientation</string>
+    <string name="orientation_landscape">Landscape</string>
+    <string name="orientation_portrait">Portrait</string>
+    <string name="setting_overlay_time">Date and time</string>
+    <string name="setting_overlay_speed">Speed</string>
+    <string name="setting_overlay_coords">GPS coordinates</string>
+    <string name="setting_speed_unit">Speed unit</string>
+    <string name="setting_sensitivity">Impact sensitivity</string>
+    <string name="setting_sensitivity_summary">Protects the clips around a sudden impact automatically.</string>
+    <string name="sensitivity_off">Off</string>
+    <string name="sensitivity_low">Low (strong impacts only)</string>
+    <string name="sensitivity_medium">Medium</string>
+    <string name="sensitivity_high">High (bumps may trigger)</string>
+    <string name="setting_loop_limit">Loop storage limit</string>
+    <string name="gigabytes">%d GB</string>
+    <string name="setting_storage_location">Save clips to</string>
+    <string name="storage_phone">Phone storage</string>
+    <string name="storage_sd">SD card</string>
+    <string name="setting_auto_gallery">Copy protected clips to Gallery</string>
+    <string name="setting_auto_gallery_summary">Keeps incidents safe even if you uninstall the app</string>
+    <string name="setting_auto_start">Record when the app opens</string>
+    <string name="setting_power_stop">Stop when the charger is unplugged</string>
+    <string name="setting_power_stop_summary">Waits 60 seconds first, so a loose cable won\'t stop it</string>
+    <string name="setting_keep_screen_on">Keep screen on in the app</string>
+    <string name="setting_pip">Floating preview</string>
+    <string name="setting_pip_summary">Shows a small live view while you use other apps</string>
+    <string name="setting_battery">Background activity</string>
+    <string name="battery_unrestricted">Unrestricted. Android won\'t stop recordings.</string>
+    <string name="battery_optimized">Restricted. Tap to allow recording in the background.</string>
+    <string name="setting_permissions">App permissions</string>
+    <string name="setting_permissions_summary">Camera, microphone, location, notifications</string>
+    <string name="setting_version">Version</string>
+    <string name="applies_next_recording">Video changes apply to the next recording.</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Turn your phone into a dashcam</string>
+    <string name="onboarding_subtitle">Keeps recording in the background while you use maps, music or any other app.</string>
+    <string name="perm_camera_title">Camera</string>
+    <string name="perm_camera_text">Records the road ahead. Required.</string>
+    <string name="perm_mic_title">Microphone</string>
+    <string name="perm_mic_text">Adds sound to clips. Optional.</string>
+    <string name="perm_location_title">Location</string>
+    <string name="perm_location_text">Speed and position on every clip. Optional.</string>
+    <string name="perm_notifications_title">Notifications</string>
+    <string name="perm_notifications_text">Recording controls in your notification shade.</string>
+    <string name="perm_storage_title">Storage</string>
+    <string name="perm_storage_text">Copies protected clips to your Gallery.</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_camera_denied">Dashcam needs the camera to record. You can allow it in system settings.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="onboarding_battery_title">Keep it recording</string>
+    <string name="onboarding_battery_text">Some phones close apps running in the background to save battery. Allow Dashcam to keep running so clips never get cut short.</string>
+    <string name="onboarding_battery_allow">Allow background activity</string>
+    <string name="onboarding_skip">Not now</string>
+</resources>
