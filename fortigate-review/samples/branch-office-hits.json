@@ -1,0 +1,22 @@
+{
+  "http_method": "GET",
+  "results": [
+    { "policyid": 1, "active_sessions": 412, "hit_count": 18234551, "first_used": 1709374500, "last_used": 1795355940, "bytes": 912345678901, "packets": 1023456789 },
+    { "policyid": 7, "active_sessions": 3, "hit_count": 3412, "first_used": 1736845200, "last_used": 1795300860, "bytes": 81234567, "packets": 912345 },
+    { "policyid": 3, "active_sessions": 18, "hit_count": 56120, "first_used": 1748939400, "last_used": 1795355880, "bytes": 1234567890, "packets": 2345678 },
+    { "policyid": 12, "active_sessions": 0, "hit_count": 0, "bytes": 0, "packets": 0 },
+    { "policyid": 5, "active_sessions": 6, "hit_count": 8811, "first_used": 1739271600, "last_used": 1795349400, "bytes": 45678901, "packets": 123456 },
+    { "policyid": 9, "active_sessions": 0, "hit_count": 0, "bytes": 0, "packets": 0 },
+    { "policyid": 10, "active_sessions": 0, "hit_count": 0, "bytes": 0, "packets": 0 },
+    { "policyid": 11, "active_sessions": 0, "hit_count": 0, "bytes": 0, "packets": 0 },
+    { "policyid": 13, "active_sessions": 0, "hit_count": 466, "first_used": 1756712700, "last_used": 1786378800, "bytes": 23456789, "packets": 45678 },
+    { "policyid": 14, "active_sessions": 0, "hit_count": 0, "bytes": 0, "packets": 0 }
+  ],
+  "vdom": "root",
+  "path": "firewall",
+  "name": "policy",
+  "status": "success",
+  "serial": "FGT60FSAMPLE0001",
+  "version": "v7.2.8",
+  "build": 1639
+}

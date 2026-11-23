@@ -1,0 +1,376 @@
+/**
+ * Run one FortiGate rulebase review.
+ *
+ *   npm run review -- <backup.conf> [options]
+ *
+ * Redacts secrets on this machine, parses the backup, uploads the redacted
+ * copy to a Claude Managed Agents session, follows the agent while it works,
+ * and saves report.md, findings.json and analysis.py under reports/.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import Anthropic, { toFile } from "@anthropic-ai/sdk";
+import { parseConfig, summarize, toAgentJson } from "./fortios.ts";
+import { redactionCounts, sanitize } from "./sanitize.ts";
+import { parseHits } from "./hits.ts";
+import { downloadFortinetKev, fortinetKev, type KevFile } from "./kev.ts";
+import { loadIds, AGENT_FILE, ENVIRONMENT_FILE } from "./ids.ts";
+import { MAX_ITERATIONS, RUBRIC, outcomeDescription } from "./rubric.ts";
+import { downloadOutputs, follow, terminalApprover, type Printer } from "./session.ts";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+const USAGE = `Review a FortiGate rulebase and firmware with a Claude agent.
+
+Usage:
+  npm run review -- <backup.conf> [options]
+
+Options:
+  --hits <file>           Policy hit counts: the JSON from GET /api/v2/monitor/firewall/policy, or a CSV
+  --hits-days <n>         How many days the hit counters cover (they reset when the unit reboots)
+  --hits-exported <date>  When the hit counts were exported (default: the file's modified time)
+  --deviations <file>     Findings the team has accepted (JSON array of {check, object, reason, owner, expires})
+  --kev-file <file>       Use a saved copy of CISA's KEV catalog instead of downloading it
+  --no-kev                Skip the KEV catalog
+  --notes <text>          Anything the reviewer should know, passed to the agent
+  --review-date <date>    Review date, YYYY-MM-DD (default: today)
+  --budget-usd <n>        Spending cap for this run, in US dollars (default: 5)
+  --out <dir>             Where to save the bundle and the report (default: reports)
+  --workspace <id>        Console workspace for the live link (default: default)
+  --keep-uploads          Keep the uploaded inputs in your Anthropic account after the run
+  --dry-run               Redact and parse only. Writes what would be uploaded and sends nothing
+  -h, --help              Show this help`;
+
+const isTty = Boolean(process.stdout.isTTY);
+const dim = (s: string) => (isTty ? `\x1b[2m${s}\x1b[0m` : s);
+const bold = (s: string) => (isTty ? `\x1b[1m${s}\x1b[0m` : s);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+const print: Printer = {
+  message: (text) => console.log(`\n${text}`),
+  detail: (text) => console.log(dim(`  ${text}`)),
+  heading: (text) => console.log(bold(`\n${text}`)),
+};
+
+function today(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "fortigate";
+}
+
+/** A path relative to the current folder when it's inside it, absolute otherwise. */
+function shown(p: string): string {
+  const rel = path.relative(process.cwd(), p);
+  return rel && !rel.startsWith("..") && !path.isAbsolute(rel) ? rel : p;
+}
+
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+interface Options {
+  configPath: string;
+  hits?: string;
+  hitsDays: number | null;
+  hitsExported?: string;
+  deviations?: string;
+  kevFile?: string;
+  noKev: boolean;
+  notes: string;
+  reviewDate: string;
+  budgetCents: number;
+  out: string;
+  workspace: string;
+  keepUploads: boolean;
+  dryRun: boolean;
+}
+
+function readOptions(): Options {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: {
+      hits: { type: "string" },
+      "hits-days": { type: "string" },
+      "hits-exported": { type: "string" },
+      deviations: { type: "string" },
+      "kev-file": { type: "string" },
+      "no-kev": { type: "boolean", default: false },
+      notes: { type: "string", default: "" },
+      "review-date": { type: "string" },
+      "budget-usd": { type: "string", default: "5" },
+      out: { type: "string", default: "reports" },
+      workspace: { type: "string", default: "default" },
+      "keep-uploads": { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
+  });
+  if (values.help || positionals.length !== 1) {
+    console.log(USAGE);
+    process.exit(values.help ? 0 : 1);
+  }
+  const reviewDate = values["review-date"] ?? today();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reviewDate)) fail("--review-date must look like 2026-11-23.");
+  const budget = Number(values["budget-usd"]);
+  if (!Number.isFinite(budget) || budget <= 0) fail("--budget-usd must be a positive number of dollars.");
+  let hitsDays: number | null = null;
+  if (values["hits-days"] !== undefined) {
+    hitsDays = Number(values["hits-days"]);
+    if (!Number.isInteger(hitsDays) || hitsDays <= 0) fail("--hits-days must be a whole number of days.");
+  }
+  if (values["hits-exported"] !== undefined && Number.isNaN(new Date(values["hits-exported"]).getTime())) {
+    fail("--hits-exported must be a date, such as 2026-11-22T14:05:00Z.");
+  }
+  return {
+    configPath: path.resolve(positionals[0]),
+    hits: values.hits,
+    hitsDays,
+    hitsExported: values["hits-exported"],
+    deviations: values.deviations,
+    kevFile: values["kev-file"],
+    noKev: values["no-kev"],
+    notes: values.notes,
+    reviewDate,
+    budgetCents: Math.round(budget * 100),
+    out: path.resolve(values.out),
+    workspace: values.workspace,
+    keepUploads: values["keep-uploads"],
+    dryRun: values["dry-run"],
+  };
+}
+
+interface InputFile {
+  name: string;
+  path: string;
+  type: string;
+}
+
+interface Bundle {
+  dir: string;
+  device: string;
+  files: InputFile[];
+}
+
+/** Redact, parse and stage every input under <out>/<device>-<date>/inputs/. */
+async function prepare(opts: Options): Promise<Bundle> {
+  if (!fs.existsSync(opts.configPath)) fail(`Can't find ${opts.configPath}.`);
+  const original = fs.readFileSync(opts.configPath, "utf8").replace(/^﻿/, "");
+  const { text: redacted, redactions } = sanitize(original);
+  if (redacted.split("\n").length !== original.split("\n").length) {
+    fail("Redaction changed the number of lines, so line references would be wrong. Nothing was uploaded.");
+  }
+  const parsed = parseConfig(redacted);
+  const summary = summarize(parsed);
+  const policyCount = Object.values(summary.policies).reduce((a, b) => a + b, 0);
+  if (!parsed.header.config_version && policyCount === 0) {
+    fail(`${path.basename(opts.configPath)} doesn't look like a FortiGate backup: no #config-version header and no firewall policies.`);
+  }
+
+  const device = summary.hostname ?? path.basename(opts.configPath).replace(/\.[^.]+$/, "");
+  let dir = path.join(opts.out, `${slug(device)}-${opts.reviewDate}`);
+  if (fs.existsSync(dir)) {
+    const d = new Date();
+    dir = `${dir}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+  const inputs = path.join(dir, "inputs");
+  fs.mkdirSync(inputs, { recursive: true });
+  const files: InputFile[] = [];
+  const write = (name: string, content: string, type: string) => {
+    const p = path.join(inputs, name);
+    fs.writeFileSync(p, content);
+    files.push({ name, path: p, type });
+  };
+
+  write("config.conf", redacted, "text/plain");
+  write("config.json", JSON.stringify(toAgentJson(parsed)), "application/json");
+
+  let hitsPeriod: number | null = null;
+  if (opts.hits) {
+    if (!fs.existsSync(opts.hits)) fail(`Can't find ${opts.hits}.`);
+    const exportedAt = opts.hitsExported
+      ? new Date(opts.hitsExported).toISOString()
+      : fs.statSync(opts.hits).mtime.toISOString();
+    const hits = parseHits(fs.readFileSync(opts.hits, "utf8"), {
+      source: path.basename(opts.hits),
+      periodDays: opts.hitsDays,
+      exportedAt,
+    });
+    hitsPeriod = hits.period_days;
+    write("hits.json", JSON.stringify(hits, null, 2), "application/json");
+  }
+
+  let kev: KevFile | null = null;
+  if (opts.kevFile) {
+    kev = fortinetKev(JSON.parse(fs.readFileSync(opts.kevFile, "utf8")), path.basename(opts.kevFile));
+  } else if (!opts.noKev) {
+    try {
+      kev = await downloadFortinetKev();
+    } catch (err) {
+      console.warn(
+        `Couldn't download CISA's KEV catalog (${(err as Error).message}). Continuing without it. ` +
+          "Behind a proxy, set NODE_USE_ENV_PROXY=1, or download the catalog yourself and pass --kev-file.",
+      );
+    }
+  }
+  if (kev) write("kev-fortinet.json", JSON.stringify(kev, null, 2), "application/json");
+
+  if (opts.deviations) {
+    const data = JSON.parse(fs.readFileSync(opts.deviations, "utf8"));
+    if (!Array.isArray(data)) fail("--deviations must be a JSON array.");
+    write("deviations.json", JSON.stringify(data, null, 2), "application/json");
+  }
+
+  const run = {
+    format: "fortigate-review run.json v1",
+    device,
+    review_date: opts.reviewDate,
+    notes: opts.notes,
+    source_file: path.basename(opts.configPath),
+    redacted_settings: redactionCounts(redactions),
+    inputs: {
+      hits: Boolean(opts.hits),
+      hits_period_days: hitsPeriod,
+      kev: Boolean(kev),
+      kev_entries: kev?.count ?? 0,
+      deviations: Boolean(opts.deviations),
+    },
+    parser_warnings: parsed.warnings.length,
+  };
+  write("run.json", JSON.stringify(run, null, 2), "application/json");
+
+  // Kept on this machine only: which lines were redacted, never the values.
+  fs.writeFileSync(path.join(dir, "redactions.json"), JSON.stringify(redactions, null, 2));
+
+  const policies = Object.entries(summary.policies).map(([v, n]) => `${n} in ${v}`).join(", ") || "none";
+  console.log(bold(device) + dim(`  ${summary.model ?? "unknown model"}, FortiOS ${summary.version ?? "?"} build ${summary.build ?? "?"}`));
+  console.log(`  ${parsed.line_count} lines, policies: ${policies}, ${summary.addresses} addresses`);
+  console.log(`  Redacted ${redactions.length} secret${redactions.length === 1 ? "" : "s"} before upload. The list of lines is in ${shown(path.join(dir, "redactions.json"))}`);
+  if (parsed.warnings.length) console.log(`  Parser warnings: ${parsed.warnings.length} (listed in config.json)`);
+  console.log(`  Inputs: ${files.map((f) => f.name).join(", ")}`);
+  return { dir, device, files };
+}
+
+function printFindings(dir: string) {
+  const p = path.join(dir, "findings.json");
+  if (!fs.existsSync(p)) return;
+  try {
+    const f = JSON.parse(fs.readFileSync(p, "utf8")) as { summary?: Record<string, number> };
+    const s = f.summary ?? {};
+    const parts = ["critical", "high", "medium", "low", "info"].filter((k) => s[k]).map((k) => `${s[k]} ${k}`);
+    console.log(bold(`Findings: ${parts.join(", ") || "none"}`));
+  } catch {
+    console.log("findings.json isn't valid JSON; read report.md instead.");
+  }
+}
+
+async function main() {
+  const opts = readOptions();
+  // Check for the agent before writing anything, so a failed start leaves no files behind.
+  const ids = opts.dryRun ? null : loadIds(ROOT);
+  if (ids && "error" in ids) fail(ids.error);
+
+  const bundle = await prepare(opts);
+  if (!ids) {
+    console.log(`\nDry run: nothing was sent. The files that would be uploaded are in ${shown(path.join(bundle.dir, "inputs"))}`);
+    return;
+  }
+
+  const client = new Anthropic();
+  const uploaded: string[] = [];
+  let exitCode = 0;
+  try {
+    const resources: { type: "file"; file_id: string; mount_path: string }[] = [];
+    for (const f of bundle.files) {
+      const meta = await client.files.upload({ file: await toFile(fs.readFileSync(f.path), f.name, { type: f.type }) });
+      uploaded.push(meta.id);
+      resources.push({ type: "file", file_id: meta.id, mount_path: `/${f.name}` });
+    }
+
+    const session = await client.beta.sessions.create({
+      agent: ids.agentId,
+      environment_id: ids.environmentId,
+      title: `Rulebase review: ${bundle.device} (${opts.reviewDate})`,
+      resources,
+      budget: { type: "limit", max_list_cost: { amount: String(opts.budgetCents), currency: "USD" } },
+      metadata: { workflow: "NET-2", device: bundle.device.slice(0, 200), review_date: opts.reviewDate },
+    });
+    console.log(`\nSession ${session.id}, spending cap $${(opts.budgetCents / 100).toFixed(2)}`);
+    console.log(`Watch it live: https://platform.claude.com/workspaces/${opts.workspace}/sessions/${session.id}`);
+
+    let interrupted = false;
+    process.on("SIGINT", () => {
+      if (interrupted) process.exit(130);
+      interrupted = true;
+      console.log("\nStopping the agent. Press Ctrl+C again to quit without saving its outputs.");
+      client.beta.sessions.events.send(session.id, { events: [{ type: "user.interrupt" }] }).catch(() => {});
+    });
+
+    const kickoff = async () => {
+      await client.beta.sessions.events.send(session.id, {
+        events: [
+          {
+            type: "user.define_outcome",
+            description: outcomeDescription({ device: bundle.device, reviewDate: opts.reviewDate, files: bundle.files.map((f) => f.name) }),
+            rubric: { type: "text", content: RUBRIC },
+            max_iterations: MAX_ITERATIONS,
+          },
+        ],
+      });
+    };
+    const ending = await follow(client, session.id, kickoff, {
+      approve: terminalApprover,
+      print,
+      unattended: !process.stdin.isTTY,
+    });
+
+    const saved = await downloadOutputs(client, session.id, bundle.dir);
+    const finished = await client.beta.sessions.retrieve(session.id);
+    const cost = finished.usage?.list_cost;
+
+    console.log("");
+    if (ending.stopReason === "budget_reached") {
+      console.log(`The run reached its $${(opts.budgetCents / 100).toFixed(2)} cap and paused. Run again with a higher --budget-usd.`);
+      exitCode = 2;
+    } else if (ending.stopReason === "refusal") {
+      console.log("Claude declined to continue this review. Check the session in the Console.");
+      exitCode = 2;
+    } else if (ending.stopReason !== "end_turn") {
+      console.log(`The session stopped early (${ending.stopReason}).`);
+      exitCode = 2;
+    } else if (ending.outcome && ending.outcome !== "satisfied") {
+      console.log(`The report didn't fully meet the rubric (${ending.outcome.replace(/_/g, " ")}). Read it with that in mind.`);
+      exitCode = 2;
+    }
+    printFindings(bundle.dir);
+    if (saved.length) {
+      console.log(`Saved to ${shown(bundle.dir)}: ${saved.join(", ")}`);
+    } else {
+      console.log("The agent didn't save any output files.");
+      exitCode = exitCode || 2;
+    }
+    if (cost) console.log(dim(`Cost at list price: $${(Number(cost.amount) / 100).toFixed(2)} ${cost.currency}`));
+    console.log(dim(`The session keeps its history until you delete it: ant beta:sessions delete --session-id ${session.id}`));
+  } finally {
+    if (!opts.keepUploads) {
+      for (const id of uploaded) await client.files.delete(id).catch(() => {});
+    }
+  }
+  process.exitCode = exitCode;
+}
+
+main().catch((err: unknown) => {
+  if (err instanceof Anthropic.AuthenticationError) {
+    fail("Anthropic rejected the credentials. Set ANTHROPIC_API_KEY, or run `ant auth login`.");
+  }
+  if (err instanceof Anthropic.NotFoundError) {
+    fail(`Anthropic couldn't find the agent or environment. Run \`ant apply ${AGENT_FILE} ${ENVIRONMENT_FILE}\` from the fortigate-review folder.\n${err.message}`);
+  }
+  if (err instanceof Anthropic.APIError) fail(`Anthropic API error ${err.status ?? ""}: ${err.message}`);
+  fail(err instanceof Error ? err.message : String(err));
+});

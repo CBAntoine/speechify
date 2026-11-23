@@ -1,0 +1,8 @@
+node_modules/
+# Review bundles hold (redacted) firewall configs and the agent's findings.
+reports/
+# Keep real backups out of Git. Put them here, or anywhere outside the repo.
+private/
+*.local.conf
+.env
+.env.*

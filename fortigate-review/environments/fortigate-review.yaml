@@ -1,0 +1,12 @@
+# The sandbox the review agent's tools run in. It needs no network: the runner
+# uploads every input, and the agent works with Python's standard library.
+name: fortigate-review
+description: Sandbox for the FortiGate rulebase review agent. No network access.
+config:
+  type: cloud
+  networking:
+    type: limited
+    allow_package_managers: false
+    allow_mcp_servers: false
+metadata:
+  workflow: NET-2

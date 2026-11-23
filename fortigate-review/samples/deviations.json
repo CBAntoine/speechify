@@ -1,0 +1,16 @@
+[
+  {
+    "check": "AD-07",
+    "object": "admin account \"admin\"",
+    "reason": "The account is renamed during the FortiManager migration.",
+    "owner": "IT Ops",
+    "expires": "2027-03-31"
+  },
+  {
+    "check": "AD-03",
+    "object": "system global admintimeout",
+    "reason": "Long timeout while the NOC wallboard was logged in.",
+    "owner": "IT Ops",
+    "expires": "2026-09-30"
+  }
+]

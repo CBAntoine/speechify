@@ -2,6 +2,8 @@
 
 > **Also in this repo: [Rainmaker](rainmaker/README.md)**, a separate app in `rainmaker/`. It's an AI-first agency CRM (a simpler GoHighLevel alternative) that finds local-business clients, runs your pipeline with Claude agents and builds tailored ads. It has its own `package.json`; run it with `cd rainmaker && npm install && npm run dev`.
 
+> **Also in this repo: [FortiGate rulebase review](fortigate-review/README.md)**, a separate tool in `fortigate-review/`. It's a Claude agent that reviews a FortiGate firewall's rules and firmware from a config backup, quotes the config lines behind each finding, and drafts fixes for an engineer to approve. Secrets are redacted on your machine before anything is uploaded.
+
 An unofficial GTA VI companion site. Players talk to **Sol**, a voice guide built on ElevenLabs Agents. Sol flies the map to any secret, pin or street and opens a popup that explains it. It can also draw a route with turn-by-turn directions, give tips with confidence labels, and read out the day's news. The news and community pins update every day on their own.
 
 > GTA 6 Secrets Map is a fan site. It is not affiliated with Rockstar Games or Take-Two Interactive. The map is **real-world Florida** (the place Leonida parodies) standing in for the game world. It never copies Rockstar's in-game map.
