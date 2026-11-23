@@ -2,15 +2,21 @@
 // Philips…), controlled over ADB once "ADB debugging" / "Network debugging" is switched on in the
 // device's developer options. Volume and play/pause also work over Google Cast when the device
 // has it, with or without ADB.
+//
+// Any other Android device too (a wall calendar, a tablet, a phone, a newer TV): with Wireless
+// debugging on (Android 11 and later), it announces itself, Patch pairs once with the six-digit code
+// it shows, and from then on everything here works on it the same way, over an encrypted connection.
 import fsp from "node:fs/promises";
-import { AdbClient, newAdbKey, shellQuote } from "../net/adb.mjs";
+import { AdbClient, newAdbKey, pairAdb, shellQuote } from "../net/adb.mjs";
+import { browse } from "../net/mdns.mjs";
+import { certificateFor, certificatePem } from "../apk/sign.mjs";
 import { fireTvModel } from "../net/models.mjs";
 import { describeScreen, riskyButton } from "../net/phone.mjs";
 import { readUiTree } from "../net/uitree.mjs";
 import { watchUrl, youtubeSearchUrl, youtubeVoiceUrl } from "../net/youtube.mjs";
 import { WebSession, describePage, hostOf } from "../tvweb/session.mjs";
 import { apkInfo } from "../apk/index.mjs";
-import { fuzzyPick, normalizeText, sleep } from "../util.mjs";
+import { fuzzyPick, normalizeText, prettyHostname, sleep } from "../util.mjs";
 import cast from "./cast.mjs";
 import { DeviceError, done, explainError, need, unsupported } from "./common.mjs";
 import { APPS, buttonCodes, customAppNames, describeButtons, knownApp, parseButtons, parseChannel, pickIndex, pressPlan, settleAfter, storeLink, webSearchUrl, websiteOrSearch, youtubePlay, youtubeSearch } from "./tv.mjs";
@@ -84,7 +90,32 @@ async function adbKey(ctx) {
   return pem;
 }
 
+/** Patch's ADB key with a certificate for it: what Wireless debugging asks to see. */
+async function adbTls(ctx) {
+  const key = await adbKey(ctx);
+  if (ctx.secrets.adbCert) return { key, cert: ctx.secrets.adbCert };
+  const cert = certificatePem(certificateFor(key, "adb"));
+  await ctx.saveSecret(["adbCert"], cert);
+  return { key, cert };
+}
+
+const WIRELESS = "_adb-tls-connect._tcp";
+const PAIRING = "_adb-tls-pairing._tcp";
+
+/**
+ * Where a device's Wireless debugging (or its pairing window) is listening right now, from its own
+ * announcement: the port changes each time it's switched on.
+ */
+async function announcedPort(device, type, ctx) {
+  const { services } = await browse({ types: [type], timeout: 2000, enumerate: false, ...(ctx.mdnsTarget ? { target: ctx.mdnsTarget } : {}) }).catch(() => ({ services: [] }));
+  const mine = services.filter((x) => x.type === type && x.port && (x.addresses.includes(device.ref.ip) || (device.ref.guid && x.name === device.ref.guid)));
+  return mine.find((x) => x.addresses.includes(device.ref.ip))?.port || mine[0]?.port || null;
+}
+
+const pairSteps = (name) => `On ${name}, open Settings → About and tap “Build number” seven times (that turns on Developer options), then Settings → System → Developer options → Wireless debugging: switch it on, choose “Pair device with pairing code”, and give Patch the six-digit code it shows.`;
+
 function setupMessage(device) {
+  if (device.ref?.tls) return pairSteps(device.name);
   const fire = /fire tv/i.test(`${device.brand} ${device.model}`) || device.brand === "Amazon";
   return fire
     ? `To let Patch open apps, YouTube and websites on ${device.name}: on the Fire TV go to Settings → My Fire TV → Developer options and turn on ADB debugging (no Developer options? Settings → My Fire TV → About, then select the device name 7 times). Then press Connect.`
@@ -101,8 +132,10 @@ async function connect(device, ctx, { pairing = false } = {}) {
   const key = await adbKey(ctx);
   let client;
   try {
-    client = await AdbClient.connect(device.ref.ip, { port: device.ref.adbPort || 5555, privateKey: key, allowPrompt: pairing, promptTimeout: 45_000 });
+    if (device.ref.tls) client = await connectWireless(device, ctx);
+    else client = await AdbClient.connect(device.ref.ip, { port: device.ref.adbPort || 5555, privateKey: key, allowPrompt: pairing, promptTimeout: 45_000 });
   } catch (err) {
+    if (err instanceof DeviceError) throw err;
     if (err.code === "ECONNREFUSED") throw new DeviceError(setupMessage(device), { code: "ESETUP" });
     if (err.code === "ESETUP") {
       if (!pairing) await ctx.forgetSecret(["pairings", device.id]);
@@ -115,6 +148,53 @@ async function connect(device, ctx, { pairing = false } = {}) {
   client.on("close", () => clients.get(id)?.client === client && clients.delete(id));
   closeLater(id);
   return client;
+}
+
+/** Over Wireless debugging: TLS with Patch's key; when the port has moved, it's looked up again. */
+async function connectWireless(device, ctx) {
+  const tlsKeys = await adbTls(ctx);
+  const attempt = (port) => AdbClient.connect(device.ref.ip, { port, privateKey: tlsKeys.key, tls: tlsKeys });
+  const off = () => new DeviceError(`Wireless debugging is off on ${device.name}, or it's asleep. On ${device.name}, open Settings → System → Developer options and switch Wireless debugging on (Patch stays paired).`, { code: "ESETUP" });
+  if (!device.ref.adbPort) device.ref.adbPort = await announcedPort(device, WIRELESS, ctx);
+  if (!device.ref.adbPort) throw off();
+  try {
+    return await attempt(device.ref.adbPort);
+  } catch (err) {
+    if (err.code === "EPAIR") {
+      await ctx.forgetSecret(["pairings", device.id]);
+      throw new DeviceError(`${device.name} doesn't know Patch any more (it was unpaired, or reset). ${pairSteps(device.name)}`, { code: "ESETUP" });
+    }
+    if (!["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH"].includes(err.code)) throw err;
+    const port = await announcedPort(device, WIRELESS, ctx);
+    if (!port || port === device.ref.adbPort) throw off();
+    device.ref.adbPort = port;
+    await ctx.saveSecret(["pairings", device.id, "port"], port);
+    return attempt(port);
+  }
+}
+
+/** Pair with a device showing “Pair device with pairing code”, then connect: the code is the six digits it shows. */
+async function pairWireless(device, value, ctx) {
+  const text = String(value ?? "");
+  const code = text.match(/(?<!\d)(\d{6})(?!\d)/)?.[1];
+  if (!code) throw new DeviceError(`${pairSteps(device.name)} Then tell me the code.`, { code: "ESETUP" });
+  // The port under the code ("192.168.1.42:37123") if the person read it out; otherwise its announcement.
+  const said = text.replace(code, "").match(/(?:port\s*|:\s*)(\d{4,5})\b/i) || text.replace(code, "").match(/\b(\d{5})\b/);
+  const port = said ? Number(said[1]) : await announcedPort(device, PAIRING, ctx);
+  if (!port) throw new DeviceError(`I can't find the pairing window on ${device.name}. Keep “Pair device with pairing code” open on it and try again, or tell me the port shown under the code (the number after the colon).`, { code: "ESETUP" });
+  const tlsKeys = await adbTls(ctx);
+  let paired;
+  try {
+    paired = await pairAdb(device.ref.ip, port, code, { privateKey: tlsKeys.key, cert: tlsKeys.cert });
+  } catch (err) {
+    if (err.code === "EPAIRCODE") throw new DeviceError(`That code didn't match. ${device.name} shows a new code each time: read me the one on its screen now.`, { code: "ESETUP" });
+    if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT"].includes(err.code)) throw new DeviceError(`${device.name}'s pairing window has closed (it closes after a short while). Choose “Pair device with pairing code” again and tell me the new code.`, { code: "ESETUP" });
+    throw err;
+  }
+  device.ref.guid = paired.guid || device.ref.guid;
+  const connectPort = (await announcedPort(device, WIRELESS, ctx)) || device.ref.adbPort;
+  if (connectPort) device.ref.adbPort = connectPort;
+  await ctx.saveSecret(["pairings", device.id], { adb: true, paired: true, tls: true, guid: device.ref.guid || null, ip: device.ref.ip, port: device.ref.adbPort || null });
 }
 
 const sh = (client, cmd, timeout) => client.shell(cmd, { timeout });
@@ -172,6 +252,8 @@ async function youtubePkg(client, device) {
  * Google TV, then the plainer ways of asking for a search. True once the app has taken one.
  */
 async function youtubeAsk(client, yt, q, { play = false } = {}) {
+  // The phone and tablet YouTube app: a search opens its results; "play this" by name it can't take.
+  if (yt === "com.google.android.youtube") return play ? false : view(client, youtubeSearchUrl(q), yt);
   const alexa = `youtube://search?query=${encodeURIComponent(q).replace(/%20/g, "+")}&isVoice=true${play ? "&method=play" : ""}`;
   const assistant = youtubeVoiceUrl(q, { play });
   for (const url of /amazon|firetv/.test(yt) ? [alexa, assistant] : [assistant, alexa]) if (await view(client, url, yt)) return true;
@@ -641,6 +723,51 @@ export function actionsFor({ kind, paired, cast: hasCast }) {
   return [...list, "rename", "set_room"];
 }
 
+/**
+ * An Android device found by its Wireless debugging (a wall calendar, a tablet, a phone): itself, as
+ * what its name and announcements say it is, controlled like the TVs once it has paired.
+ */
+async function wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore }) {
+  const facts = host.facts || {};
+  const guid = (wireless || pairingWindow)?.name || pairedBefore?.[1].guid || null;
+  const id = pairedBefore?.[0] || `android:${String(guid || host.mac || host.ip).replace(/:/g, "").toLowerCase()}`;
+  // Its name on the network: not Android's own "Android_…" announcement name, which says nothing.
+  const hostname = [...(host.hostnames || [])].filter((h) => !/^android([-_ .]|$)/i.test(h)).map((h) => prettyHostname(h)).find(Boolean);
+  const kind = ["display", "tablet", "phone", "tv", "streamer"].includes(facts.kind) ? facts.kind : "tablet";
+  const model = facts.model && facts.model !== "Android phone or tablet" ? facts.model : "Android device";
+  const device = {
+    id,
+    driver: "androidtv",
+    kind,
+    brand: facts.brand || host.vendor || null,
+    model,
+    name: facts.name || hostname || `${facts.brand ? `${facts.brand} ` : ""}${model}`,
+    ip: host.ip,
+    ref: { ip: host.ip, tls: true, adbPort: wireless?.port || pairedBefore?.[1].port || null, guid, cast: null },
+    state: {},
+    info: { os: "Android" },
+    actions: [],
+  };
+  const paired = !!ctx?.secrets.pairings?.[id]?.adb;
+  device.setup = paired ? null : { kind: "code", message: setupMessage(device) };
+  device.actions = actionsFor({ kind, paired, cast: false });
+  if (paired && wireless) {
+    try {
+      const client = await connect(device, ctx);
+      const f = await deviceFacts(client);
+      if (f.model) device.info.modelNumber = f.model;
+      if (f.maker && !device.brand) device.brand = f.maker;
+      if (f.model && device.model === "Android device") device.model = f.maker && !f.model.toLowerCase().includes(f.maker.toLowerCase()) ? `${f.maker} ${f.model}` : f.model;
+      device.info.os = `Android${f.android ? ` ${f.android}` : ""}`;
+      if (f.name && !hostname) device.name = f.name;
+      device.state = await liveState(client, device);
+    } catch {
+      /* asleep, or Wireless debugging went off: keep what the network said */
+    }
+  }
+  return device;
+}
+
 export default {
   id: "androidtv",
   label: "Android TV / Fire TV",
@@ -654,7 +781,13 @@ export default {
     const gcast = host.mdns.find((s) => s.type === "_googlecast._tcp" && s.txt?.id && !(Number(s.txt.ca) & 32));
     const dial = host.ssdp.map((r) => r.desc).find((d) => d && /amazon/i.test(d.manufacturer || "") && /^AFT/i.test(d.modelName || ""));
     const adbOpen = host.ports.has(5555);
-    if (!amzn && !atv && !dial && !(adbOpen && /amazon|google|nvidia|xiaomi|sony|tcl|hisense|philips|tp vision|onn|walmart/i.test(host.vendor || ""))) return null;
+    // Wireless debugging (Android 11 and later): on, or its pairing window open, or paired with Patch before.
+    const wireless = svc(WIRELESS);
+    const pairingWindow = svc(PAIRING);
+    const pairedBefore = Object.entries(ctx?.secrets.pairings || {}).find(([pid, p]) => p?.tls && p.ip === host.ip && pid.startsWith("android"));
+    const overWifi = !adbOpen && !!(wireless || pairingWindow || pairedBefore);
+    if (!amzn && !atv && !dial && !overWifi && !(adbOpen && /amazon|google|nvidia|xiaomi|sony|tcl|hisense|philips|tp vision|onn|walmart/i.test(host.vendor || ""))) return null;
+    if (overWifi && !amzn && !atv && !dial) return [await wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore })];
 
     const fire = fireTvModel(dial?.modelName || amzn?.txt?.ad || amzn?.txt?.md);
     const isFire = !!(amzn || dial || fire || /amazon/i.test(host.vendor || ""));
@@ -671,14 +804,14 @@ export default {
       model: fire?.name || (md || (isFire ? "Fire TV" : "Android TV")),
       name,
       ip: host.ip,
-      ref: { ip: host.ip, adbPort: 5555, cast: gcast ? { ip: host.ip, port: gcast.port || 8009 } : null },
+      ref: { ip: host.ip, adbPort: 5555, cast: gcast ? { ip: host.ip, port: gcast.port || 8009 } : null, ...(overWifi ? { tls: true, adbPort: wireless?.port || pairedBefore?.[1].port || null, guid: (wireless || pairingWindow)?.name || pairedBefore?.[1].guid || null } : {}) },
       state: {},
       info: { os: isFire ? "Fire OS" : "Android TV / Google TV", modelNumber: fire?.code || null },
       actions: [],
     };
-    device.setup = paired ? null : { kind: adbOpen ? "tv-prompt" : "adb", message: adbOpen ? `Press Connect, then on ${name} tick "Always allow from this computer" and choose Allow.` : setupMessage(device) };
+    device.setup = paired ? null : overWifi ? { kind: "code", message: setupMessage(device) } : { kind: adbOpen ? "tv-prompt" : "adb", message: adbOpen ? `Press Connect, then on ${name} tick "Always allow from this computer" and choose Allow.` : setupMessage(device) };
     device.actions = actionsFor({ kind, paired, cast: !!gcast });
-    if (paired && adbOpen) {
+    if (paired && (adbOpen || overWifi)) {
       // Exact model and current app straight from the device.
       try {
         const client = await connect(device, ctx);
@@ -742,6 +875,7 @@ export default {
         return await cast.act({ ...device, ref: device.ref.cast }, action, value);
       }
       if (action === "pair") {
+        if (device.ref.tls) await pairWireless(device, value, ctx);
         const client = await connect(device, ctx, { pairing: true });
         const facts = await deviceFacts(client).catch(() => ({}));
         const ft = fireTvModel(facts.model);

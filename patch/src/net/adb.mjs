@@ -1,18 +1,25 @@
-// Android Debug Bridge over the network (TCP 5555), the way Fire TV and Android/Google TV devices
-// accept remote commands once "ADB debugging" / "Network debugging" is switched on in their
-// developer options. The first connection makes the TV ask "Allow USB debugging?"; it remembers
-// Patch's key after "Always allow".
+// Android Debug Bridge over the network, two ways:
+//  - TCP 5555, the way Fire TV and Android/Google TV devices accept commands once "ADB debugging" /
+//    "Network debugging" is on in their developer options. The first connection makes the TV ask
+//    "Allow USB debugging?"; it remembers Patch's key after "Always allow".
+//  - Wireless debugging (Android 11 and later: phones, tablets, wall calendars, newer TVs). Patch
+//    pairs once with the six-digit code the device shows (pairAdb), and the device then trusts
+//    Patch's key. Each connection starts plain, the device asks to switch to TLS ("STLS"), and Patch
+//    shows its key in a certificate.
 //
 // Wire format: 24-byte little-endian header { command, arg0, arg1, length, checksum, magic } + data.
 import net from "node:net";
+import tls from "node:tls";
 import crypto from "node:crypto";
 import os from "node:os";
 import { EventEmitter } from "node:events";
 import { Duplex } from "node:stream";
+import { Spake2 } from "./spake2.mjs";
 
 export const CMD = { CNXN: 0x4e584e43, AUTH: 0x48545541, OPEN: 0x4e45504f, OKAY: 0x59414b4f, CLSE: 0x45534c43, WRTE: 0x45545257, STLS: 0x534c5453 };
 export const AUTH = { TOKEN: 1, SIGNATURE: 2, RSAPUBLICKEY: 3 };
 export const VERSION = 0x01000001;
+export const STLS_VERSION = 0x01000000;
 export const MAX_DATA = 256 * 1024;
 // DER prefix of a SHA-1 DigestInfo: ADB signs its 20-byte token as if it were a SHA-1 digest.
 export const SHA1_PREFIX = Buffer.from("3021300906052b0e03021a05000414", "hex");
@@ -54,6 +61,13 @@ export class MessageParser {
       this.buf = this.buf.subarray(24 + len);
       this.onMessage(msg);
     }
+  }
+
+  /** The bytes after the last whole message (and stop holding them): what follows STLS belongs to TLS. */
+  take() {
+    const rest = this.buf;
+    this.buf = Buffer.alloc(0);
+    return rest;
   }
 }
 
@@ -149,14 +163,7 @@ export class AdbClient extends EventEmitter {
     this.parser = new MessageParser((m) => this.emit("message", m));
     // A shell command, a file transfer and a few open streams each listen for their own messages.
     this.setMaxListeners(40);
-    socket.on("data", (d) => {
-      try {
-        this.parser.push(d);
-      } catch (e) {
-        this.emit("error", e);
-        socket.destroy();
-      }
-    });
+    this.#read(socket);
     socket.on("close", () => {
       this.open = false;
       this.emit("close");
@@ -164,20 +171,46 @@ export class AdbClient extends EventEmitter {
     socket.on("error", () => {});
   }
 
+  #read(sock) {
+    sock.on("data", (d) => {
+      try {
+        this.parser.push(d);
+      } catch (e) {
+        this.emit("error", e);
+        sock.destroy();
+      }
+    });
+  }
+
   send(command, arg0, arg1, data) {
     if (this.socket.writable) this.socket.write(encodeMessage(command, arg0, arg1, data));
+  }
+
+  /** Wireless debugging: carry on over TLS on the same connection, showing Patch's key in `cert`. */
+  startTls({ key, cert }) {
+    const raw = this.socket;
+    raw.removeAllListeners("data");
+    const secure = tls.connect({ socket: raw, key, cert, rejectUnauthorized: false, checkServerIdentity: () => undefined, minVersion: "TLSv1.3", maxVersion: "TLSv1.3" });
+    secure.on("error", () => {});
+    this.socket = secure;
+    this.#read(secure);
+    return new Promise((resolve, reject) => {
+      secure.once("secureConnect", resolve);
+      secure.once("error", reject);
+    });
   }
 
   /**
    * Connect and authenticate. With allowPrompt, an unknown key is offered to the device, which shows
    * the "Allow USB debugging?" question; otherwise an unknown key fails with code ESETUP.
    */
-  static connect(host, { port = 5555, privateKey, allowPrompt = false, timeout = 5000, promptTimeout = 45_000, onPrompt } = {}) {
+  static connect(host, { port = 5555, privateKey, tls: tlsKeys = null, allowPrompt = false, timeout = 5000, promptTimeout = 45_000, onPrompt } = {}) {
     return new Promise((resolve, reject) => {
       const socket = net.connect({ host, port });
       const client = new AdbClient(socket);
       let signed = false;
       let offered = false;
+      let upgraded = false;
       let finished = false;
       let timer = setTimeout(() => fail(err("The device didn't answer.", "ETIMEDOUT")), timeout);
       const fail = (e) => {
@@ -187,8 +220,10 @@ export class AdbClient extends EventEmitter {
         socket.destroy();
         reject(e);
       };
-      socket.once("error", (e) => fail(e));
-      socket.once("close", () => fail(err(offered ? "The device closed the connection before Patch was allowed." : "The device closed the connection.", offered ? "ESETUP" : "ECONNRESET")));
+      // Over Wireless debugging, a device that doesn't know Patch's key ends the TLS handshake.
+      const untrusted = () => err("The device doesn't know Patch yet: it needs pairing (Wireless debugging → Pair device with pairing code).", "EPAIR");
+      socket.once("error", (e) => fail(upgraded ? untrusted() : e));
+      socket.once("close", () => fail(upgraded ? untrusted() : err(offered ? "The device closed the connection before Patch was allowed." : "The device closed the connection.", offered ? "ESETUP" : "ECONNRESET")));
       socket.once("connect", () => client.send(CMD.CNXN, VERSION, MAX_DATA, "host::\0"));
       client.on("message", function onMsg(m) {
         if (m.command === CMD.CNXN) {
@@ -205,7 +240,12 @@ export class AdbClient extends EventEmitter {
           client.banner = parseBanner(m.data.toString("utf8"));
           resolve(client);
         } else if (m.command === CMD.STLS) {
-          fail(err("This device only offers encrypted wireless debugging, which Patch doesn't support. Use its Network/ADB debugging option instead.", "EUNSUPPORTED"));
+          // Wireless debugging: answer in kind, then TLS on the same connection; the device's CNXN follows.
+          if (!tlsKeys) return fail(untrusted());
+          if (upgraded) return;
+          upgraded = true;
+          client.send(CMD.STLS, STLS_VERSION, 0);
+          client.startTls(tlsKeys).catch(() => fail(untrusted()));
         } else if (m.command === CMD.AUTH && m.arg0 === AUTH.TOKEN) {
           if (!signed && privateKey) {
             signed = true;
@@ -471,3 +511,143 @@ export function syncStream(data, remotePath, mode = 0o644, mtime = Math.floor(Da
 
 /** Quote a value for the device's shell. */
 export const shellQuote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+// ── Wireless debugging: pairing with the device's six-digit code ──────────────
+// Android's own steps (adb/pairing_connection, adb/pairing_auth): TLS 1.3 with both sides showing a
+// certificate; 64 bytes exported from that TLS session ("adb-label\0") go after the code to make the
+// SPAKE2 password; SPAKE2 messages are swapped; the key that comes out (HKDF-SHA256) encrypts, with
+// AES-128-GCM, one 8 KB "peer info" each way: Patch sends its public key, the device its name.
+
+const PAIR_VERSION = 1;
+const PAIR_SPAKE2 = 0;
+const PAIR_PEER_INFO = 1;
+const PEER_INFO_SIZE = 8192;
+const PEER_RSA_KEY = 0;
+const PEER_GUID = 1;
+export const PAIR_CLIENT_NAME = Buffer.from("adb pair client\0");
+export const PAIR_SERVER_NAME = Buffer.from("adb pair server\0");
+export const PAIR_EXPORT_LABEL = "adb-label\0";
+
+export const pairHeader = (type, size) => {
+  const h = Buffer.alloc(6);
+  h[0] = PAIR_VERSION;
+  h[1] = type;
+  h.writeUInt32BE(size, 2);
+  return h;
+};
+
+/** The AES-128-GCM key both sides make from the SPAKE2 key. */
+export const pairCipherKey = (spakeKey) => Buffer.from(crypto.hkdfSync("sha256", spakeKey, Buffer.alloc(0), Buffer.from("adb pairing_auth aes-128-gcm key"), 16));
+// The nonce is a message counter, eight bytes little-endian, then four zeros.
+const pairNonce = (n) => {
+  const b = Buffer.alloc(12);
+  b.writeBigUInt64LE(BigInt(n));
+  return b;
+};
+export function pairSeal(key, n, data) {
+  const c = crypto.createCipheriv("aes-128-gcm", key, pairNonce(n));
+  return Buffer.concat([c.update(data), c.final(), c.getAuthTag()]);
+}
+export function pairOpen(key, n, data) {
+  const d = crypto.createDecipheriv("aes-128-gcm", key, pairNonce(n));
+  d.setAuthTag(data.subarray(data.length - 16));
+  return Buffer.concat([d.update(data.subarray(0, data.length - 16)), d.final()]);
+}
+/** A peer-info block: its type, then text (NUL-padded to 8 KB). */
+export function peerInfo(type, text) {
+  const b = Buffer.alloc(PEER_INFO_SIZE);
+  b[0] = type;
+  Buffer.from(String(text).replace(/\0+$/, ""), "utf8").copy(b, 1, 0, PEER_INFO_SIZE - 2);
+  return b;
+}
+export const peerInfoText = (b) => {
+  const end = b.indexOf(0, 1);
+  return b.toString("utf8", 1, end < 0 ? b.length : end);
+};
+export { PEER_RSA_KEY, PEER_GUID, PAIR_SPAKE2, PAIR_PEER_INFO };
+
+/** Reads exact byte counts off a stream: read(n) → Promise<Buffer>; fails when the stream ends first. */
+export function exactReader(sock) {
+  let buf = Buffer.alloc(0);
+  let want = null;
+  let ended = null;
+  const check = () => {
+    if (!want) return;
+    if (buf.length >= want.n) {
+      const w = want;
+      want = null;
+      const out = buf.subarray(0, w.n);
+      buf = buf.subarray(w.n);
+      w.resolve(out);
+    } else if (ended) {
+      const w = want;
+      want = null;
+      w.reject(ended);
+    }
+  };
+  sock.on("data", (d) => {
+    buf = Buffer.concat([buf, d]);
+    check();
+  });
+  const end = (e) => {
+    ended ||= e || err("The connection closed.", "ECONNRESET");
+    check();
+  };
+  sock.on("end", () => end());
+  sock.on("close", () => end());
+  sock.on("error", (e) => end(e));
+  return (n) =>
+    new Promise((resolve, reject) => {
+      want = { n, resolve, reject };
+      check();
+    });
+}
+
+/**
+ * Pair with a device showing "Pair device with pairing code". Resolves { guid } (the device's
+ * wireless-debugging name); afterwards the device lets Patch's key connect over TLS.
+ * Codes that don't match fail with code EPAIRCODE.
+ */
+export function pairAdb(host, port, code, { privateKey, cert, timeout = 15_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const sock = tls.connect({ host, port, key: privateKey, cert, rejectUnauthorized: false, checkServerIdentity: () => undefined, minVersion: "TLSv1.3", maxVersion: "TLSv1.3" });
+    const finish = (e, v) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      sock.destroy();
+      e ? reject(e) : resolve(v);
+    };
+    const timer = setTimeout(() => finish(err("The device's pairing screen didn't answer.", "ETIMEDOUT")), timeout);
+    sock.on("error", (e) => finish(e.code === "ECONNREFUSED" ? err("Nothing is waiting for a pairing code there: open “Pair device with pairing code” on the device first.", "ECONNREFUSED") : e));
+    sock.once("secureConnect", async () => {
+      try {
+        const read = exactReader(sock);
+        const readPacket = async (type) => {
+          const h = await read(6);
+          const size = h.readUInt32BE(2);
+          if (h[0] !== PAIR_VERSION || h[1] !== type || !size || size > PEER_INFO_SIZE * 2) throw err("The device answered in a way Patch doesn't understand.", "EPROTO");
+          return read(size);
+        };
+        const password = Buffer.concat([Buffer.from(String(code).trim(), "utf8"), sock.exportKeyingMaterial(64, PAIR_EXPORT_LABEL)]);
+        const spake = new Spake2("alice", PAIR_CLIENT_NAME, PAIR_SERVER_NAME);
+        const mine = spake.generateMessage(password);
+        sock.write(Buffer.concat([pairHeader(PAIR_SPAKE2, mine.length), mine]));
+        const key = pairCipherKey(spake.processMessage(await readPacket(PAIR_SPAKE2)));
+        const sealed = pairSeal(key, 0, peerInfo(PEER_RSA_KEY, androidPublicKey(privateKey)));
+        sock.write(Buffer.concat([pairHeader(PAIR_PEER_INFO, sealed.length), sealed]));
+        let theirs;
+        try {
+          theirs = pairOpen(key, 0, await readPacket(PAIR_PEER_INFO));
+        } catch {
+          // A wrong code gives each side a different key: the device can't read Patch's key, and hangs up.
+          throw err("That code didn't match.", "EPAIRCODE");
+        }
+        finish(null, { guid: theirs[0] === PEER_GUID ? peerInfoText(theirs) : null });
+      } catch (e) {
+        finish(e);
+      }
+    });
+  });
+}

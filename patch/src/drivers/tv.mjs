@@ -55,7 +55,7 @@ function channelNumber(major, minor) {
 
 /** Well-known apps and their ids on each platform (the TV's own app list is always checked first). */
 export const APPS = [
-  { key: "youtube", names: ["youtube"], roku: "837", samsung: ["111299001912"], lg: ["youtube.leanback.v4"], android: ["com.google.android.youtube.tv", "com.amazon.firetv.youtube", "com.google.android.youtube.googletv"] },
+  { key: "youtube", names: ["youtube"], roku: "837", samsung: ["111299001912"], lg: ["youtube.leanback.v4"], android: ["com.google.android.youtube.tv", "com.amazon.firetv.youtube", "com.google.android.youtube.googletv", "com.google.android.youtube"] },
   { key: "netflix", names: ["netflix"], roku: "12", samsung: ["3201907018807", "11101200001"], lg: ["netflix"], android: ["com.netflix.ninja"] },
   { key: "prime", names: ["prime video", "amazon prime", "prime", "amazon video", "amazon prime video"], roku: "13", samsung: ["3201910019365", "3201512006785"], lg: ["amazon"], android: ["com.amazon.amazonvideo.livingroom", "com.amazon.avod"] },
   { key: "disney", names: ["disney plus", "disney+", "disney"], roku: "291097", samsung: ["3201901017640"], lg: ["com.disney.disneyplus-prod"], android: ["com.disney.disneyplus"] },

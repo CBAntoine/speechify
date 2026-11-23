@@ -25,7 +25,6 @@ const HOSTNAME_HINTS = [
   [/oneplus/i, { kind: "phone", brand: "OnePlus", model: null }],
   [/(redmi|xiaomi|poco)/i, { kind: "phone", brand: "Xiaomi", model: null }],
   [/(moto[-_ ]?[a-z]|motorola)/i, { kind: "phone", brand: "Motorola", model: null }],
-  [/^android[-_]/i, { kind: "phone", brand: null, model: "Android phone or tablet" }],
   [/^(desktop|laptop)-[a-z0-9]{6,}$/i, (m) => ({ kind: "computer", brand: null, model: /^laptop/i.test(m[0]) ? "Windows laptop" : "Windows PC", os: "Windows" })],
   [/^(xbox|xboxone|xbox-series)/i, { kind: "console", brand: "Microsoft", model: "Xbox" }],
   [/^ps[45]-/i, (m) => ({ kind: "console", brand: "Sony", model: `PlayStation ${m[0][2]}` })],
@@ -48,6 +47,8 @@ const HOSTNAME_HINTS = [
   [/(brw|brn)[0-9a-f]{12}/i, { kind: "printer", brand: "Brother", model: null }],
   [/^(hp|npi)[0-9a-f]{6}/i, { kind: "printer", brand: "HP", model: null }],
   [/^(epson)/i, { kind: "printer", brand: "Epson", model: null }],
+  // Last: Android's own default names say only that it's Android, so any better name wins.
+  [/^android[-_]/i, { kind: "phone", brand: null, model: "Android phone or tablet" }],
 ];
 
 /** "galaxy-s23-ultra" → "Galaxy S23 Ultra" */
@@ -60,9 +61,10 @@ const tidy = (s) =>
     .replace(/\b(\d+)([a-z])\b/gi, (x, n, l) => `${n}${l.toLowerCase()}`);
 
 function fromHostname(names) {
-  for (const raw of names) {
-    const n = String(raw).replace(/\.(local|lan|home|localdomain)$/i, "");
-    for (const [re, v] of HOSTNAME_HINTS) {
+  const clean = names.map((raw) => String(raw).replace(/\.(local|lan|home|localdomain)$/i, ""));
+  // The most telling hint wins, whichever of the device's names it's in.
+  for (const [re, v] of HOSTNAME_HINTS) {
+    for (const n of clean) {
       const m = n.match(re);
       if (m) return { ...(typeof v === "function" ? v(m) : v), via: `its network name (“${n}”)` };
     }

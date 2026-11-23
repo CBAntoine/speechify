@@ -39,6 +39,7 @@ export class Controller {
         return apiKey ? { apiKey, base: o.youtubeBase } : null;
       },
       openUrl: o.openUrl,
+      mdnsTarget: o.mdnsTarget, // tests: ask the simulator's announcements instead of the network's
       webTries: o.webTries, // how long to wait for a TV's browser to start (tests shorten it)
       // Set by the app: files the person sent from the dashboard, and the TV apps made with Patch.
       uploads: this.uploads || null,

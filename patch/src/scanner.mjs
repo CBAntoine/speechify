@@ -274,7 +274,8 @@ export class Scanner extends EventEmitter {
         h.rtt = r.rtt;
       }),
       this.#reverseDns(alive, net),
-      mdns.reverseLookup(alive.filter((ip) => !hosts.get(ip).hostnames.size), { iface: net.address || undefined, ...mTarget }),
+      // Hosts with no name yet, or only Android's own "Android_…" one (which says nothing about the device).
+      mdns.reverseLookup(alive.filter((ip) => ![...hosts.get(ip).hostnames].some((n) => !/^android([-_ .]|$)/i.test(n))), { iface: net.address || undefined, ...mTarget }),
       kasaDiscover({ broadcasts: [], unicast: need("kasa") }),
       lifxDiscover({ broadcasts: [], unicast: need("lifx") }),
       yeelightDiscover({ target: null, unicast: need("yeelight") }),

@@ -18,6 +18,8 @@ export const SERVICE_TYPES = [
   "_esphomelib._tcp", "_http._tcp", "_amzn-wplay._tcp", "_androidtvremote2._tcp", "_plexmediasvr._tcp",
   "_matter._tcp", "_meshcop._udp", "_mqtt._tcp", "_workstation._tcp", "_nvstream_dbd._tcp", "_daap._tcp",
   "_rdlink._tcp", "_viziocast._tcp", "_leap._tcp", "_lutron._tcp", "_miio._udp", "_ecobee._tcp", "_dyson_mqtt._tcp",
+  // Android's Wireless debugging: its port while it's on, and the pairing window while that's open.
+  "_adb-tls-connect._tcp", "_adb-tls-pairing._tcp",
 ];
 
 const ENUMERATE = "_services._dns-sd._udp.local";

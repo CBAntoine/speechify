@@ -240,7 +240,7 @@ export function createVoice(ui) {
     const lines = devs.slice(0, 110).map((d) => {
       const acts = (d.actions || []).filter((a) => !SKIP_ACTIONS.has(a));
       const st = d.online === false ? "offline" : ui.stateLine(d);
-      return `- ${d.name} | ${d.what || d.kindLabel}${d.confidence === "guess" ? " (best guess)" : ""}${d.room ? ` | room: ${d.room}` : ""}${st ? ` | ${st}` : ""}${acts.length ? ` | can: ${acts.join(", ")}` : ""}${d.setup ? ` | NEEDS SETUP: ${d.setup.message}` : ""}`;
+      return `- ${d.name} | ${d.what || d.kindLabel}${d.confidence === "guess" ? " (best guess)" : ""}${d.room ? ` | room: ${d.room}` : ""}${st ? ` | ${st}` : ""}${acts.length ? ` | can: ${acts.join(", ")}` : ""}${d.setup ? ` | NEEDS SETUP: ${d.setup.message}${d.setup.kind === "code" ? " (When the person reads you the code, call control_device with action pair and the code as value, straight away: the code changes after a while.)" : ""}` : ""}`;
     });
     return lines.join("\n");
   }

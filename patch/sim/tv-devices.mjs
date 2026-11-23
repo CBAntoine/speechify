@@ -5,10 +5,14 @@
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
+import tls from "node:tls";
+import { Duplex } from "node:stream";
 import dgram from "node:dgram";
 import crypto from "node:crypto";
 import { acceptUpgrade } from "../src/net/websocket.mjs";
-import { AUTH, CMD, MessageParser, SHA1_PREFIX, encodeMessage, parseAndroidPublicKey } from "../src/net/adb.mjs";
+import { AUTH, CMD, MessageParser, SHA1_PREFIX, STLS_VERSION, encodeMessage, parseAndroidPublicKey, exactReader, pairHeader, pairCipherKey, pairSeal, pairOpen, peerInfo, peerInfoText, PAIR_CLIENT_NAME, PAIR_SERVER_NAME, PAIR_EXPORT_LABEL, PAIR_SPAKE2, PAIR_PEER_INFO, PEER_GUID } from "../src/net/adb.mjs";
+import { Spake2 } from "../src/net/spake2.mjs";
+import { certificateFor, certificatePem } from "../src/apk/sign.mjs";
 import { apkInfo, templateLevel } from "../src/apk/index.mjs";
 import { encodePng } from "../src/apk/png.mjs";
 import { verifyV2 } from "../src/apk/sign.mjs";
@@ -353,7 +357,7 @@ function storeGet(s) {
 
 function fireShell(s, cmd) {
   s.commands.push(cmd);
-  if (/getprop ro\.product\.manufacturer/.test(cmd)) return "Amazon|AFTKA|9|Kids Room Fire TV\n";
+  if (/getprop ro\.product\.manufacturer/.test(cmd)) return s.identity ? `${s.identity.maker}|${s.identity.model}|${s.identity.android}|${s.identity.name}\n` : "Amazon|AFTKA|9|Kids Room Fire TV\n";
   if (cmd === "wm size") return "Physical size: 1920x1080\n";
   if (/^dumpsys power/.test(cmd)) return `  mWakefulness=${s.awake ? "Awake" : "Asleep"}\n`;
   if (/^dumpsys window/.test(cmd)) return `  mCurrentFocus=Window{4a3b2c1 u0 ${s.focus}}\n  mFocusedApp=AppWindowToken{5d4e3f2 token=Token{6e5f4a3 ActivityRecord{7f6a5b4 u0 ${s.focus} t12}}}\n`;
@@ -509,7 +513,7 @@ function fireShell(s, cmd) {
   return `/system/bin/sh: ${cmd.split(" ")[0]}: not found\n`;
 }
 
-export async function fireTv(ip, s) {
+export async function fireTv(ip, s, { port = 5555, wireless = null } = {}) {
   // Connections end with the simulator (Patch's ADB client would otherwise keep one open for a minute).
   const open = new Set();
   const server = net.createServer((sock) => {
@@ -521,13 +525,49 @@ export async function fireTv(ip, s) {
     });
     let token = null;
     let authed = false;
-    const send = (c, a0, a1, d) => sock.writable && sock.write(encodeMessage(c, a0, a1, d));
-    const banner = "device::ro.product.name=kara;ro.product.model=AFTKA;ro.product.device=kara;features=shell_v2,cmd\0";
+    // Where messages go: the connection itself, or TLS over it once Wireless debugging has switched.
+    let io = sock;
+    const send = (c, a0, a1, d) => io.writable && io.write(encodeMessage(c, a0, a1, d));
+    const banner = s.banner || "device::ro.product.name=kara;ro.product.model=AFTKA;ro.product.device=kara;features=shell_v2,cmd\0";
     const challenge = () => {
       token = crypto.randomBytes(20);
       send(CMD.AUTH, AUTH.TOKEN, 0, token);
     };
     const parser = new MessageParser((m) => {
+      if (wireless && !authed) {
+        // Wireless debugging: ask to switch to TLS, then only a key that paired gets in.
+        if (m.command === CMD.CNXN) return send(CMD.STLS, STLS_VERSION, 0);
+        if (m.command === CMD.STLS && io === sock) {
+          // Android reads exactly one message, then hands the connection to TLS: bytes that came
+          // in behind STLS (the start of the handshake) belong to TLS, not to ADB.
+          const rest = parser.take();
+          const pipe = new Duplex({ read() {}, write: (chunk, enc, cb) => sock.write(chunk, cb), final: (cb) => (sock.end(), cb()) });
+          sock.removeAllListeners("data");
+          sock.on("data", (d) => pipe.push(d));
+          sock.on("end", () => pipe.push(null));
+          if (rest.length) pipe.push(rest);
+          const t = new tls.TLSSocket(pipe, { isServer: true, key: wireless.key, cert: wireless.cert, requestCert: true, rejectUnauthorized: false, minVersion: "TLSv1.3" });
+          io = t;
+          t.on("error", () => sock.destroy());
+          t.on("data", (d) => {
+            try {
+              parser.push(d);
+            } catch {
+              sock.destroy();
+            }
+          });
+          t.on("secure", () => {
+            const spki = t.getPeerX509Certificate?.()?.publicKey.export({ type: "spki", format: "der" }).toString("base64");
+            if (!spki || !s.paired.includes(spki)) {
+              s.refusedTls = (s.refusedTls || 0) + 1;
+              return sock.destroy();
+            }
+            authed = true;
+            send(CMD.CNXN, 0x01000001, 256 * 1024, banner);
+          });
+        }
+        return;
+      }
       if (m.command === CMD.CNXN) return challenge();
       if (m.command === CMD.AUTH && m.arg0 === AUTH.SIGNATURE) {
         const ok = s.authorized.some((k) => {
@@ -676,13 +716,78 @@ export async function fireTv(ip, s) {
     });
     sock.on("error", () => {});
   });
-  await listen(server, 5555, ip);
+  await listen(server, port, ip);
   const close = server.close.bind(server);
   server.close = (cb) => {
     for (const sock of open) sock.destroy();
     return close(cb);
   };
   return [server];
+}
+
+// ── An Android tablet with Wireless debugging (a wall calendar) ──────────────
+
+/** A Cozyla-style wall calendar: Android 13, controlled the way any Android device is once it's paired. */
+export function wirelessAndroidState() {
+  const s = fireTvState();
+  return Object.assign(s, {
+    focus: "com.cozyla.smart.calendar/.MainActivity",
+    packages: ["com.cozyla.smart.calendar", "com.google.android.youtube", "com.android.chrome", "com.android.settings", "com.google.android.documentsui"],
+    system: ["com.cozyla.smart.calendar", "com.android.settings", "com.google.android.documentsui"],
+    identity: { maker: "Cozyla", model: "Calendar 2", android: "13", name: "Cozyla Calendar 2" },
+    banner: "device::ro.product.name=cozyla_cal2;ro.product.model=Calendar 2;ro.product.device=cal2;features=shell_v2,cmd\0",
+    guid: "adb-CZ2A1B2C3D-x7Kq9m",
+    connectPort: 37101,
+    pairingPort: 37102,
+    wireless: true, // Wireless debugging is on (Developer options)
+    pairingOpen: false, // the "Pair device with pairing code" window is showing
+    pairingCode: "482913",
+    paired: [], // keys that have paired (DER SubjectPublicKeyInfo, base64)
+    pairings: [], // each pairing attempt: "paired" or "wrong code"
+  });
+}
+
+export async function wirelessAndroid(ip, s) {
+  const key = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
+  const cert = certificatePem(certificateFor(key, "adb"));
+  const [adb] = await fireTv(ip, s, { port: s.connectPort, wireless: { key, cert } });
+  // The pairing window: TLS, then the code checked with SPAKE2, as Android's own pairing server does.
+  const pairing = tls.createServer({ key, cert, requestCert: true, rejectUnauthorized: false, minVersion: "TLSv1.3" }, async (t) => {
+    t.on("error", () => {});
+    if (!s.pairingOpen) return t.destroy();
+    try {
+      const read = exactReader(t);
+      const packet = async (type) => {
+        const h = await read(6);
+        if (h[0] !== 1 || h[1] !== type) throw new Error("bad packet");
+        return read(h.readUInt32BE(2));
+      };
+      const password = Buffer.concat([Buffer.from(s.pairingCode), t.exportKeyingMaterial(64, PAIR_EXPORT_LABEL)]);
+      const spake = new Spake2("bob", PAIR_SERVER_NAME, PAIR_CLIENT_NAME);
+      const mine = spake.generateMessage(password);
+      t.write(Buffer.concat([pairHeader(PAIR_SPAKE2, mine.length), mine]));
+      const k = pairCipherKey(spake.processMessage(await packet(PAIR_SPAKE2)));
+      const sealed = pairSeal(k, 0, peerInfo(PEER_GUID, s.guid));
+      t.write(Buffer.concat([pairHeader(PAIR_PEER_INFO, sealed.length), sealed]));
+      let theirs;
+      try {
+        theirs = pairOpen(k, 0, await packet(PAIR_PEER_INFO));
+      } catch {
+        s.pairings.push("wrong code");
+        return t.destroy();
+      }
+      const { key: pub, valid } = parseAndroidPublicKey(peerInfoText(theirs));
+      if (!valid) return t.destroy();
+      s.paired.push(pub.export({ type: "spki", format: "der" }).toString("base64"));
+      s.pairings.push("paired");
+      s.pairingOpen = false; // Android closes the window once a device has paired
+      t.end();
+    } catch {
+      t.destroy();
+    }
+  });
+  await listen(pairing, s.pairingPort, ip);
+  return [adb, pairing];
 }
 
 // ── PlayStation 5 (DDP) ──────────────────────────────────

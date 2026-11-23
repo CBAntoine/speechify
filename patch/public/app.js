@@ -96,7 +96,7 @@ export function ago(ts) {
 
 export function stateLine(d) {
   const s = d.state || {};
-  if (d.setup) return d.setup.kind === "button" || d.setup.kind === "tv-prompt" ? "Ready to connect" : d.setup.kind === "password" ? "Needs its password" : d.setup.kind === "adb" ? "Needs a setting on the TV" : "Waiting to be connected";
+  if (d.setup) return d.setup.kind === "button" || d.setup.kind === "tv-prompt" ? "Ready to connect" : d.setup.kind === "password" ? "Needs its password" : d.setup.kind === "adb" ? "Needs a setting on the TV" : d.setup.kind === "code" ? "Needs a pairing code" : d.setup.kind === "android" ? "Needs Wireless debugging on" : "Waiting to be connected";
   if (d.online === false) return d.lastSeen ? `Offline · seen ${ago(d.lastSeen)}` : "Offline";
   const parts = (...xs) => xs.filter(Boolean).join(" · ");
   switch (d.kind) {
@@ -152,6 +152,8 @@ function primaryControl(d) {
   if (d.setup?.kind === "token") return { foot: `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>` };
   if (d.setup?.kind === "password") return { foot: `<button class="btn btn--sm" data-ui="open" data-id="${id}">${icon("key", 15)} Password</button>` };
   if (d.setup?.kind === "adb") return { foot: `<button class="btn btn--sm" data-ui="open" data-id="${id}">Set up</button>` };
+  if (d.setup?.kind === "code") return { foot: `<button class="btn btn--primary btn--sm" data-ui="open" data-id="${id}">Pair</button>` };
+  if (d.setup?.kind === "android") return { foot: `<button class="btn btn--sm" data-ui="open" data-id="${id}">Set up</button>` };
   if (d.online === false) return {};
   if (isPowered(d)) return { top: `<button class="switch ${busy ? "is-busy" : ""}" role="switch" aria-checked="${d.state.on}" aria-label="${esc(d.name)} power" data-act="${d.state.on ? "turn_off" : "turn_on"}" data-id="${id}"></button>` };
   if (has(d, "pause") && has(d, "play")) {
@@ -375,10 +377,10 @@ function todoItems() {
       ? `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${id}">Connect</button>`
       : d.setup.kind === "token"
         ? `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>`
-        : d.setup.kind === "adb"
+        : d.setup.kind === "adb" || d.setup.kind === "code" || d.setup.kind === "android"
           ? `<button class="btn btn--sm" data-ui="open" data-id="${id}">Show me how</button>`
           : `<button class="btn btn--sm" data-ui="open" data-id="${id}">Add password</button>`;
-    const title = d.setup.kind === "password" ? `Add ${d.name}'s password` : d.setup.kind === "adb" ? `Let Patch control ${d.name}` : `Connect ${d.name}`;
+    const title = d.setup.kind === "password" ? `Add ${d.name}'s password` : d.setup.kind === "adb" || d.setup.kind === "code" || d.setup.kind === "android" ? `Let Patch control ${d.name}` : `Connect ${d.name}`;
     items.push({ id: `setup:${d.id}`, icon: kindIcon(d), tint: tintOf(d), title, text: d.setup.message, button });
   }
   return items.filter((i) => !state.dismissed.has(i.id));
@@ -942,7 +944,7 @@ function renderDrawer(fresh = false) {
   const tab = controls && state.drawerTab !== "details" ? "controls" : "details";
   const status = d.online === false ? "Offline" : d.setup ? "Needs connecting" : stateLine(d) || "Online";
   const setup = d.setup
-    ? `<div class="note">${icon(d.setup.kind === "password" ? "key" : "info", 18, 'class="note__icon"')}<p>${esc(d.setup.message)}</p>${needsPair(d) ? `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Connect</button>` : d.setup.kind === "token" ? `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>` : ""}</div>`
+    ? `<div class="note">${icon(d.setup.kind === "password" ? "key" : "info", 18, 'class="note__icon"')}<p>${esc(d.setup.message)}</p>${needsPair(d) ? `<button class="btn btn--primary btn--sm" data-act="pair" data-id="${esc(d.id)}">Connect</button>` : d.setup.kind === "token" ? `<button class="btn btn--primary btn--sm" data-ui="settings" data-focus="ha">Connect</button>` : d.setup.kind === "code" ? `<form class="inline-form" data-form="pair" data-id="${esc(d.id)}"><input name="value" inputmode="numeric" autocomplete="one-time-code" maxlength="24" placeholder="The six-digit code" aria-label="Pairing code"><button class="btn btn--primary btn--sm">Pair</button></form>` : ""}</div>`
     : "";
   el.innerHTML = `
     <div class="drawer__head" style="--tint:${tintOf(d)}">

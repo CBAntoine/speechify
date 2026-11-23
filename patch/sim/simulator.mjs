@@ -37,6 +37,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     samsung: T.samsungState(),
     lg: T.lgState(),
     firetv: T.fireTvState(),
+    calendar: T.wirelessAndroidState(),
   };
   // Port forwards point at the simulated camera and Raspberry Pi.
   state.router.mappings[0].NewInternalClient = ip(23);
@@ -72,6 +73,8 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
   add({ close: () => pretend.close() });
   add(await T.fireTv(ip(17), state.firetv));
   add(await T.playStation(ip(18)));
+  // A wall calendar running Android, reachable once Wireless debugging is on and it has paired.
+  add(await T.wirelessAndroid(ip(28), state.calendar));
   add(await S.openPorts(ip(19), [7000, 49152]));
   add(await S.openPorts(ip(24), [62078]));
   add(await S.openPorts(ip(25), [22, 445, 5900]));
@@ -86,7 +89,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     [11, "04:cf:8c:15:24:3f"], [12, "30:05:5c:1a:2b:3c"], [13, "f8:0f:f9:5c:0a:7e"], [14, "dc:a6:32:9a:8b:7c"], [20, "00:1a:2b:3c:4d:5e"],
     [21, "9a:4c:01:22:33:44"], [22, "bc:51:fe:44:55:66"], [23, "b8:27:eb:4d:5e:6f"], [30, "10:2c:6b:00:11:22"], [31, "6e:12:ab:cd:ef:01"],
     [15, "64:1c:ae:12:34:56"], [16, "44:be:8b:0a:1b:2c"], [17, "f0:4f:7c:3a:2b:1c"], [18, "a4:b1:c2:d3:e4:f5"], [19, "f0:b3:ec:12:9a:7b"],
-    [24, "2a:91:fe:61:0c:33"], [25, "f4:d4:88:5e:21:9c"], [26, "08:df:1f:55:66:77"], [27, "56:3e:91:aa:20:4d"],
+    [24, "2a:91:fe:61:0c:33"], [25, "f4:d4:88:5e:21:9c"], [26, "08:df:1f:55:66:77"], [27, "56:3e:91:aa:20:4d"], [28, "ae:3f:12:9b:44:20"],
   ].map(([n, mac]) => ({ ip: ip(n), mac, iface: "sim" }));
 
   // ── mDNS ──
@@ -111,9 +114,12 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
     { type: "_spotify-connect._tcp", instance: "Bathroom Speaker", host: "Bose-SM500-55667.local", ip: ip(26), port: 8200, txt: { CPath: "/zc", VERSION: "1.0", Stack: "SP" } },
     { type: "_workstation._tcp", instance: "raspberrypi [b8:27:eb:4d:5e:6f]", host: "raspberrypi.local", ip: ip(23), port: 9, txt: {} },
     { type: "_plexmediasvr._tcp", instance: "raspberrypi", host: "raspberrypi.local", ip: ip(23), port: 32400, txt: {} },
+    // Android announces Wireless debugging while it's on, and its pairing window while that's open.
+    { type: "_adb-tls-connect._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.connectPort, txt: {}, when: () => state.calendar.wireless },
+    { type: "_adb-tls-pairing._tcp", instance: state.calendar.guid, host: "Android_5c0a7e2b.local", ip: ip(28), port: state.calendar.pairingPort, txt: {}, when: () => state.calendar.pairingOpen },
   ];
   const fullName = (s) => joinName([s.instance, ...s.type.split("."), "local"]);
-  const reverse = new Map([[reverseName(ip(21)), "Kitchen-iPad.local"], [reverseName(ip(23)), "raspberrypi.local"], [reverseName(ip(20)), "OFFICE-PC.local"], [reverseName(ip(27)), "Galaxy-S24-Ultra.local"]]);
+  const reverse = new Map([[reverseName(ip(21)), "Kitchen-iPad.local"], [reverseName(ip(23)), "raspberrypi.local"], [reverseName(ip(20)), "OFFICE-PC.local"], [reverseName(ip(27)), "Galaxy-S24-Ultra.local"], [reverseName(ip(28)), "Cozyla-Calendar-2.local"]]);
   const types = [...new Set(services.map((s) => s.type))];
   const recordsFor = (s) => ({
     srv: { name: fullName(s), type: TYPE.SRV, data: { priority: 0, weight: 0, port: s.port, target: s.host }, flush: true },
@@ -142,6 +148,7 @@ export async function startSimulator({ prefix = "127.0.10", multicast = false } 
         continue;
       }
       for (const s of services) {
+        if (s.when && !s.when()) continue;
         const r = recordsFor(s);
         if (n === `${s.type}.local` && (type === TYPE.PTR || type === TYPE.ANY)) {
           answers.push({ name: `${s.type}.local`, type: TYPE.PTR, data: fullName(s) });

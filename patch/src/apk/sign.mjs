@@ -67,16 +67,24 @@ export function derChildren(buf, el) {
 
 // ── Patch's signing key ────────────────────────────────────────────────────
 
-/** A new 2048-bit RSA key and its self-signed certificate: { key (PEM), cert (base64 DER) }. */
-export function newSigningKey(commonName = "Patch TV apps") {
-  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, publicExponent: 65537 });
-  const spki = publicKey.export({ type: "spki", format: "der" });
+/** A self-signed certificate (DER) for an RSA key: what app signing and Android's wireless debugging need. */
+export function certificateFor(key, commonName) {
+  const privateKey = key instanceof crypto.KeyObject ? key : crypto.createPrivateKey(key);
+  const spki = crypto.createPublicKey(privateKey).export({ type: "spki", format: "der" });
   const name = seq(set(seq(oid(OID.commonName), utf8String(commonName))));
   const serial = crypto.randomBytes(8);
   serial[0] = (serial[0] & 0x7f) | 0x01;
   const tbs = seq(explicit0(integer([2])), integer(serial), algorithm(OID.sha256WithRsa), name, seq(utcTime(new Date(Date.now() - 86_400_000)), utcTime(new Date(Date.UTC(2049, 11, 31, 23, 59, 59)))), name, spki);
-  const cert = seq(tbs, algorithm(OID.sha256WithRsa), bitString(crypto.sign("sha256", tbs, privateKey)));
-  return { key: privateKey.export({ type: "pkcs8", format: "pem" }), cert: cert.toString("base64") };
+  return seq(tbs, algorithm(OID.sha256WithRsa), bitString(crypto.sign("sha256", tbs, privateKey)));
+}
+
+/** The same certificate as PEM text, the form TLS takes. */
+export const certificatePem = (der) => `-----BEGIN CERTIFICATE-----\n${der.toString("base64").match(/.{1,64}/g).join("\n")}\n-----END CERTIFICATE-----\n`;
+
+/** A new 2048-bit RSA key and its self-signed certificate: { key (PEM), cert (base64 DER) }. */
+export function newSigningKey(commonName = "Patch TV apps") {
+  const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048, publicExponent: 65537 });
+  return { key: privateKey.export({ type: "pkcs8", format: "pem" }), cert: certificateFor(privateKey, commonName).toString("base64") };
 }
 
 /** The certificate's issuer and serial number (what a JAR signature names its signer by). */

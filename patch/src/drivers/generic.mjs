@@ -144,6 +144,9 @@ export default {
       (c.model && c.brand && !c.model.includes(c.brand) ? `${c.brand} ${c.model}` : c.model) ||
       (c.brand ? `${c.brand} ${c.kind === "unknown" ? "device" : label.toLowerCase()}` : label);
     const wakeable = !!host.mac && !isRandomizedMac(host.mac) && ["computer", "nas", "console", "unknown"].includes(c.kind);
+    // It runs Android (its name says so, or it's a family calendar that does): Patch can work it
+    // once Wireless debugging is on, when it announces itself and the Android driver takes over.
+    const android = !c.weak && (/^(Cozyla|Skylight)$/.test(c.brand || "") || [...(host.hostnames || [])].some((h) => /^android[-_]/i.test(h)));
     return [
       {
         id: `host:${(host.mac || host.ip).replace(/:/g, "")}`,
@@ -158,6 +161,7 @@ export default {
         info: c.weak ? { guess: c.model } : {},
         webUrl: webUrlFor(host),
         actions: [...(wakeable ? ["wake"] : []), "rename", "set_room"],
+        ...(android ? { setup: { kind: "android", message: `${name} runs Android, so Patch can work it (apps, YouTube, its screen) once Wireless debugging is on. On it, open Settings → About and tap “Build number” seven times, then Settings → System → Developer options → Wireless debugging: switch it on. Then scan again in Patch and pair it with the six-digit code.` } } : {}),
       },
     ];
   },
