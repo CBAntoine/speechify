@@ -155,9 +155,13 @@ export class Scanner extends EventEmitter {
             if ((!d.kind || d.kind === "unknown") && f.kind) d.kind = f.kind;
             d.info = { ...(d.info || {}), modelNumber: d.info?.modelNumber ?? f.modelNumber ?? null, os: d.info?.os ?? f.os ?? null };
             const evidence = [...(driver.id !== "generic" && driver.id !== "upnp" ? [`its own ${driver.label} API`] : []), ...f.evidence];
-            d.info.identity = { exact: driver.id !== "generic" ? true : f.exact, evidence: [...new Set(evidence)].slice(0, 4) };
+            // A driver that says how it knows (an Android device that hasn't paired yet, say) is taken at its word.
+            const own = d.identity;
+            delete d.identity;
+            d.info.identity = own ? { exact: own.exact, evidence: [...new Set([...own.evidence, ...f.evidence])].slice(0, 4) } : { exact: driver.id !== "generic" ? true : f.exact, evidence: [...new Set(evidence)].slice(0, 4) };
             if (!d.room && f.room) d.room = f.room;
           }
+          delete d.identity;
           d.mac ??= h.mac;
           d.vendor = h.vendor;
           d.ports = [...h.ports].sort((a, b) => a - b);

@@ -747,6 +747,8 @@ async function wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore
     state: {},
     info: { os: "Android" },
     actions: [],
+    // Until it has paired, what Patch knows comes from its announcement and its name, not from the device.
+    identity: { exact: false, evidence: ["its Wireless debugging announcement (it runs Android)"] },
   };
   const paired = !!ctx?.secrets.pairings?.[id]?.adb;
   device.setup = paired ? null : { kind: "code", message: setupMessage(device) };
@@ -760,6 +762,7 @@ async function wirelessDevice(host, ctx, { wireless, pairingWindow, pairedBefore
       if (f.model && device.model === "Android device") device.model = f.maker && !f.model.toLowerCase().includes(f.maker.toLowerCase()) ? `${f.maker} ${f.model}` : f.model;
       device.info.os = `Android${f.android ? ` ${f.android}` : ""}`;
       if (f.name && !hostname) device.name = f.name;
+      device.identity = { exact: !!f.model, evidence: [`its own answer over Wireless debugging${f.android ? ` (Android ${f.android})` : ""}`] };
       device.state = await liveState(client, device);
     } catch {
       /* asleep, or Wireless debugging went off: keep what the network said */

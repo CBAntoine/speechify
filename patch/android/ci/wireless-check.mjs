@@ -40,6 +40,26 @@ const finish = async (ok, msg) => {
 };
 process.on("unhandledRejection", (e) => finish(false, `the check itself broke: ${e?.stack || e}`));
 
+/** Wireless debugging's encrypted port: as Android's debugging service knows it (IAdbManager 10), else adbd's property. */
+async function tlsPortNow() {
+  const r = (await sh("service call adb 10").catch(() => "")).match(/Parcel\(\s*([0-9a-f]{8})\s+([0-9a-f]{8})/i);
+  const port = r && parseInt(r[1], 16) === 0 ? parseInt(r[2], 16) : 0;
+  if (port > 0 && port < 65536) return port;
+  return Number(await sh("getprop service.adb.tls.port").catch(() => "0")) || 0;
+}
+
+/** What Android says about Wireless debugging, for a failure to explain itself. */
+async function diagnose() {
+  const get = async (cmd) => (await sh(cmd).catch((e) => `(${String(e.message).split("\n")[0]})`)).slice(0, 1500);
+  return {
+    tlsServerEnable: await get("getprop persist.adb.tls_server.enable"),
+    adbWifiEnabled: await get("settings get global adb_wifi_enabled"),
+    serviceCallPort: await get("service call adb 10"),
+    portProperty: await get("getprop service.adb.tls.port"),
+    log: await get("logcat -d -t 600 | grep -iE 'adbd|AdbDebugging|adb wifi|TlsServer|pairing' | tail -n 20"),
+  };
+}
+
 /** TCP ports something on the device is listening on (from /proc/net). */
 async function listening() {
   const text = await sh("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null").catch(() => "");
@@ -77,11 +97,14 @@ async function main() {
   await sh(`service call adb 4 i32 1 s16 ${bssid}`);
   let tlsPort = 0;
   for (let i = 0; i < 60 && !tlsPort; i++) {
-    tlsPort = Number(await sh("getprop service.adb.tls.port").catch(() => "0")) || 0;
+    tlsPort = await tlsPortNow();
     if (!tlsPort) await sleep(500);
   }
   report.tlsPort = tlsPort;
-  if (!tlsPort) return finish(false, `Wireless debugging didn't start (adb_wifi_enabled=${await sh("settings get global adb_wifi_enabled").catch(() => "?")})`);
+  if (!tlsPort) {
+    report.diagnosis = await diagnose();
+    return finish(false, `Wireless debugging didn't give a port: ${JSON.stringify(report.diagnosis)}`);
+  }
   await adb("forward", `tcp:${TLS_LOCAL}`, `tcp:${tlsPort}`);
 
   const key = newAdbKey();
@@ -97,8 +120,20 @@ async function main() {
   }
 
   // 2. A wrong password: the key exchange fails and Android keeps nothing.
+  if (!(await listening()).size) {
+    report.root = (await adb("root").catch((e) => String(e.message))).trim();
+    await adb("wait-for-device").catch(() => {});
+    await sleep(3000);
+    tlsPort = 0;
+    for (let i = 0; i < 40 && !tlsPort; i++) {
+      tlsPort = await tlsPortNow();
+      if (!tlsPort) await sleep(500);
+    }
+    report.tlsPortAfterRoot = tlsPort;
+    await adb("forward", `tcp:${TLS_LOCAL}`, `tcp:${tlsPort}`).catch(() => {});
+  }
   let pairPort = await startPairing("patch-right-password-482913", tlsPort);
-  if (pairPort === -1) return finish(false, "the device's list of listening ports can't be read from the shell, so the pairing port can't be found");
+  if (pairPort === -1) return finish(false, `the device's list of listening ports can't be read, so the pairing port can't be found (${JSON.stringify(await diagnose())})`);
   report.pairingPort = pairPort;
   if (!pairPort) return finish(false, "Android's pairing server didn't open a port");
   await adb("forward", `tcp:${PAIR_LOCAL}`, `tcp:${pairPort}`);

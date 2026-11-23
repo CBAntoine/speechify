@@ -235,6 +235,8 @@ export function describeDevice(d) {
 /** How sure Patch is about what a device is: "exact" (it said so), "likely" (strong clues) or "guess". */
 export function confidenceOf(d) {
   if (d.self) return "exact";
+  // A driver that said it isn't sure yet (an Android device that hasn't paired) isn't "exact".
+  if (d.info?.identity?.exact === false && d.driver && !["generic", "upnp"].includes(d.driver)) return d.brand && d.model ? "likely" : "guess";
   if (d.driver && !["generic", "upnp"].includes(d.driver)) return "exact";
   if (d.info?.identity?.exact) return "exact";
   if (d.brand && d.model && d.kind !== "unknown") return "likely";

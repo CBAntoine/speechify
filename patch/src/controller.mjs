@@ -157,7 +157,8 @@ export class Controller {
       } else {
         const driver = driverById[d.driver];
         if (!driver?.act) throw new DeviceError(`${name} can't be controlled from here.`);
-        r = await driver.act(view, action, value, { ...this.ctx(), confirmed, look, sight });
+        // Object.assign, not a spread: secrets must stay live (a key made in this very request is read back in it).
+        r = await driver.act(view, action, value, Object.assign(this.ctx(), { confirmed, look, sight }));
       }
       const patch = { online: true };
       if (r.state) patch.state = r.state;

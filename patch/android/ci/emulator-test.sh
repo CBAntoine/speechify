@@ -167,13 +167,14 @@ node "$HERE/tvapp-check.mjs" "$(dirname "$OUT")" "$OUT" || fail "the TV app chec
 echo "Patch's own browser on a TV: Patch puts it there, then reads and uses web pages in it…"
 node "$HERE/tvweb-check.mjs" "$HERE/../../tvapp/template.apk" "$OUT" || fail "the TV browser check failed"
 
-echo "Wireless debugging (any Android device: a wall calendar, a tablet, a phone): pairing, then an encrypted connection…"
-node "$HERE/wireless-check.mjs" "$OUT" || fail "the Wireless debugging check failed"
-
 echo "Claude: Anthropic's SDK, loaded only when it's needed, loads on the phone's Node.js…"
 api "$BASE/api/claude/sdk" > "$OUT/claude-sdk.json" || fail "/api/claude/sdk didn't answer"
 grep -q '"ok":true' "$OUT/claude-sdk.json" || fail "Anthropic's SDK didn't load on the phone, so Claude can't build apps: $(cat "$OUT/claude-sdk.json")"
 echo "It loads, so Claude can build apps from the phone."
+
+# Last, because it may restart the device's adb (which drops the port forwards the checks above use).
+echo "Wireless debugging (any Android device: a wall calendar, a tablet, a phone): pairing, then an encrypted connection…"
+node "$HERE/wireless-check.mjs" "$OUT" || fail "the Wireless debugging check failed"
 
 echo "---- Patch's log ----"
 patch_log 120

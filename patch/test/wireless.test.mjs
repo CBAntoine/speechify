@@ -173,6 +173,12 @@ test("with Wireless debugging off, the calendar says how to switch it on; once o
     assert.equal(found[0].driver, "androidtv");
     assert.equal(found[0].setup?.kind, "code");
     assert.equal(found[0].name, "Kitchen calendar");
+    // Paired at the first try, with nothing made before: the key Patch makes for it is the one it keeps.
+    sim2.state.calendar.pairingOpen = true;
+    const r = await call2("POST", `/api/devices/${encodeURIComponent(found[0].id)}/action`, { action: "pair", value: sim2.state.calendar.pairingCode });
+    assert.equal(r.ok, true, r.message);
+    const again = await call2("POST", `/api/devices/${encodeURIComponent(found[0].id)}/action`, { action: "launch_app", value: "YouTube" });
+    assert.equal(again.ok, true, again.message);
   } finally {
     await app2.close();
     await sim2.stop();
