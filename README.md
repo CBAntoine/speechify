@@ -54,6 +54,10 @@ At connect time the page sends Sol the date, the player's tier, what they're vie
 
 Map data © OpenStreetMap contributors (ODbL) via OpenFreeMap and OpenMapTiles. Natural Earth (public domain). AWS Terrain Tiles. News headlines link to the original publishers; the site never republishes articles. Pins carry confidence labels: **Confirmed**, **Reported** or **Theory**. Theories are the site's own inferences and are labelled as such.
 
+## Also in this repo: a self-improving agent for your team's questions
+
+[`evals/`](evals/README.md) holds a Generator → Verifier → Coach loop of Claude Code agents. The **generator** (`.claude/agents/generator.md`) answers teammates' questions about these apps the way the owner would. The read-only **verifier** grades its answers against an answer key (`evals/answer_key.md`). The **coach** drafts one change at a time to a copy of the generator, and a draft goes live only if it fixes a case and breaks none. In Claude Code, start with `/interview`, then run `/improve`. A guard hook enforces each agent's limits.
+
 ## Also in this repo: Patch, a voice assistant for your home WiFi
 
 [`patch/`](patch/README.md) is a separate app you run on your own computer. It finds every device on your home network and says exactly what each one is (make and model), controls lights, TVs, speakers, plugs, printers and more (including TV channels, apps, YouTube and web searches on the TV), and runs a network tune-up, all by talking or typing to an ElevenLabs agent called Patch. It has its own `package.json` and is not part of the website build. Start with `cd patch && npm install && npm start`, or try it on a simulated home with `npm run demo`.

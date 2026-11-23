@@ -37,5 +37,19 @@
       "mcp__ElevenLabs__agents_get_test_run_summary",
       "mcp__ElevenLabs__agents_get_test_run_failures"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/evals/guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

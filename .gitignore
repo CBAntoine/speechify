@@ -11,3 +11,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 scripts/.cache/
 public/vendor/
+
+# The generator loop (evals/README.md): run output, and answer-key rows kept off GitHub
+evals/runs/
+evals/answer_key.private.md
