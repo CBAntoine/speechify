@@ -62,3 +62,17 @@ test("leads whose order was cancelled or never paid are not clients", () => {
   assert.equal(isClient(db, b), false);
   assert.equal(planFresh(db).keptClients.length, 0);
 });
+
+test("starting fresh deletes the leads' video ads and lists their files to delete", () => {
+  const { db, a, b } = fixture();
+  const base = { token: "tok_video_xxxxx", business: "x", createdAt: AT, createdBy: "user", format: "vertical" as const, products: [], facts: [], scenes: [], timing: { starts: [], total: 0 }, email: { subject: "", body: "" }, writtenBy: "template" as const };
+  db.videos = [
+    { ...base, id: "video_a", leadId: a.id, brand: { color: "#000", ink: "#fff", logo: "asset_logo" }, voiceover: { assetId: "asset_voice", model: "m" } },
+    { ...base, id: "video_b", leadId: b.id, brand: { color: "#000", ink: "#fff", photo: "asset_keep" } },
+  ];
+  const plan = planFresh(db);
+  assert.equal(plan.videos, 1);
+  assert.deepEqual([...plan.assets].sort(), ["asset_logo", "asset_voice"]);
+  startFresh(db);
+  assert.deepEqual(db.videos.map((v) => v.id), ["video_b"], "a paying client's video stays");
+});

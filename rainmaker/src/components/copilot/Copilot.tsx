@@ -53,6 +53,8 @@ const CRM_LABEL: Record<CopilotCrmTool, (p: Params) => string> = {
   start_ai_guide_trial: () => "Putting the AI guide on their website",
   ai_guide_report: () => "Reading the AI guide's conversations",
   teach_ai_guide: () => "Teaching the AI guide",
+  create_video_ad: () => "Making a video ad from their real data (a minute or two)",
+  email_video_ad: () => "Drafting the video ad email for your approval",
 };
 
 /** Tools that change data: the screen refreshes after them. */
@@ -69,6 +71,8 @@ const MUTATES = new Set<CopilotCrmTool>([
   "pitch_ai_guide",
   "start_ai_guide_trial",
   "teach_ai_guide",
+  "create_video_ad",
+  "email_video_ad",
 ]);
 
 function friendly(msg: string): string {
@@ -276,6 +280,8 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   useConversationClientTool("start_ai_guide_trial", (p: Params) => crm("start_ai_guide_trial", p));
   useConversationClientTool("ai_guide_report", (p: Params) => crm("ai_guide_report", p));
   useConversationClientTool("teach_ai_guide", (p: Params) => crm("teach_ai_guide", p));
+  useConversationClientTool("create_video_ad", (p: Params) => crm("create_video_ad", p));
+  useConversationClientTool("email_video_ad", (p: Params) => crm("email_video_ad", p));
 
   /** Without the AI: open screens and answer from the guide. */
   const answerLocally = useCallback(

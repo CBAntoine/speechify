@@ -127,6 +127,59 @@ export interface DemoAgent {
   usage?: { day: string; sessions: number };
 }
 
+/** Something true about a business, and where it came from: all a video ad's script may say about them. */
+export interface VideoFact {
+  id: string;
+  kind: "business" | "gap" | "strength" | "industry" | "research";
+  text: string;
+  source: string;
+  url?: string;
+}
+
+export interface VideoScene {
+  kind: "hook" | "fact" | "problem" | "solution" | "cta";
+  /** On screen, a few words. */
+  headline: string;
+  /** On screen under the headline. */
+  sub: string;
+  /** What the narrator says. */
+  voiceover: string;
+  visual: "logo" | "photo" | "website" | "stat" | "product" | "plain";
+  stat?: { value: string; label: string };
+  /** The product a solution scene sells. */
+  productId?: string;
+  /** The facts it rests on. */
+  factIds: string[];
+}
+
+/**
+ * A personalised video ad for one business, made from their real data to
+ * sell the products picked for them. Drawn in the browser (and recorded to a
+ * file there); its private page is /video/<token>.
+ */
+export interface VideoAd {
+  id: string;
+  token: string;
+  leadId: string;
+  business: string;
+  createdAt: string;
+  createdBy: string;
+  format: "vertical" | "square";
+  /** Store product ids it sells. */
+  products: string[];
+  facts: VideoFact[];
+  scenes: VideoScene[];
+  /** When each scene starts, in seconds, and the length. */
+  timing: { starts: number[]; total: number };
+  /** Their brand colour, readable text colour, and logo and photo (asset ids). */
+  brand: { color: string; ink: string; logo?: string; photo?: string; domain?: string };
+  voiceover?: { assetId: string; model: string };
+  email: { subject: string; body: string };
+  writtenBy: "claude" | "template";
+  views?: number;
+  lastViewedAt?: string;
+}
+
 /** An AI Website Guide built for a prospect: their website's knowledge, a demo page, and later their live widget. */
 export interface GuideDemo {
   agentId: string;
@@ -531,6 +584,8 @@ export interface Db {
   autopilot: AutopilotState;
   /** The CRM copilot's ElevenLabs agent, once synced from this app; hash is the spec it was synced from. */
   copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string; hash?: string };
+  /** Video ads made for leads. */
+  videos?: VideoAd[];
   /** When the owner last talked to the copilot, for its "since your last visit" greeting. */
   copilotSeen?: { lastSessionAt: string; briefSince?: string };
   seeded: boolean;

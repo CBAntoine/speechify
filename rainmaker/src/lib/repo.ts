@@ -174,6 +174,7 @@ export async function deleteLead(id: string): Promise<void> {
     db.leads = db.leads.filter((l) => l.id !== id);
     db.tasks = db.tasks.filter((t) => t.leadId !== id);
     db.drafts = db.drafts.filter((d) => d.leadId !== id || d.status === "sent");
+    db.videos = (db.videos ?? []).filter((v) => v.leadId !== id);
   });
 }
 

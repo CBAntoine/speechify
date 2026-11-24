@@ -61,6 +61,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname === "/store" ||
     pathname.startsWith("/store/") ||
     pathname.startsWith("/demo/") ||
+    pathname.startsWith("/video/") ||
+    pathname.startsWith("/api/public/video/") ||
     pathname.startsWith("/guide/") ||
     pathname.startsWith("/api/store/") ||
     pathname === "/api/payments/stripe/webhook" ||

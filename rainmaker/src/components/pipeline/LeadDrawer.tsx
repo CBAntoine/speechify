@@ -399,6 +399,16 @@ export function LeadDrawer({
                 <Megaphone size={15} /> Build sample ads
               </Link>
             </div>
+            <div className="card card-pad stack" style={{ gap: 10, alignItems: "flex-start" }}>
+              <div style={{ fontWeight: 600 }}>Send them a video made for them</div>
+              <div className="muted small">
+                A short video about {lead.name}: what&apos;s working, what we found on their website, and how the products you tick would fix it, made only from their real
+                data. Email it to them with one tap.
+              </div>
+              <Link href={`/ads?mode=video&lead=${lead.id}`} className="btn">
+                <Video size={15} /> Make a video ad
+              </Link>
+            </div>
             {leadCampaigns.map((c) => (
               <Link key={c.id} href={`/ads?campaign=${c.id}`} className="card row" style={{ padding: 14, gap: 12 }}>
                 <span className="icon-tile" style={{ background: c.creative.palette.bg, color: c.creative.palette.accent }}>

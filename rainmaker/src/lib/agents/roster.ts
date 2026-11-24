@@ -23,7 +23,9 @@ export type ToolName =
   | "pitch_ai_guide"
   | "start_ai_guide_trial"
   | "ai_guide_report"
-  | "teach_ai_guide";
+  | "teach_ai_guide"
+  | "create_video_ad"
+  | "email_video_ad";
 
 export interface AgentDef {
   id: AgentId;

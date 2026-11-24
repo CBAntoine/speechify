@@ -1,0 +1,85 @@
+/* A business's private video ad page. Built on the store's base styles. */
+
+.vpage-top {
+  border-bottom: 1px solid var(--hair);
+  background: #fff;
+}
+
+.vpage-top .store-wrap {
+  min-height: 58px;
+}
+
+.vpage-main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 32px;
+  padding-bottom: 56px;
+}
+
+.vpage-intro {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.vpage-intro h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.vpage-intro p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 16px;
+}
+
+.vpage-products h2,
+.vpage-cta h2 {
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.vpage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.vpage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--ring);
+}
+
+.vpage-card ul {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+
+.vpage-cta {
+  padding: 24px 16px;
+  border-radius: 20px;
+  background: var(--stone);
+  text-align: center;
+}
+
+.vpage-foot {
+  padding-bottom: 32px;
+  text-align: center;
+}

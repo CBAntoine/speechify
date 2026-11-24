@@ -133,6 +133,60 @@ export async function safeFetchText(
   }
 }
 
+/**
+ * Download a small file (an image) with the same protections as
+ * safeFetchText: public hosts only, redirects re-checked, a size cap.
+ */
+export async function safeFetchBytes(
+  url: string,
+  opts: { timeoutMs?: number; maxBytes?: number; accept?: string } = {}
+): Promise<{ bytes: Buffer; mime: string; finalUrl: string }> {
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const maxBytes = opts.maxBytes ?? 3_000_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let current = (await assertPublicUrl(url)).toString();
+    for (let hop = 0; hop <= 5; hop++) {
+      const res = await fetch(current, { redirect: "manual", signal: controller.signal, headers: { "user-agent": USER_AGENT, accept: opts.accept ?? "*/*" } });
+      if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+        const next = new URL(res.headers.get("location")!, current).toString();
+        await res.body?.cancel();
+        current = (await assertPublicUrl(next)).toString();
+        continue;
+      }
+      if (!res.ok || !res.body) {
+        await res.body?.cancel();
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const declared = Number(res.headers.get("content-length") ?? 0);
+      if (declared > maxBytes) {
+        await res.body.cancel();
+        throw new Error("File too large");
+      }
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > maxBytes) {
+          await reader.cancel();
+          throw new Error("File too large");
+        }
+        chunks.push(value);
+      }
+      return { bytes: Buffer.concat(chunks), mime: (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase(), finalUrl: current };
+    }
+    throw new Error("Too many redirects");
+  } catch (err) {
+    throw new Error(friendlyNetError(err, timeoutMs));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** One short phrase for a failed request, suitable for showing a user. */
 export function friendlyNetError(err: unknown, timeoutMs = 9000): string {
   const e = err as { name?: string; message?: string; code?: string; cause?: { code?: string; message?: string } };

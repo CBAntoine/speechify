@@ -10,6 +10,7 @@ import { generateCampaign, templateCampaign, toCampaign } from "@/lib/claude/ads
 import { researchWeb } from "@/lib/claude/research";
 import { addKnowledge, buildGuide, draftGuidePitch, guideReport, guideUrl, setGuideRoi, startGuideTrial, testGuide } from "@/lib/offers/guide";
 import { INTENT_LABEL, estimateGuideRoi, intentFor, leadValueFor } from "@/lib/offers/guide-math";
+import { createVideoAd, emailVideoAd, productChoices, videoUrl } from "@/lib/video/make";
 import {
   createDraft,
   createTask,
@@ -85,7 +86,10 @@ const by = (ctx: ToolContext) => (ctx.agentId === "copilot" ? "copilot" : `agent
 
 // The AI Website Guide offer: a chat and voice agent on a business's website
 // that answers visitors and passes them the leads.
-const GUIDE_TOOLS: Record<"estimate_ai_guide" | "build_ai_guide" | "test_ai_guide" | "pitch_ai_guide" | "start_ai_guide_trial" | "ai_guide_report" | "teach_ai_guide", ToolDef> = {
+const GUIDE_TOOLS: Record<
+  "estimate_ai_guide" | "build_ai_guide" | "test_ai_guide" | "pitch_ai_guide" | "start_ai_guide_trial" | "ai_guide_report" | "teach_ai_guide" | "create_video_ad" | "email_video_ad",
+  ToolDef
+> = {
   estimate_ai_guide: {
     name: "estimate_ai_guide",
     description:
@@ -249,6 +253,54 @@ const GUIDE_TOOLS: Record<"estimate_ai_guide" | "build_ai_guide" | "test_ai_guid
         },
         summary: `${r.last30.conversations} conversations, ${r.last30.leads} leads in 30 days`,
       };
+    },
+  },
+  create_video_ad: {
+    name: "create_video_ad",
+    description:
+      "Make a video ad for a lead: a short video for the owner about their own business, made only from real data (their website check, their website's headline, services, logo, photo and colour, their Google rating, facts about their industry, and web research when Claude is connected), showing how the chosen store products would fix what we found. ElevenLabs narrates it when connected. Takes up to two minutes. Give product_ids from the store, up to 4, or leave them out to use the ones that fit their findings. Returns its private link.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lead_id: { type: "string" },
+        product_ids: { type: "array", items: { type: "string" }, description: "Store product ids to sell, up to 4 (default: the ones their findings point to)" },
+        format: { type: "string", enum: ["vertical", "square"], description: "vertical 9:16 (default) or square 1:1" },
+        research: { type: "boolean", description: "Search the web about them first (default true when Claude is connected)" },
+      },
+      required: ["lead_id"],
+    },
+    describe: () => "Making a video ad",
+    run: async (input, ctx) => {
+      const lead = await guideLead(input);
+      if (!lead) return noLead;
+      let ids = Array.isArray(input.product_ids) ? input.product_ids.map(String).slice(0, 4) : [];
+      if (!ids.length) ids = (await productChoices(lead)).filter((c) => c.recommended).slice(0, 3).map((c) => c.id);
+      const { video, notes } = await createVideoAd(lead.id, { products: ids, format: input.format === "square" ? "square" : "vertical", research: input.research !== false, voice: true, createdBy: by(ctx) });
+      return {
+        result: {
+          video_id: video.id,
+          link: videoUrl(video.token),
+          business: lead.name,
+          sells: video.products,
+          scenes: video.scenes.map((s) => s.headline),
+          facts_used: video.facts.length,
+          narrated: Boolean(video.voiceover),
+          written_by: video.writtenBy,
+          notes,
+          next: "Show it in Ad Studio (go_to ad_studio), or draft the email with email_video_ad.",
+        },
+        summary: `Video ad for ${lead.name}: ${video.scenes.length} scenes`,
+      };
+    },
+  },
+  email_video_ad: {
+    name: "email_video_ad",
+    description: "Draft the email that goes with a video ad, to the lead's email address (or the one given), with the private video link. It waits in the Inbox for approval; nothing is sent.",
+    input_schema: { type: "object", properties: { video_id: { type: "string" }, to: { type: "string", description: "Email address, if the lead has none" } }, required: ["video_id"] },
+    describe: () => "Drafting the video ad email",
+    run: async (input, ctx) => {
+      const d = await emailVideoAd(String(input.video_id ?? ""), { to: str(input.to, 200), createdBy: by(ctx) });
+      return { result: { draft_id: d.id, to: d.to ?? null, subject: d.subject ?? null, where: "Inbox, waiting for approval" }, summary: `Email drafted to ${d.to}` };
     },
   },
   teach_ai_guide: {
