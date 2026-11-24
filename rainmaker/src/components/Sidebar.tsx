@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Film, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
 import { openCopilot } from "./copilot/Copilot";
 import { useOverlay } from "./client";
 import { InstallButton, useInstall } from "./pwa";
@@ -26,6 +26,7 @@ const SELL = [
 
 const MORE = [
   { href: "/ads", label: "Ad Studio", sub: "Tailored ads for any business", icon: Megaphone },
+  { href: "/ads?mode=video", label: "Video ads", sub: "A video for the owner, from their real data", icon: Film },
   { href: "/agents", label: "Agents", sub: "Give a goal, watch it work", icon: Bot },
   { href: "/autopilot", label: "Autopilot", sub: "Finds, pitches and onboards clients daily", icon: Zap },
   { href: "/sales", label: "Sales", sub: "Orders, recurring revenue, onboarding", icon: CircleDollarSign },
@@ -177,7 +178,7 @@ export function Sidebar({ inbox, claude, runtime, agencyName, canSignOut }: { in
             </div>
             <div className="stack" style={{ gap: 6 }}>
               {MORE.map((m) => (
-                <Link key={m.href} href={m.href} className="sheet-link" aria-current={active(m.href) ? "page" : undefined}>
+                <Link key={m.href} href={m.href} className="sheet-link" aria-current={active(m.href) ? "page" : undefined} onClick={() => setMore(false)}>
                   <span className="icon-tile lg">
                     <m.icon size={19} />
                   </span>
