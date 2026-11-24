@@ -195,7 +195,6 @@ export function Board({
                         <div className="row small faint" style={{ gap: 8 }}>
                           {l.value ? <span className="nowrap">{money(l.value)}/mo</span> : null}
                           {pending > 0 && <span className="badge brand">{pending} draft{pending > 1 ? "s" : ""}</span>}
-                          {l.sample && <span className="badge warm">Sample</span>}
                           <span className="spacer" />
                           <span className="nowrap">{timeAgo(l.lastContactAt ?? l.updatedAt)}</span>
                         </div>

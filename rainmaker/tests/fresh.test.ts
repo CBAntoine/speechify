@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { elevenResourcesOf, isClient, planFresh, startFresh } from "../src/lib/fresh.ts";
-import { seedDb } from "../src/lib/seed.ts";
+import { sampleDb } from "./fixtures/samples.ts";
 import type { Order } from "../src/lib/types.ts";
 
 const AT = "2026-11-24T10:00:00Z";
 
 function fixture() {
-  const db = seedDb({ withSamples: true });
+  const db = sampleDb();
   const [a, b] = db.leads;
   // a: an ordinary lead with a demo receptionist and an AI guide.
   a.sample = false;

@@ -166,7 +166,6 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
                       </span>
                       <span className="row small muted" style={{ gap: 5 }}>
                         <C.icon size={12} /> {C.label}
-                        {d.sample && <span className="badge warm" style={{ height: 18 }}>Sample</span>}
                       </span>
                       <span className="faint small truncate" style={{ display: "block" }}>
                         {d.subject || d.body.split("\n").find((x) => x.trim())}

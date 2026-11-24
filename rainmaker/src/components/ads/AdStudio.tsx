@@ -308,7 +308,6 @@ export function AdStudio({
                     {campaign.createdBy.startsWith("agent:") && (
                       <span className="badge violet">{campaign.createdBy === "agent:copilot" ? "By Copilot" : campaign.createdBy === "agent:autopilot" ? "By Autopilot" : "By Ad Strategist"}</span>
                     )}
-                    {campaign.sample && <span className="badge warm">Sample</span>}
                     <span className="faint small">{timeAgo(campaign.createdAt)}</span>
                   </div>
                   <h2 className="display" style={{ margin: 0, fontSize: 22 }}>

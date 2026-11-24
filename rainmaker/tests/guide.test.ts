@@ -17,7 +17,7 @@ import {
 } from "../src/lib/offers/site-kb-parse.ts";
 import { buildAppState } from "../src/lib/copilot/state.ts";
 import { COPILOT_CRM_TOOLS } from "../src/lib/copilot/screens.ts";
-import { seedDb } from "../src/lib/seed.ts";
+import { sampleDb } from "./fixtures/samples.ts";
 import type { Integrations } from "../src/lib/config.ts";
 
 test("ROI: 5% chat, 2.5% become leads, a tenth of their value as the retainer", () => {
@@ -189,7 +189,7 @@ const NO_KEYS: Integrations = {
 };
 
 test("the copilot sees guides and trials, and has the guide tools", () => {
-  const db = seedDb({ withSamples: true });
+  const db = sampleDb();
   const [a, b] = db.leads;
   const base = { agentId: "ag", token: "tok_1234567890", createdAt: "2026-11-01T00:00:00Z", name: "Ava", knowledge: [], pages: [], faqs: 0, questions: [] };
   a.guide = { ...base, trial: { domain: "a.ca", startedAt: "2026-11-10T00:00:00Z", endsAt: "2026-12-08T00:00:00Z" } };

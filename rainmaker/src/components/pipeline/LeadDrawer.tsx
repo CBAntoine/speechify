@@ -157,7 +157,6 @@ export function LeadDrawer({
               {nicheIcon && <DynIcon name={nicheIcon} size={12} />} {nicheLabel ?? lead.niche}
             </span>
             <TierBadge score={lead.score} />
-            {lead.sample && <span className="badge warm">Sample</span>}
           </div>
           <h2>{lead.name}</h2>
           <div className="muted small" style={{ marginTop: 4 }}>
@@ -432,7 +431,7 @@ export function LeadDrawer({
             <dl className="kv">
               <dt>Added</dt>
               <dd>
-                {timeAgo(lead.createdAt)} by {lead.createdBy?.startsWith("agent:") ? "an agent" : lead.createdBy === "sample" ? "sample data" : "you"}
+                {timeAgo(lead.createdAt)} by {lead.createdBy?.startsWith("agent:") ? "an agent" : "you"}
               </dd>
               <dt>Source</dt>
               <dd>{lead.source.replace("_", " ")}</dd>

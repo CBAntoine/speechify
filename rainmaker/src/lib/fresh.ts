@@ -1,9 +1,44 @@
+import { OLD_PLACEHOLDERS } from "./seed.ts";
 import type { Db, Lead } from "./types.ts";
 
 // "Start fresh": delete every lead and what hangs off it (drafts, tasks, ad
 // campaigns, activity, sample records), keeping paying clients, orders and
 // all settings. Pure: plan it, or apply it to the database; the caller then
 // deletes the leads' ElevenLabs demo agents and knowledge. Unit tested.
+
+// The sample workspace earlier versions created (fictional businesses on
+// ".example" domains), by its exact ids.
+const SAMPLE_TASKS = new Set(["task_sample_1", "task_sample_2", "task_sample_3"]);
+const SAMPLE_ACTIVITY = new Set(["act_s1", "act_s2", "act_s3", "act_s4", "act_s5"]);
+const isSampleLead = (l: Lead) => Boolean(l.sample) || l.source === "sample" || l.id.startsWith("lead_sample_");
+
+/**
+ * Remove all demo data: the sample businesses and everything about them
+ * (drafts, tasks, ad campaigns, activity, even ones you made for them), and
+ * the placeholder offer and pricing if they were never edited. Runs whenever
+ * the database is loaded, so it's gone everywhere. Returns how much it removed.
+ */
+export function removeDemoData(db: Db): number {
+  const gone = new Set(db.leads.filter(isSampleLead).map((l) => l.id));
+  const ofGone = (x: { leadId?: string }) => x.leadId !== undefined && gone.has(x.leadId);
+  const size = () => db.leads.length + db.drafts.length + db.campaigns.length + db.tasks.length + db.activity.length;
+  const before = size();
+  db.leads = db.leads.filter((l) => !gone.has(l.id));
+  db.drafts = db.drafts.filter((d) => !d.sample && !ofGone(d));
+  db.campaigns = db.campaigns.filter((c) => !c.sample && !ofGone(c));
+  db.tasks = db.tasks.filter((t) => !SAMPLE_TASKS.has(t.id) && !ofGone(t));
+  db.activity = db.activity.filter((a) => !SAMPLE_ACTIVITY.has(a.id) && !ofGone(a));
+  let removed = before - size();
+  if (db.profile.coreOffer === OLD_PLACEHOLDERS.coreOffer) {
+    db.profile.coreOffer = "";
+    removed++;
+  }
+  if (db.profile.pricing === OLD_PLACEHOLDERS.pricing) {
+    db.profile.pricing = "";
+    removed++;
+  }
+  return removed;
+}
 
 /** A lead stays when it's a paying client: an active or past-due order, or a live receptionist. */
 export function isClient(db: Db, l: Lead): boolean {
@@ -47,9 +82,9 @@ function targets(db: Db) {
     agents: [...agents],
     knowledge: [...knowledge],
     draft: (d: Db["drafts"][number]) => Boolean(d.sample) || ofGone(d),
-    task: (t: Db["tasks"][number]) => t.id.startsWith("task_sample") || ofGone(t),
+    task: (t: Db["tasks"][number]) => SAMPLE_TASKS.has(t.id) || ofGone(t),
     campaign: (c: Db["campaigns"][number]) => Boolean(c.sample) || ofGone(c),
-    activity: (a: Db["activity"][number]) => a.id.startsWith("act_s") || ofGone(a),
+    activity: (a: Db["activity"][number]) => SAMPLE_ACTIVITY.has(a.id) || ofGone(a),
     kept: db.leads.filter((l) => !ids.has(l.id)).map((l) => l.name),
   };
 }

@@ -6,7 +6,7 @@ import type { AgentRun, Db } from "../src/lib/types.ts";
 
 /** In-memory backend that behaves like the Postgres one (compare-and-set). */
 function memory(): Backend & { writes: number } {
-  let doc = JSON.stringify(seedDb({ withSamples: false }));
+  let doc = JSON.stringify(seedDb());
   let version = 1;
   const runs = new Map<string, AgentRun>();
   return {

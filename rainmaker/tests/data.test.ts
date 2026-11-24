@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildOverpassQuery, parseOverpass, type OsmElement } from "../src/lib/prospecting/osm-parse.ts";
 import { getNiche, matchNiche, NICHES } from "../src/lib/niches.ts";
-import { seedDb } from "../src/lib/seed.ts";
+import { sampleDb } from "./fixtures/samples.ts";
+import { OLD_PLACEHOLDERS, seedDb } from "../src/lib/seed.ts";
+import { removeDemoData } from "../src/lib/fresh.ts";
 import { PLAYBOOKS, COMPLAINTS } from "../src/lib/playbooks.ts";
 import { dueLabel, money, timeAgo } from "../src/lib/format.ts";
 
@@ -55,15 +57,44 @@ test("every niche has what the UI and prompts need", () => {
   }
 });
 
-test("seed data is consistent and clearly sample", () => {
-  const db = seedDb({ withSamples: true });
+test("the test fixture is consistent and clearly fictional", () => {
+  const db = sampleDb();
   assert.ok(db.leads.length >= 5);
   assert.ok(db.leads.every((l) => l.sample && l.source === "sample"));
   assert.ok(db.leads.every((l) => !l.website || l.website.includes(".example")), "fictional domains only");
   const ids = new Set(db.leads.map((l) => l.id));
   assert.ok(db.drafts.every((d) => !d.leadId || ids.has(d.leadId)));
   assert.ok(db.tasks.every((t) => !t.leadId || ids.has(t.leadId)));
-  assert.equal(seedDb({ withSamples: false }).leads.length, 0);
+});
+
+test("the app starts with no demo data and no made-up offer", () => {
+  const db = seedDb();
+  for (const list of [db.leads, db.drafts, db.campaigns, db.tasks, db.activity, db.orders]) assert.equal(list.length, 0);
+  assert.equal(db.profile.coreOffer, "");
+  assert.equal(db.profile.pricing, "");
+});
+
+test("demo data is removed from existing databases, and nothing real goes with it", () => {
+  const db = sampleDb();
+  db.profile.coreOffer = OLD_PLACEHOLDERS.coreOffer;
+  db.profile.pricing = "My own price: $900/mo";
+  const sampleLead = db.leads[0].id;
+  const real = { ...db.leads[0], id: "lead_real", name: "Real Plumbing", sample: false, source: "openstreetmap" as const, createdBy: "user" };
+  db.leads.push(real);
+  db.drafts.push({ ...db.drafts[0], id: "draft_real", sample: false, leadId: "lead_real" });
+  db.drafts.push({ ...db.drafts[0], id: "draft_for_sample", sample: false, leadId: sampleLead });
+  db.tasks.push({ id: "task_real", title: "Call Real Plumbing", leadId: "lead_real", done: false, createdBy: "user", createdAt: "2026-11-24T00:00:00Z" });
+  db.activity.push({ id: "act_sxyz", at: "2026-11-24T00:00:00Z", kind: "system", text: "Real activity whose id happens to start with s" });
+
+  assert.ok(removeDemoData(db) > 0);
+  assert.deepEqual(db.leads.map((l) => l.id), ["lead_real"]);
+  assert.deepEqual(db.drafts.map((d) => d.id), ["draft_real"], "drafts made for a sample business go too");
+  assert.deepEqual(db.tasks.map((t) => t.id), ["task_real"]);
+  assert.deepEqual(db.campaigns, []);
+  assert.deepEqual(db.activity.map((a) => a.id), ["act_sxyz"]);
+  assert.equal(db.profile.coreOffer, "", "the untouched placeholder offer is cleared");
+  assert.equal(db.profile.pricing, "My own price: $900/mo", "an edited price stays");
+  assert.equal(removeDemoData(db), 0, "nothing left to remove");
 });
 
 test("playbooks and complaints all cite https sources", () => {

@@ -1,7 +1,6 @@
 import "server-only";
 import { newId, readDb, update } from "./store";
 import { deleteAssets } from "./assets";
-import { seedDb } from "./seed";
 import { getNiche } from "./niches";
 import { domainOf } from "./net";
 import { STAGES } from "./types";
@@ -92,7 +91,6 @@ export async function saveProspects(
         signals: p.signals,
         audit: p.audit,
         notes: opts.note,
-        sample: p.source === "sample" ? true : undefined,
         createdBy: opts.createdBy,
         createdAt: now(),
         updatedAt: now(),
@@ -294,30 +292,3 @@ export async function updateTask(id: string, patch: Partial<Pick<Task, "title" |
   });
 }
 
-// ── Sample data ───────────────────────────────────────────────
-
-export async function clearSamples(): Promise<void> {
-  await update((db) => {
-    db.leads = db.leads.filter((l) => !l.sample);
-    db.drafts = db.drafts.filter((d) => !d.sample);
-    db.campaigns = db.campaigns.filter((c) => !c.sample);
-    db.tasks = db.tasks.filter((t) => !t.id.startsWith("task_sample"));
-    db.activity = db.activity.filter((a) => !a.id.startsWith("act_s"));
-  });
-}
-
-export async function loadSamples(): Promise<void> {
-  const s = seedDb({ withSamples: true });
-  await update((db) => {
-    const ids = new Set(db.leads.map((l) => l.id));
-    db.leads = [...s.leads.filter((l) => !ids.has(l.id)), ...db.leads];
-    const dids = new Set(db.drafts.map((d) => d.id));
-    db.drafts = [...s.drafts.filter((d) => !dids.has(d.id)), ...db.drafts];
-    const cids = new Set(db.campaigns.map((c) => c.id));
-    db.campaigns = [...s.campaigns.filter((c) => !cids.has(c.id)), ...db.campaigns];
-    const tids = new Set(db.tasks.map((t) => t.id));
-    db.tasks = [...s.tasks.filter((t) => !tids.has(t.id)), ...db.tasks];
-    const aids = new Set(db.activity.map((a) => a.id));
-    db.activity = [...s.activity.filter((a) => !aids.has(a.id)), ...db.activity];
-  });
-}

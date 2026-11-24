@@ -5,6 +5,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
 import type { AgentRun, Db } from "./types";
+import { removeDemoData } from "./fresh";
 import { seedDb } from "./seed";
 import { casUpdate, compactRun, type Backend } from "./store-core";
 
@@ -22,7 +23,14 @@ export function newId(prefix: string): string {
 }
 
 function migrate(raw: Partial<Db>): Db {
-  const base = seedDb({ withSamples: false });
+  const db = upgrade(raw);
+  // No demo data, ever: drop the sample workspace older versions created.
+  removeDemoData(db);
+  return db;
+}
+
+function upgrade(raw: Partial<Db>): Db {
+  const base = seedDb();
   const payments = raw.payments;
   const autopilot = raw.autopilot;
   return {
@@ -107,7 +115,7 @@ function fileBackend(): Backend {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         await fs.copyFile(file, `${file}.corrupt-${Date.now()}`).catch(() => {});
       }
-      cache = seedDb({ withSamples: true });
+      cache = seedDb();
       await persist(JSON.stringify(cache));
     }
     version = 1;
@@ -192,7 +200,7 @@ function pgBackend(url: string): Backend {
       await init();
       let rows = await sql<{ version: string; data: Partial<Db> }[]>`select version, data from rainmaker_store where id = 'main'`;
       if (!rows.length) {
-        const seed = seedDb({ withSamples: true });
+        const seed = seedDb();
         await sql`insert into rainmaker_store (id, version, data) values ('main', 1, ${json({ ...seed, runs: [] })}) on conflict (id) do nothing`;
         rows = await sql<{ version: string; data: Partial<Db> }[]>`select version, data from rainmaker_store where id = 'main'`;
       }

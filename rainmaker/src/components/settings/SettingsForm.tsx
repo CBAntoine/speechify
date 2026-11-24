@@ -23,14 +23,12 @@ export function SettingsForm({
   niches,
   storage,
   passwordSet,
-  sampleCount,
 }: {
   profile: AgencyProfile;
   integrations: Integrations;
   niches: { id: string; label: string }[];
   storage: { kind: "file" | "postgres"; label: string; persistent: boolean };
   passwordSet: boolean;
-  sampleCount: number;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -53,16 +51,6 @@ export function SettingsForm({
       toast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function samples(action: "clear" | "load") {
-    try {
-      await api("/api/settings/samples", { method: "POST", json: { action } });
-      toast(action === "clear" ? "Sample data removed" : "Sample data added");
-      router.refresh();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), "error");
     }
   }
 
@@ -118,7 +106,7 @@ export function SettingsForm({
           </label>
           <label className="field">
             <span>Core offer</span>
-            <textarea className="textarea" rows={3} value={p.coreOffer} onChange={set("coreOffer")} />
+            <textarea className="textarea" rows={3} value={p.coreOffer} onChange={set("coreOffer")} placeholder="Who you help, the result you get them, and why it's low-risk" />
             <small>One or two sentences: who you help, the result, and why it's low-risk.</small>
           </label>
           <label className="field">
@@ -128,7 +116,7 @@ export function SettingsForm({
           <div className="grid-2">
             <label className="field">
               <span>Pricing</span>
-              <input className="input" value={p.pricing} onChange={set("pricing")} />
+              <input className="input" value={p.pricing} onChange={set("pricing")} placeholder="Your setup fee and monthly price" />
             </label>
             <label className="field">
               <span>Phone</span>
@@ -323,20 +311,9 @@ export function SettingsForm({
               </div>
             ) : (
               <div className="muted small">
-                {storage.kind === "postgres" ? "Saved in your Postgres database, shared by every device you sign in from." : "Back this file up to keep your pipeline."} Sample records are marked &ldquo;Sample&rdquo; and use fictional businesses.
+                {storage.kind === "postgres" ? "Saved in your Postgres database, shared by every device you sign in from." : "Back this file up to keep your pipeline."}
               </div>
             )}
-            <div className="row wrap">
-              {sampleCount > 0 ? (
-                <button className="btn sm" onClick={() => void samples("clear")}>
-                  Remove {sampleCount} sample records
-                </button>
-              ) : (
-                <button className="btn sm" onClick={() => void samples("load")}>
-                  Load sample data
-                </button>
-              )}
-            </div>
             <StartFresh />
           </div>
         </section>

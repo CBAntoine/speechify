@@ -51,7 +51,7 @@ async function nominatim<T>(what: string, params: Record<string, string>): Promi
   try {
     res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "en" }, signal: AbortSignal.timeout(15_000) });
   } catch (err) {
-    throw new Error(`Couldn't reach OpenStreetMap to look up ${what} (${friendlyNetError(err, 15_000)}). Try again in a minute, or try sample data.`);
+    throw new Error(`Couldn't reach OpenStreetMap to look up ${what} (${friendlyNetError(err, 15_000)}). Try again in a minute.`);
   }
   if (!res.ok) throw new Error(`OpenStreetMap search failed (HTTP ${res.status}). Try again in a minute.`);
   return (await res.json()) as T[];

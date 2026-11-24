@@ -73,7 +73,7 @@ function prompt(lead: Lead, profile: AgencyProfile, focus: Channel, pitch?: Outr
     "THE AGENCY:",
     `- Name: ${profile.agencyName}`,
     profile.ownerName ? `- Sender: ${profile.ownerName}` : "- Sender: (no name set; sign with the agency name)",
-    `- Offer: ${profile.coreOffer}`,
+    profile.coreOffer ? `- Offer: ${profile.coreOffer}` : "- Offer: not set (describe the services plainly; don't invent guarantees or terms)",
     `- Services: ${profile.services.join(", ")}`,
     profile.pricing ? `- Pricing: ${profile.pricing} (don't put prices in a first email)` : "",
     profile.proof ? `- Proof / results: ${profile.proof}` : "- Proof: none given (don't invent any)",

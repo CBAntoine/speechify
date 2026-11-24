@@ -49,7 +49,7 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
       top_open_leads: [...open]
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         .slice(0, 8)
-        .map((l) => ({ lead_id: l.id, name: l.name, stage: l.stage, score: l.score ?? null, niche: l.niche, city: l.city ?? null, next_step: l.nextStep ?? null, sample: Boolean(l.sample) })),
+        .map((l) => ({ lead_id: l.id, name: l.name, stage: l.stage, score: l.score ?? null, niche: l.niche, city: l.city ?? null, next_step: l.nextStep ?? null })),
     },
     inbox: {
       drafts_waiting: pending.length,
@@ -115,6 +115,5 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
     ad_campaigns: { total: db.campaigns.length, latest: db.campaigns.slice(0, 3).map((c) => ({ campaign_id: c.id, business: c.businessName, made: ago(c.createdAt, now) })) },
     agent_runs: db.runs.slice(0, 3).map((r) => ({ run_id: r.id, agent: r.agentId, goal: r.goal.slice(0, 140), status: r.status, started: ago(r.startedAt, now) })),
     recent_activity: db.activity.slice(0, 8).map((a) => `${ago(a.at, now)}: ${a.text}`),
-    sample_data_present: db.leads.some((l) => l.sample),
   };
 }

@@ -22,9 +22,9 @@ npm run dev                    # http://localhost:3100
 
 With no keys, it runs in **demo mode**:
 - Search, website audits, scoring, the pipeline, the inbox, playbooks and template-based ads and emails all work.
-- Search uses free OpenStreetMap data, or fictional sample businesses if the map service can't be reached.
+- Search uses free OpenStreetMap data and city licence lists. If they can't be reached, it says so and you try again; it never shows made-up businesses.
 - Agents follow a fixed script that uses the real tools.
-- The first run creates a small workspace of fictional sample businesses. Remove them in Settings.
+- There's no demo data: the pipeline, inbox and ads start empty, and your offer and pricing stay blank until you write them in Settings (agents won't make them up). Databases from earlier versions drop their sample businesses on the next load.
 
 Add `ANTHROPIC_API_KEY` to switch on Claude. Claude then writes the ads and outreach, researches the web, and runs the agents for real.
 
@@ -59,7 +59,7 @@ All of them, with defaults and optional overrides, are in [.env.example](.env.ex
 | **Sales** | Orders from the store: monthly recurring revenue, money collected this month, lifetime revenue, cancellations and unfinished checkouts. Each order shows its payment status and onboarding steps. Run or retry onboarding, open Stripe's billing portal for the client, cancel a subscription, or record a sale made outside the store. |
 | **Store & pricing** | Turn the store on, set every price and setup fee (with the margin at full usage beside each), hide products, pick the currency, yearly billing, headline and assistant name. Connect Stripe and PayPal webhooks with one button each, and sync the AI sales assistant. |
 | **Playbooks** | 14 client-finding plays: 13 from agency surveys and practitioner reports, and the AI website guide offer from your own playbook. Plus niche cheat sheets and a table of common GoHighLevel complaints next to what Rainmaker does instead. Research claims link to their source. |
-| **Settings** | Agency profile (agents read it every run), connection status, sample data, and **Start fresh**: deletes every lead with its drafts, tasks, ad campaigns and activity, and the demo receptionists and AI guides built for them in ElevenLabs, after you type DELETE. Paying clients, orders and all settings stay. |
+| **Settings** | Agency profile (agents read it every run), connection status, where your data is stored, and **Start fresh**: deletes every lead with its drafts, tasks, ad campaigns and activity, and the demo receptionists and AI guides built for them in ElevenLabs, after you type DELETE. Paying clients, orders and all settings stay. |
 
 ### How a prospect is scored
 

@@ -43,7 +43,7 @@ function has(signals: Signal[] | undefined, id: string) {
   return Boolean(signals?.some((s) => s.id === id));
 }
 
-const SOURCE_LABEL: Record<string, string> = { google_places: "Google Places", openstreetmap: "OpenStreetMap", open_data: "City licences", web: "Claude web research", sample: "Sample data" };
+const SOURCE_LABEL: Record<string, string> = { google_places: "Google Places", openstreetmap: "OpenStreetMap", open_data: "City licences", web: "Claude web research" };
 
 export function ProspectFinder({
   niches,
@@ -76,7 +76,7 @@ export function ProspectFinder({
   const nicheInfo = niches.find((n) => n.id === niche);
 
   const search = useCallback(
-    async (source?: "sample") => {
+    async () => {
       const nicheText = niche === "custom" ? custom.trim() : niche;
       if (!nicheText || (!location.trim() && !near)) {
         toast("Pick a niche and a city first", "error");
@@ -88,13 +88,11 @@ export function ProspectFinder({
       const timers: ReturnType<typeof setTimeout>[] = [];
       const later = (ms: number, text: string) => timers.push(setTimeout(() => setPhase(text), ms));
       // 20 results: one Google Places request per search when a key is set.
-      const body = { niche: nicheText, location: near ? "" : location, ...(near ? { lat: near.lat, lon: near.lon } : {}), radiusKm: radius, limit: 20, audit: 10, source };
+      const body = { niche: nicheText, location: near ? "" : location, ...(near ? { lat: near.lat, lon: near.lon } : {}), radiusKm: radius, limit: 20, audit: 10 };
       try {
-        setPhase(source === "sample" ? "Loading sample businesses…" : places ? "Searching Google Places…" : "Searching OpenStreetMap…");
-        if (source !== "sample") {
-          later(7000, "Checking their websites for gaps…");
-          later(16000, "Scoring who needs you most…");
-        }
+        setPhase(places ? "Searching Google Places…" : "Searching OpenStreetMap…");
+        later(7000, "Checking their websites for gaps…");
+        later(16000, "Scoring who needs you most…");
         const res = await api<Result>("/api/prospects/search", { method: "POST", json: body });
         setResult(res);
         if (!near) savePlace(location);
@@ -358,9 +356,6 @@ export function ProspectFinder({
               <button className="btn" onClick={() => void search()}>
                 Try again
               </button>
-              <button className="btn ghost" onClick={() => void search("sample")}>
-                Use sample businesses instead
-              </button>
             </div>
           </div>
         )}
@@ -380,7 +375,7 @@ export function ProspectFinder({
                     </span>
                   ))
                 ) : (
-                  <span className={`badge ${result.source === "sample" ? "warm" : "outline"}`}>{SOURCE_LABEL[result.source] ?? result.source}</span>
+                  <span className="badge outline">{SOURCE_LABEL[result.source] ?? result.source}</span>
                 )}
               </div>
               {shown.length > 0 && (
@@ -394,7 +389,7 @@ export function ProspectFinder({
                 <Lightbulb size={15} />
                 <span>
                   {result.note}
-                  {result.source !== "google_places" && result.source !== "sample" && (
+                  {result.source !== "google_places" && (
                     <>
                       {" "}
                       <Link href="/settings">Settings</Link>
@@ -482,7 +477,7 @@ export function ProspectFinder({
                   </Empty>
                 ) : (
                   <Empty icon={<Radar size={18} />} title={`No ${result.niche.plural} found here`}>
-                    {result.source !== "google_places" && result.source !== "sample" ? (
+                    {result.source !== "google_places" ? (
                       <>
                         None of the free sources list any near {result.location}. Try a wider radius or a bigger city nearby, or{" "}
                         <Link href="/settings">add a Claude API key</Link> so Rainmaker also searches the web.

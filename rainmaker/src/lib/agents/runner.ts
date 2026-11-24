@@ -103,7 +103,7 @@ function kickoff(profile: AgencyProfile, goal: string): string {
     `- Name: ${profile.agencyName}`,
     profile.ownerName ? `- Owner (sign messages as): ${profile.ownerName}` : "- Owner name: not set (sign as the agency)",
     profile.city ? `- Based in: ${profile.city}` : "",
-    `- Core offer: ${profile.coreOffer}`,
+    profile.coreOffer ? `- Core offer: ${profile.coreOffer}` : "- Core offer: not set (describe the services plainly; don't invent guarantees or terms)",
     `- Services: ${profile.services.join(", ")}`,
     profile.pricing ? `- Pricing: ${profile.pricing}` : "",
     profile.proof ? `- Proof and results: ${profile.proof}` : "- Proof and results: none given (don't invent any)",
@@ -541,13 +541,10 @@ async function demoProspector(l: Live, goal: string, profile: AgencyProfile) {
   const city = parseCity(goal) ?? (profile.city || "Austin, TX");
   emit(l, { kind: "thinking", text: "Thinking" });
   await pause(400);
-  let res = await callTool(l, "find_businesses", { niche: niche.id, location: city, limit: 20, audit_top: 8 });
+  const res = await callTool(l, "find_businesses", { niche: niche.id, location: city, limit: 20, audit_top: 8 });
   if (res.isError) {
-    emit(l, { kind: "message", text: `Map search failed (${res.summary}). Using sample businesses so you can see the workflow.` });
-    const { findBusinesses } = await import("@/lib/prospecting/search");
-    const sample = await findBusinesses({ niche: niche.id, location: city, limit: 12, source: "sample" });
-    for (const p of sample.prospects) l.ctx.prospects.set(p.key, p);
-    res = { text: "", isError: false, summary: `${sample.prospects.length} sample businesses` };
+    emit(l, { kind: "message", text: `The business search failed (${res.summary}), so nothing was saved. Try again in a minute, or try another city.` });
+    return;
   }
   const pool = [...l.ctx.prospects.values()].filter((p) => !p.savedLeadId).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const picks = pool.filter((p) => (p.score ?? 0) >= 45).slice(0, 6);

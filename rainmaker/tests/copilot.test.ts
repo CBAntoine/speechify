@@ -4,7 +4,7 @@ import { GUIDE, searchGuide } from "../src/lib/copilot/guide.ts";
 import { COPILOT_CRM_TOOLS, SCREENS, matchScreen, screenById, screenForPath } from "../src/lib/copilot/screens.ts";
 import { buildAppState } from "../src/lib/copilot/state.ts";
 import { briefingWindow, buildBriefing } from "../src/lib/copilot/briefing.ts";
-import { seedDb } from "../src/lib/seed.ts";
+import { sampleDb } from "./fixtures/samples.ts";
 import type { Integrations } from "../src/lib/config.ts";
 import type { Db } from "../src/lib/types.ts";
 
@@ -58,7 +58,7 @@ test("the copilot reuses the agents' CRM tools", () => {
 });
 
 test("the app snapshot covers everything and stays small", () => {
-  const db = seedDb({ withSamples: true });
+  const db = sampleDb();
   const s = buildAppState(db, NO_KEYS, { baseUrl: "https://agency.example", path: "/pipeline", now: new Date("2026-11-22T15:00:00Z") });
   assert.equal(s.screen, "Pipeline");
   assert.ok(s.pipeline.top_open_leads.length > 0);
@@ -68,13 +68,12 @@ test("the app snapshot covers everything and stays small", () => {
   assert.ok(s.store.offers.every((o) => o.page.startsWith("https://agency.example/store/")));
   assert.equal(s.connected.claude_ai, false);
   assert.equal(typeof s.autopilot.on, "boolean");
-  assert.ok(s.sample_data_present);
   const size = JSON.stringify(s).length;
   assert.ok(size < 20_000, `snapshot is ${size} bytes`);
 });
 
 test("the copilot opens with what changed since the last visit", () => {
-  const seed = seedDb({ withSamples: true });
+  const seed = sampleDb();
   const now = new Date("2026-11-23T15:00:00Z");
   const db: Db = { ...seed, drafts: [], tasks: [], activity: [], orders: [] };
   const lead = seed.leads[0];

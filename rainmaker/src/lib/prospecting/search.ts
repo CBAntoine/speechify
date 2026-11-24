@@ -22,7 +22,7 @@ export interface SearchInput {
   radiusKm?: number;
   /** Audit the websites of the first N results. */
   audit?: number;
-  source?: "auto" | "google" | "osm" | "sample";
+  source?: "auto" | "google" | "osm";
   /** Search around coordinates (e.g. the phone's GPS) instead of geocoding `location`. */
   near?: { lat: number; lon: number };
 }
@@ -96,77 +96,6 @@ export async function auditProspects(prospects: Prospect[], max: number): Promis
   });
 }
 
-const SAMPLE_PREFIX = ["Cedar Ridge", "Lakeside", "Northstar", "Oak & Iron", "Harbor", "Bluebird", "Summit", "Riverbend", "Maple Street", "Golden Hour", "Pinecrest", "Copper Canyon"];
-
-/** Small deterministic PRNG so sample data is stable per city. */
-function rng(seedText: string) {
-  let h = 2166136261;
-  for (const c of seedText) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
-  return () => {
-    h += 0x6d2b79f5;
-    let t = h;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Fictional businesses for trying the app offline. Always labelled "sample". */
-export function sampleProspects(niche: Niche, location: string, n: number): Prospect[] {
-  const rand = rng(`${niche.id}|${location.toLowerCase()}`);
-  const pick = (p: number) => rand() < p;
-  const out: Prospect[] = [];
-  const offset = Math.floor(rand() * SAMPLE_PREFIX.length);
-  for (let i = 0; i < Math.min(n, SAMPLE_PREFIX.length); i++) {
-    const prefix = SAMPLE_PREFIX[(i + offset) % SAMPLE_PREFIX.length];
-    const label = niche.label.replace(/ \/.*$/, "").replace(/\b\w/g, (c) => c.toUpperCase());
-    const name = `${prefix} ${label}`;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const hasSite = pick(0.8);
-    const reviewCount = Math.floor(3 + rand() * 240);
-    out.push({
-      key: `sample:${slug}`,
-      name,
-      niche: niche.id,
-      category: niche.label,
-      address: `${location} (sample)`,
-      city: location,
-      phone: `(555) 555-01${String(10 + i).padStart(2, "0")}`,
-      website: hasSite ? `https://${slug}.example` : undefined,
-      rating: Math.round((3.6 + rand() * 1.35) * 10) / 10,
-      reviewCount,
-      source: "sample",
-      audit: hasSite
-        ? {
-            url: `https://${slug}.example`,
-            fetchedAt: new Date().toISOString(),
-            reachable: pick(0.92),
-            https: pick(0.8),
-            status: 200,
-            responseMs: Math.round(600 + rand() * 4200),
-            mobileViewport: pick(0.7),
-            analytics: pick(0.55) ? ["Google Analytics 4"] : [],
-            pixels: pick(0.35) ? ["Meta Pixel"] : [],
-            booking: pick(0.35) ? ["Booking link or form"] : [],
-            chat: pick(0.2) ? ["Podium"] : [],
-            reviewsWidgets: [],
-            hasContactForm: pick(0.7),
-            hasClickToCall: pick(0.6),
-            hasSchema: pick(0.3),
-            hasOgImage: true,
-            copyrightYear: 2017 + Math.floor(rand() * 10),
-            socials: pick(0.65) ? ["Facebook"] : [],
-            emails: [],
-            phones: [],
-            title: name,
-            description: pick(0.7) ? `${name} in ${location}` : undefined,
-          }
-        : undefined,
-    });
-  }
-  return out;
-}
-
 interface Normalized {
   niche: Niche;
   near?: { lat: number; lon: number };
@@ -213,7 +142,7 @@ async function finish(
   audit?: number
 ): Promise<SearchResult> {
   let prospects = found.prospects;
-  if (audit && audit > 0 && found.source !== "sample") {
+  if (audit && audit > 0) {
     prospects = await auditProspects(prospects, audit);
   }
   prospects = scoreAll(prospects, n.niche);
@@ -272,10 +201,6 @@ const OSM = "OpenStreetMap";
 
 export async function findBusinesses(input: SearchInput): Promise<SearchResult> {
   const n = normalize(input);
-  if (n.wanted === "sample") {
-    const prospects = sampleProspects(n.niche, n.location, n.limit);
-    return finish(n, { source: "sample", prospects, note: "Sample businesses (fictional) so you can try the workflow offline." }, input.audit);
-  }
   if (!inHouse(n.wanted)) {
     const prospects = await searchPlaces({ niche: n.niche, location: n.location, limit: n.limit, near: n.near ? { ...n.near, radiusKm: n.radiusKm } : undefined });
     return finish(n, { source: "google_places", prospects }, input.audit);
