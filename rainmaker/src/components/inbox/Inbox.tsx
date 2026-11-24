@@ -277,7 +277,7 @@ export function Inbox({ drafts: initial, tasks: initialTasks, agents, resend, le
                   </div>
                 )}
                 {sel.channel === "email" && !resend && sel.status === "pending" && (
-                  <div className="faint small">Tip: set RESEND_API_KEY and RESEND_FROM to send straight from here. Until then, &ldquo;Open in my email&rdquo; fills in your own mail app.</div>
+                  <div className="faint small">Tip: add your Resend key and a Send from address in Settings → API keys to send straight from here. Until then, &ldquo;Open in my email&rdquo; fills in your own mail app.</div>
                 )}
               </div>
             </>

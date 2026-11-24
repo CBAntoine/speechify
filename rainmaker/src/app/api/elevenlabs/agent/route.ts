@@ -11,7 +11,7 @@ export const maxDuration = 60;
 export const GET = route(async () => {
   const agentId = await resolveSalesAgentId();
   const db = await readDb();
-  if (!elevenEnabled()) return Response.json({ connected: false, agentId, reason: "Add ELEVENLABS_API_KEY" });
+  if (!elevenEnabled()) return Response.json({ connected: false, agentId, reason: "Add your ElevenLabs API key in Settings → API keys" });
   if (!agentId) return Response.json({ connected: false, reason: "No sales assistant yet: press Sync to create one" });
   try {
     const a = await eleven<{ name?: string }>("GET", `/v1/convai/agents/${agentId}`);
@@ -23,7 +23,7 @@ export const GET = route(async () => {
 
 /** Create the assistant, or push the prompt and tools from the code to it. */
 export const POST = route(async () => {
-  if (!elevenEnabled()) throw new HttpError(400, "Add ELEVENLABS_API_KEY first");
+  if (!elevenEnabled()) throw new HttpError(400, "Add your ElevenLabs API key in Settings → API keys first");
   const res = await syncSalesAgent((await getProfile()).agencyName);
   return Response.json(res);
 });

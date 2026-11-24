@@ -36,7 +36,7 @@ function facts(order: Order, lead: Lead | undefined, profile: AgencyProfile): Bu
 
 async function agentStep(order: Order, lead: Lead | undefined, profile: AgencyProfile): Promise<StepResult> {
   if (lead?.clientAgentId) return { status: "done", detail: `Agent ready: ${agentDashboardUrl(lead.clientAgentId)}` };
-  if (!elevenEnabled()) return { status: "skipped", detail: "Add ELEVENLABS_API_KEY to build client agents automatically. Until then, build it in ElevenLabs by hand." };
+  if (!elevenEnabled()) return { status: "skipped", detail: "Add your ElevenLabs API key in Settings → API keys to build client agents automatically. Until then, build it in ElevenLabs by hand." };
   const f = facts(order, lead, profile);
   let agentId: string;
   if (lead?.demo?.agentId) {
@@ -121,7 +121,7 @@ async function welcomeStep(order: Order, lead: Lead | undefined, offer: Offer, p
   if (!to) return { status: "skipped", detail: "No email address on the order" };
   if (!resendEnabled()) {
     await createTask({ title: `Send ${order.business ?? to} a welcome email (email sending isn't connected)`, leadId: lead?.id, createdBy: "store" });
-    return { status: "skipped", detail: "Email sending isn't connected (RESEND_API_KEY + RESEND_FROM): added a task to send it yourself" };
+    return { status: "skipped", detail: "Email sending isn't connected (Resend key and Send from address in Settings → API keys): added a task to send it yourself" };
   }
   await sendEmail({ to, subject: `Welcome to ${profile.agencyName}: next steps for your ${offer.name}`, text: welcomeText(order, offer, profile), replyTo: profile.email || undefined });
   return { status: "done", detail: `Sent to ${to}` };

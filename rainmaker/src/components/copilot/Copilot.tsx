@@ -7,7 +7,7 @@ import {
 } from "@elevenlabs/react";
 import { ArrowUpRight, Mic, MicOff, MousePointerClick, PhoneOff, Send, Sparkles, X } from "lucide-react";
 import { GUIDE, searchGuide } from "@/lib/copilot/guide";
-import { matchScreen, screenById, screenForPath, type CopilotCrmTool } from "@/lib/copilot/screens";
+import { matchKeyService, matchScreen, screenById, screenForPath, type CopilotCrmTool } from "@/lib/copilot/screens";
 import { clickElement, fillElement, findOnScreen, pointTo, readScreen } from "./dom";
 
 // The Rainmaker copilot: an ElevenLabs voice and chat agent that runs the app
@@ -159,11 +159,13 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
         if (str(p.agent)) q.set("agent", str(p.agent));
         if (str(p.goal)) q.set("goal", str(p.goal));
       }
+      // Settings > API keys, scrolled to one service's fields for the user to paste into.
+      if (s.id === "settings" && str(p.key_for)) q.set("keys", str(p.key_for).toLowerCase().replace(/[^a-z]/g, ""));
       const href = `${s.path}${q.size ? `?${q}` : ""}`;
       router.push(href);
       push("tool", `Opened ${s.label}`);
       await waitForPath(s.path);
-      return `${s.label} is open on the user's screen.${q.has("go") ? " The search is running on screen; call read_screen in a few seconds to see the results." : ""}`;
+      return `${s.label} is open on the user's screen.${q.has("go") ? " The search is running on screen; call read_screen in a few seconds to see the results." : ""}${q.has("keys") ? " The API keys card is scrolled to that service with its field highlighted: ask them to paste the key and press Save." : ""}`;
     },
     [push, router]
   );
@@ -250,6 +252,12 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   const answerLocally = useCallback(
     (text: string, already = false) => {
       if (!already) push("user", text);
+      const keyFor = matchKeyService(text);
+      if (keyFor) {
+        void goTo({ screen: "settings", key_for: keyFor.id });
+        push("agent", `Here's where your ${keyFor.name} key goes. Paste it and press Save: it stays saved until you remove it.`);
+        return;
+      }
       const s = matchScreen(text);
       if (s && (/\b(go|open|show|take|navigate|bring|switch|jump|view)\b/i.test(text) || text.trim().split(/\s+/).length <= 3)) {
         void goTo({ screen: s.id });
@@ -272,7 +280,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
       }
       push(
         "agent",
-        voice ? "I couldn't reach the AI just now. I can still open screens: try “open the pipeline”." : "Right now I can open screens and explain features. Add ELEVENLABS_API_KEY and I'll take actions and talk too."
+        voice ? "I couldn't reach the AI just now. I can still open screens: try “open the pipeline”." : "Right now I can open screens and explain features. Add your ElevenLabs key in Settings → API keys and I'll take actions and talk too."
       );
     },
     [goTo, push, voice]
@@ -453,7 +461,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
             <p>
               {voice
                 ? `Hi${ownerName ? ` ${ownerName.split(" ")[0]}` : ""}. Tell me what to do in Rainmaker: I can open screens, click and fill things in, find clients, work your pipeline, write ads and explain any feature.`
-                : "I can open any screen and explain how every feature works. Add ELEVENLABS_API_KEY and I'll also take actions for you, by voice or text."}
+                : "I can open any screen and explain how every feature works. Add your ElevenLabs key in Settings → API keys and I'll also take actions for you, by voice or text."}
             </p>
             {voice && (
               <div className="row" style={{ gap: 8, justifyContent: "center", flexWrap: "wrap" }}>

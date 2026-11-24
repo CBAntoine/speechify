@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
+import { Bot, Check, CircleX, Database, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
 import { api, useToast } from "@/components/client";
 import { InstallButton } from "@/components/pwa";
 import { CopilotConnection } from "./CopilotConnection";
@@ -24,6 +24,7 @@ export function SettingsForm({
   storage,
   passwordSet,
   sampleCount,
+  keysCard,
 }: {
   profile: AgencyProfile;
   integrations: Integrations;
@@ -31,6 +32,8 @@ export function SettingsForm({
   storage: { kind: "file" | "postgres"; label: string; persistent: boolean };
   passwordSet: boolean;
   sampleCount: number;
+  /** Settings > API keys, rendered by the page. */
+  keysCard: React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -168,10 +171,12 @@ export function SettingsForm({
       </form>
 
       <div className="stack" style={{ gap: 14 }}>
+        {keysCard}
+
         <section className="card">
           <div className="card-head">
             <h2>Connections</h2>
-            <span className="faint small">Set in .env.local</span>
+            <span className="faint small">What&apos;s switched on</span>
           </div>
           <div className="list">
             <div className="list-item">
@@ -186,7 +191,7 @@ export function SettingsForm({
                 <div className="muted small">
                   {i.claude
                     ? `Model ${i.model}. Writes ads and outreach, researches the web, finds clients on the web and runs the agents.`
-                    : "Set ANTHROPIC_API_KEY to turn on AI ads, AI outreach, web research, web search in Find clients, and thinking agents."}
+                    : "Add your Claude API key in API keys above to turn on AI ads, AI outreach, web research, web search in Find clients, and thinking agents."}
                 </div>
               </span>
             </div>
@@ -239,7 +244,7 @@ export function SettingsForm({
                   <li>OpenStreetMap, the free world map, through its Nominatim search server.</li>
                   <li>City business-licence lists: Toronto, Vancouver, Calgary and Edmonton publish theirs as open data, contractors included.</li>
                   <li>
-                    Claude web research: {i.claude ? "on. It runs when the free sources find fewer than 20 businesses, at roughly 10–30 cents a search." : "turns on with ANTHROPIC_API_KEY and finds businesses in any town, at roughly 10–30 cents a search."}
+                    Claude web research: {i.claude ? "on. It runs when the free sources find fewer than 20 businesses, at roughly 10–30 cents a search." : "turns on with your Claude key and finds businesses in any town, at roughly 10–30 cents a search."}
                   </li>
                   <li>Rainmaker&apos;s crawler visits each business&apos;s own website for its phone, email and the gaps you sell against, finds sites that weren&apos;t listed, and follows each site&apos;s robots.txt.</li>
                 </ul>
@@ -274,7 +279,7 @@ export function SettingsForm({
                       , create an <b>API key</b>, and restrict it to Places API (New).
                     </li>
                     <li>
-                      In your Vercel project, open <b>Settings → Environment Variables</b>, add <code>GOOGLE_PLACES_API_KEY</code> with the key, then redeploy.
+                      Paste it under <b>Google Places</b> in API keys above and press <b>Save</b>.
                     </li>
                   </ol>
                 )}
@@ -289,7 +294,7 @@ export function SettingsForm({
                   <b>Sending email</b>
                   <Status ok={i.resend} on="Resend" off="Your mail app" />
                 </div>
-                <div className="muted small">Set RESEND_API_KEY and RESEND_FROM (a sender on a domain you verified) to send approved emails from the Inbox.</div>
+                <div className="muted small">Add your Resend API key and a Send from address (on a domain you verified) in API keys above to send approved emails from the Inbox.</div>
               </span>
             </div>
             <div className="list-item">
@@ -347,16 +352,6 @@ export function SettingsForm({
           </div>
           <div className="row wrap">
             <InstallButton className="btn primary sm" label="Install on this device" />
-          </div>
-        </section>
-
-        <section className="card card-pad stack" style={{ gap: 8 }}>
-          <div className="row" style={{ gap: 8 }}>
-            <KeyRound size={15} className="faint" />
-            <b>Where keys go</b>
-          </div>
-          <div className="muted small">
-            Copy <span className="mono">.env.example</span> to <span className="mono">.env.local</span> in the <span className="mono">rainmaker</span> folder, fill in what you have, and restart. Keys stay on your server; the browser never sees them.
           </div>
         </section>
       </div>

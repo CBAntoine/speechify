@@ -47,7 +47,7 @@ export function CopilotConnection({ elevenlabs }: { elevenlabs: boolean }) {
         <div className="muted small">
           {elevenlabs
             ? "An ElevenLabs agent that runs Rainmaker for you by voice or text: it opens screens, clicks and fills things in, finds clients, works the pipeline and writes ads. Open it with Ctrl+K (Cmd+K on a Mac)."
-            : "Set ELEVENLABS_API_KEY to talk to the copilot and let it take actions. Until then it opens screens and explains features."}
+            : "Add your ElevenLabs API key in API keys above to talk to the copilot and let it take actions. Until then it opens screens and explains features."}
           {elevenlabs && st && !st.connected && st.reason ? ` ${st.reason}.` : ""}
         </div>
         <div className="row wrap" style={{ gap: 6, marginTop: 8 }}>

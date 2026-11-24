@@ -43,7 +43,7 @@ function explain(status: number, detail: unknown): string {
       : Array.isArray(d?.detail)
         ? d.detail.map((x) => x.msg).filter(Boolean).join("; ")
         : (d?.detail as { message?: string } | undefined)?.message ?? d?.message;
-  if (status === 401) return "ElevenLabs rejected the API key. Check ELEVENLABS_API_KEY and its permissions.";
+  if (status === 401) return "ElevenLabs rejected the API key. Check it, and its permissions, in Settings → API keys.";
   if (status === 402) return `Your ElevenLabs plan doesn't include this${raw ? `: ${raw}` : ""}. Image & Video needs the Pro plan or above.`;
   if (status === 403) return `The ElevenLabs key isn't allowed to do this${raw ? `: ${raw}` : ""}. Give the key the matching permission.`;
   if (status === 429) return "ElevenLabs is rate limiting or out of credits. Wait a minute or top up.";
@@ -51,7 +51,7 @@ function explain(status: number, detail: unknown): string {
 }
 
 export async function eleven<T = Record<string, unknown>>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown, timeoutMs = 30_000): Promise<T> {
-  if (!elevenEnabled()) throw new ElevenError("Add ELEVENLABS_API_KEY to switch on voice agents, voiceovers and art", 400);
+  if (!elevenEnabled()) throw new ElevenError("Add your ElevenLabs API key in Settings → API keys to switch on voice agents, voiceovers and art", 400);
   const res = await fetch(`${ELEVEN_API}${path}`, {
     method,
     headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY!, ...(body === undefined ? {} : { "content-type": "application/json" }) },
@@ -67,7 +67,7 @@ export async function eleven<T = Record<string, unknown>>(method: "GET" | "POST"
 
 /** For endpoints that return audio or images. */
 export async function elevenBytes(method: "GET" | "POST", path: string, body?: unknown, timeoutMs = 90_000): Promise<{ bytes: Buffer; mime: string }> {
-  if (!elevenEnabled()) throw new ElevenError("Add ELEVENLABS_API_KEY to switch on voiceovers", 400);
+  if (!elevenEnabled()) throw new ElevenError("Add your ElevenLabs API key in Settings → API keys to switch on voiceovers", 400);
   const res = await fetch(`${ELEVEN_API}${path}`, {
     method,
     headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY!, ...(body === undefined ? {} : { "content-type": "application/json" }) },

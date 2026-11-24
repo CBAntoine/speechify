@@ -27,6 +27,9 @@ let registry = new Map<string, HTMLElement>();
 
 const squash = (s: string | null | undefined, max = 120) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
+/** Password and API key fields: the copilot never reads or types what's in them. */
+const isSecret = (el: Element) => (el instanceof HTMLInputElement && el.type === "password") || el.closest("[data-secret]") !== null;
+
 function visible(el: HTMLElement): boolean {
   if (el.closest("[data-copilot-ignore]")) return false;
   if (el.hidden || el.closest("[hidden]")) return false;
@@ -108,7 +111,7 @@ export function readScreen(path: string) {
     const ctx = contextOf(el, label);
     if (ctx) item.context = ctx;
     if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) item.checked = el.checked;
-    else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) item.value = el.value.slice(0, 200);
+    else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) item.value = isSecret(el) ? (el.value ? "(hidden)" : "") : el.value.slice(0, 200);
     if (el instanceof HTMLSelectElement) {
       item.value = el.selectedOptions[0]?.text;
       item.options = [...el.options].slice(0, 30).map((o) => o.text);
@@ -181,7 +184,7 @@ export function fillElement(id: string, value: string): { ok: boolean; text: str
     return { ok: true, text: `Chose "${opt.text}" in "${label}".`, label };
   }
   if (el instanceof HTMLInputElement && ["checkbox", "radio"].includes(el.type)) return { ok: false, text: `"${label}" is a switch or checkbox: use click.` };
-  if (el instanceof HTMLInputElement && el.type === "password") return { ok: false, text: "Passwords are typed by the user, not the copilot." };
+  if (isSecret(el)) return { ok: false, text: "Passwords and API keys are pasted by the user, never by the copilot. Point to the field so they can paste it." };
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return { ok: false, text: `"${label}" isn't a field you can type into.` };
   if (el.readOnly || el.disabled) return { ok: false, text: `"${label}" can't be edited.` };
   setNativeValue(el, value);

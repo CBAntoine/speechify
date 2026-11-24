@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { AutopilotBusy, runAutopilot } from "@/lib/autopilot/run";
 import { siteUrl, siteUrlStatic } from "@/lib/site";
+import { syncSavedKeys } from "@/lib/store";
 
 // Scheduled Autopilot run. Vercel Cron calls it with
 // "Authorization: Bearer $CRON_SECRET" (see vercel.json); any other
@@ -20,6 +21,7 @@ function authorized(req: Request): boolean {
 }
 
 export async function GET(req: Request) {
+  await syncSavedKeys().catch(() => undefined);
   if (!process.env.CRON_SECRET) return Response.json({ error: "Set CRON_SECRET to schedule Autopilot" }, { status: 401 });
   if (!authorized(req)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {

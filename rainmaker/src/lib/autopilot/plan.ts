@@ -122,7 +122,7 @@ export function canAutoSend(
   resend: boolean
 ): { ok: boolean; reason?: string } {
   if (!config.autoSend) return { ok: false, reason: "Auto-send is off" };
-  if (!resend) return { ok: false, reason: "Email sending isn't connected (RESEND_API_KEY + RESEND_FROM)" };
+  if (!resend) return { ok: false, reason: "Email sending isn't connected (add Resend in Settings → API keys)" };
   if (draft.status !== "pending") return { ok: false, reason: "Not a pending draft" };
   if (draft.channel !== "email") return { ok: false, reason: "Only emails are sent automatically" };
   if (!draft.to || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(draft.to)) return { ok: false, reason: "No valid email address" };

@@ -180,11 +180,11 @@ export function AutopilotPanel({
               onChange={(v) => set("buildDemos", v)}
               disabled={!i.elevenlabs}
               label="Build a demo AI receptionist from their website"
-              hint={i.elevenlabs ? `The outreach links to a private page where they can talk to it.${siteUrlSet ? "" : " Set SITE_URL so email links work."}` : "Needs ELEVENLABS_API_KEY."}
+              hint={i.elevenlabs ? `The outreach links to a private page where they can talk to it.${siteUrlSet ? "" : " Set SITE_URL so email links work."}` : "Needs your ElevenLabs key (Settings → API keys)."}
             />
-            <Switch checked={c.draftOutreach} onChange={(v) => set("draftOutreach", v)} label="Write the first email and a 3-step follow-up sequence" hint={i.claude ? "Written by Claude from their audit, pitching the product that fits them best." : "Templates until you add ANTHROPIC_API_KEY."} />
+            <Switch checked={c.draftOutreach} onChange={(v) => set("draftOutreach", v)} label="Write the first email and a 3-step follow-up sequence" hint={i.claude ? "Written by Claude from their audit, pitching the product that fits them best." : "Templates until you add your Claude key in Settings → API keys."} />
             <Switch checked={c.buildAds} onChange={(v) => set("buildAds", v)} label="Build a sample ad campaign for them" hint="Meta, Google and video ads they can see before they buy." />
-            <Switch checked={c.makeArt} onChange={(v) => set("makeArt", v)} disabled={!i.elevenlabs} label="Add custom ad art in their brand colours" hint={i.elevenlabs ? "ElevenLabs Image & Video: needs the Pro plan or above, and uses credits." : "Needs ELEVENLABS_API_KEY."} />
+            <Switch checked={c.makeArt} onChange={(v) => set("makeArt", v)} disabled={!i.elevenlabs} label="Add custom ad art in their brand colours" hint={i.elevenlabs ? "ElevenLabs Image & Video: needs the Pro plan or above, and uses credits." : "Needs your ElevenLabs key (Settings → API keys)."} />
             <Switch checked={c.followUps} onChange={(v) => set("followUps", v)} label="Draft follow-ups when they're due" hint="Day 3, 7 and 14 after the first email, until they reply. Plus a nudge to anyone who didn't finish checkout." />
             <Switch checked={c.fulfillOrders} onChange={(v) => set("fulfillOrders", v)} label="Onboard new paying clients" hint="Builds their agent, writes their launch campaign, adds the onboarding checklist and sends the welcome email." />
           </div>
@@ -208,7 +208,7 @@ export function AutopilotPanel({
                   ? mailingAddress
                     ? "Only emails that include your postal address and an opt-out line, to a real address, with no [placeholders], up to the daily cap. Everything else waits in your Inbox."
                     : "Add your postal address in Settings first: commercial email must include it."
-                  : "Needs RESEND_API_KEY and RESEND_FROM. Until then, everything waits in your Inbox for you to send."
+                  : "Needs Resend (Settings → API keys). Until then, everything waits in your Inbox for you to send."
               }
             />
             <label className="field" style={{ maxWidth: 220, marginTop: 10 }}>

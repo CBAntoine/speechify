@@ -3,6 +3,7 @@ import { fulfillOrder } from "@/lib/payments/fulfill";
 import { activateOrder, firstTimeSeen, forgetEvent, setOrderStatus } from "@/lib/payments/orders";
 import { paypalWebhookId, verifyPaypalWebhook } from "@/lib/payments/paypal";
 import { siteUrl } from "@/lib/site";
+import { syncSavedKeys } from "@/lib/store";
 
 // PayPal → Rainmaker. PayPal verifies each delivery for us (the
 // verify-webhook-signature API); each event id is handled once.
@@ -14,6 +15,7 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
 export async function POST(req: Request) {
   const raw = await req.text();
+  await syncSavedKeys().catch(() => undefined);
   let event: { id: string; event_type: string; resource: Obj };
   try {
     event = JSON.parse(raw);

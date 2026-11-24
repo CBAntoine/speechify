@@ -33,7 +33,7 @@ export class StripeError extends Error {
 type Params = Record<string, Encodable>;
 
 export async function stripe<T = Record<string, unknown>>(method: "GET" | "POST" | "DELETE", path: string, params?: Params, opts: { idempotencyKey?: string } = {}): Promise<T> {
-  if (!stripeEnabled()) throw new StripeError("Add STRIPE_SECRET_KEY to take card payments", 400);
+  if (!stripeEnabled()) throw new StripeError("Add your Stripe secret key in Settings → API keys to take card payments", 400);
   const query = method === "GET" && params ? `?${formEncode(params)}` : "";
   const res = await fetch(`${API}${path}${query}`, {
     method,
@@ -48,7 +48,7 @@ export async function stripe<T = Record<string, unknown>>(method: "GET" | "POST"
   const data = (await res.json().catch(() => ({}))) as T & { error?: { message?: string; code?: string } };
   if (!res.ok) {
     const msg = data.error?.message ?? `Stripe error ${res.status}`;
-    throw new StripeError(res.status === 401 ? "Stripe rejected the secret key. Check STRIPE_SECRET_KEY." : msg, res.status, data.error?.code);
+    throw new StripeError(res.status === 401 ? "Stripe rejected the secret key. Check it in Settings → API keys." : msg, res.status, data.error?.code);
   }
   return data;
 }
@@ -151,7 +151,7 @@ export async function connectStripeWebhook(url: string, known?: { webhookId?: st
     description: "Rainmaker store: subscriptions and payments",
     metadata: { created_by: "rainmaker" },
   });
-  if (!created.secret) throw new StripeError("Stripe didn't return a signing secret. Add STRIPE_WEBHOOK_SECRET by hand.", 502);
+  if (!created.secret) throw new StripeError("Stripe didn't return a signing secret. Add the webhook signing secret in Settings → API keys.", 502);
   return { id: created.id, secret: created.secret, reused: false };
 }
 

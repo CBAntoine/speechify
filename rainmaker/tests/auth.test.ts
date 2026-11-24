@@ -9,7 +9,7 @@ test("the storefront, demos, webhooks and cron are public", () => {
 });
 
 test("the CRM and its APIs stay behind the sign-in", () => {
-  for (const p of ["/", "/pipeline", "/sales", "/sell", "/autopilot", "/settings", "/storefront", "/stores", "/api/orders", "/api/orders/ord_1", "/api/payments/setup", "/api/leads", "/api/assets/asset_1", "/api/elevenlabs/agent", "/api/ads/generate", "/api/autopilot", "/api/storex", "/demo", "/api/copilot/tool", "/api/copilot/session", "/api/copilot/state", "/api/copilot/agent"]) {
+  for (const p of ["/", "/pipeline", "/sales", "/sell", "/autopilot", "/settings", "/storefront", "/stores", "/api/orders", "/api/orders/ord_1", "/api/payments/setup", "/api/leads", "/api/assets/asset_1", "/api/elevenlabs/agent", "/api/ads/generate", "/api/autopilot", "/api/storex", "/demo", "/api/copilot/tool", "/api/copilot/session", "/api/copilot/state", "/api/copilot/agent", "/api/keys", "/api/keys/check"]) {
     assert.equal(isPublicPath(p), false, p);
   }
 });

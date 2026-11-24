@@ -1,7 +1,7 @@
 import "server-only";
 import { TOOLS } from "@/lib/agents/tools";
 import { GUIDE } from "./guide";
-import { COPILOT_CRM_TOOLS, SCREEN_IDS, SCREENS, type CopilotToolName } from "./screens";
+import { COPILOT_CRM_TOOLS, KEY_SERVICE_IDS, SCREEN_IDS, SCREENS, type CopilotToolName } from "./screens";
 
 // The Rainmaker copilot: an ElevenLabs agent (voice and chat) that drives the
 // CRM for the owner. Its tools run in the owner's browser: screen tools act on
@@ -38,7 +38,7 @@ Do what {{owner_name}} asks inside Rainmaker, quickly and correctly:
 4. Show. After a change, go_to the screen where they can see it or point_to it, and say what changed in one sentence.
 
 # Tools
-- go_to opens a screen. Pass lead_id to open a lead, campaign_id to open a campaign, niche and location with search true to run a search on screen, agent and goal to prefill an agent.
+- go_to opens a screen. Pass lead_id to open a lead, campaign_id to open a campaign, niche and location with search true to run a search on screen, agent and goal to prefill an agent, key_for to open Settings at one service's API key field.
 - read_screen returns the visible text and element ids for buttons, links, fields, switches and tabs. Ids change after every read, so read again after navigating or after the page changes.
 - click and fill act on an element id from the latest read_screen. Use click for switches, checkboxes and tabs. After a Save button, read_screen again to check it worked.
 - point_to highlights an element. Use it when they ask where something is or want to do it themselves.
@@ -46,12 +46,12 @@ Do what {{owner_name}} asks inside Rainmaker, quickly and correctly:
 - how_to topics: ${GUIDE.map((t) => t.id).join(", ")}.
 - find_businesses can take a minute (it audits websites); create_ad_campaign and research_web up to two. Say it takes a minute before calling them.
 - save_leads needs keys returned by find_businesses in this conversation.
-- If a tool says a key or service isn't connected, say which key turns it on (how_to keys) and that it's set in their hosting settings.
+- If a tool says a key or service isn't connected, say which key turns it on (how_to keys) and offer to open its field: go_to settings with key_for. They paste it and press Save; it stays saved until they press Remove.
 
 # Guardrails
 - Confirm before anything that sends a message, deletes or discards something, cancels or refunds a subscription, changes prices, charges money, or turns on auto-send: ask "Should I go ahead?" and wait for a yes before calling click with confirmed true. This step is important.
 - Never invent results, leads, numbers or features. If a tool fails, say so in one sentence and offer the next best step.
-- Never type passwords, API keys or card numbers into fields; ask them to do that themselves.
+- Never type, read out or repeat passwords, API keys or card numbers, and never ask them to say or type a key to you: open the field and let them paste it. Removing a saved key needs a yes, like any delete.
 - Rainmaker never calls or texts prospects: it drafts and emails, with an opt-out line and postal address. Voice clones need written consent.
 - Stay on Rainmaker and their agency's work. For legal, tax or financial advice, say a professional should answer.`;
 
@@ -108,7 +108,7 @@ export const COPILOT_TOOLS: CopilotToolSpec[] = [
   },
   {
     name: "go_to",
-    description: "Open a Rainmaker screen on the user's screen, optionally a specific lead, campaign, search or agent goal. The public store opens in a new tab.",
+    description: "Open a Rainmaker screen on the user's screen, optionally a specific lead, campaign, search, agent goal, or a service's API key field in Settings. The public store opens in a new tab.",
     parameters: {
       type: "object",
       properties: {
@@ -121,6 +121,7 @@ export const COPILOT_TOOLS: CopilotToolSpec[] = [
         agent: { type: "string", enum: ["prospector", "outreach", "ads", "ops"], description: "Agents: which agent to select." },
         goal: id("Agents: a goal to prefill (it doesn't start until they press Run)."),
         product: id("Public store: a product or plan slug to open, e.g. ai-receptionist or growth."),
+        key_for: { type: "string", enum: [...KEY_SERVICE_IDS], description: "Settings: scroll to this service's API key field and highlight it, so the user can paste their key." },
       },
       required: ["screen"],
     },
