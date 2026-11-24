@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_OPTIONS, TOOLS, type JobOptions, type Privacy, type StackReport, type YouTubeStatus } from "@/lib/types";
 
 const DUB_LANGS = [
@@ -21,6 +21,26 @@ export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus
   const [progress, setProgress] = useState<number | null>(null);
   const [drag, setDrag] = useState(false);
   const set = <K extends keyof Opts>(k: K, v: Opts[K]) => setOpts((o) => ({ ...o, [k]: v }));
+  const root = useRef<HTMLDivElement>(null);
+  const link = useRef<HTMLInputElement>(null);
+  const opened = Boolean(props.onClose);
+
+  const close = useRef(props.onClose);
+  useEffect(() => {
+    close.current = props.onClose;
+  });
+
+  // Opened with "+ New VOD": bring the form into view, put the cursor in the link field, Esc closes it.
+  useEffect(() => {
+    if (!opened) return;
+    root.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    link.current?.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [opened]);
   const stack = props.stack;
   const native = stack ? TOOLS.filter((t) => stack.items[t.id]?.available).length : null;
 
@@ -82,6 +102,7 @@ export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus
 
   return (
     <div
+      ref={root}
       className={`source-form${drag ? " drag" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -113,7 +134,7 @@ export function SourceForm(props: { stack: StackReport | null; yt: YouTubeStatus
           void startUrl();
         }}
       >
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.twitch.tv/videos/…" aria-label="VOD link" disabled={busy} />
+        <input ref={link} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.twitch.tv/videos/…" aria-label="VOD link" disabled={busy} />
         <button className="btn primary" type="submit" disabled={busy}>
           Make shorts
         </button>

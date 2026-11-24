@@ -55,7 +55,7 @@ export function Monitor(props: {
         <span className="right">{label}</span>
       </div>
       <div className="pb">
-        <div className="screen" style={{ aspectRatio: src ? `${src.width} / ${src.height}` : "16 / 9" }} data-cur="monitor">
+        <div className={`screen${props.showForm ? " form-open" : ""}`} style={{ aspectRatio: src ? `${src.width} / ${src.height}` : "16 / 9" }} data-cur="monitor">
           {media && ready ? (
             <video
               ref={ref}

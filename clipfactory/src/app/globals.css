@@ -1054,20 +1054,44 @@ a {
 
 /* ── Source form ────────────────────────────────────────── */
 
+/* The New VOD form is taller than a 16:9 monitor on most screens, so while
+   it's open the monitor grows to fit it instead of clipping it. (A box with
+   an aspect ratio only grows to its content when it isn't a scroll container,
+   hence overflow: visible.) */
+.screen.form-open {
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Unclipped, the video's square corners would show around the form's rounded ones. */
+.screen.form-open > video {
+  visibility: hidden;
+}
+
 .source-form {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1 0 auto;
   z-index: 6;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 12px;
   padding: 22px;
+  border-radius: 7px;
   background:
     radial-gradient(ellipse at 30% 20%, rgba(255, 61, 110, 0.12), transparent 60%),
     radial-gradient(ellipse at 80% 90%, rgba(62, 224, 255, 0.08), transparent 55%),
     #0a0a10;
-  overflow-y: auto;
+}
+
+/* Centred when there's room, top-aligned when there isn't (flex centring
+   would push the top, with the close button, out of reach). */
+.source-form > :first-child {
+  margin-top: auto;
+}
+
+.source-form > :last-child {
+  margin-bottom: auto;
 }
 
 .source-form.drag {
