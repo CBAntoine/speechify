@@ -73,6 +73,11 @@
     <string name="battery_banner_action">Allow</string>
     <string name="interrupted_banner">Android stopped your last recording. Allowing background activity prevents this.</string>
     <string name="dismiss">Dismiss</string>
+    <string name="crash_banner">Dashcam stopped unexpectedly last time. You can copy the details to send them.</string>
+    <string name="crash_banner_scanner">Dashcam stopped unexpectedly while the car scanner was on, so the scanner was turned off. You can copy the details to send them.</string>
+    <string name="crash_copy">Copy details</string>
+    <string name="crash_copied">Copied</string>
+    <string name="crash_clip_label">Dashcam crash report</string>
     <string name="zoom_value">%sx</string>
 
     <!-- Car scanner -->

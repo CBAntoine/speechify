@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.core.graphics.scale
+import com.cbantoine.dashcam.CrashReports
 import com.cbantoine.dashcam.recording.FrameAnalyzer
 import com.cbantoine.dashcam.recording.RecorderStateHolder
 import com.cbantoine.dashcam.settings.DashcamSettings
@@ -95,6 +96,8 @@ class VehicleScanner(
         if (wanted == active) return
         wanted = active
         running = active
+        // Lets the next start turn the scanner off if the app dies while it runs.
+        CrashReports.markScanning(context, active)
         recorder.frameAnalyzer.value = if (active) binding else null
         executor.execute {
             if (active) {

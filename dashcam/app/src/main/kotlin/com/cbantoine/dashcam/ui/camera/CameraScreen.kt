@@ -696,7 +696,21 @@ private fun Banners(state: RecorderUiState, settings: DashcamSettings, scanProbl
         onPauseOrDispose { }
     }
 
+    val crash by graph.crashReport.collectAsStateWithLifecycle()
+    val crashClipLabel = stringResource(R.string.crash_clip_label)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        crash?.let { report ->
+            Banner(
+                icon = Icons.Rounded.ErrorOutline,
+                text = stringResource(if (report.scannerWasRunning) R.string.crash_banner_scanner else R.string.crash_banner),
+                accent = MaterialTheme.colorScheme.error,
+                action = stringResource(R.string.crash_copy) to {
+                    SystemAccess.copyText(context, crashClipLabel, report.text)
+                    graph.crashReport.value = null
+                },
+                secondaryAction = stringResource(R.string.dismiss) to { graph.crashReport.value = null },
+            )
+        }
         val issue = state.issue
         if (issue != null) {
             val text = when (issue) {

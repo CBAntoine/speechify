@@ -13,13 +13,21 @@ import com.cbantoine.dashcam.storage.ClipRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class DashcamApp : Application() {
     lateinit var graph: AppGraph
         private set
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        // Before content providers start, so a crash in one of them is reported too.
+        CrashReports.install(this)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -39,6 +47,17 @@ class AppGraph(app: Application) {
     val sessionMarker = SessionMarker(app)
     val apiKeyStore = ApiKeyStore(app)
     val vehicleScanner = VehicleScanner(app, appScope, settings, recorderState, apiKeyStore)
+
+    /** Why the last run stopped unexpectedly, until the user copies or dismisses it. */
+    val crashReport = MutableStateFlow(CrashReports.take(app))
+
+    init {
+        // Safe mode: if Dashcam stopped while the scanner was running, start without it so
+        // recording keeps working. The camera screen says so and the user can turn it back on.
+        if (crashReport.value?.scannerWasRunning == true) {
+            appScope.launch { settingsRepository.update { it.copy(scanActive = false) } }
+        }
+    }
 }
 
 val Context.appGraph: AppGraph

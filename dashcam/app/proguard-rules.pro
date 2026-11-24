@@ -10,3 +10,9 @@
 
 # LiteRT's native code calls back into these classes, so keep them whole (they are small).
 -keep class org.tensorflow.lite.** { *; }
+
+# ML Kit finds its components through Firebase's ComponentDiscovery, which calls each registrar's
+# no-argument constructor by reflection. firebase-components' own rule keeps the classes but,
+# under R8 full mode, not their constructors, so ML Kit's init provider crashed the app at
+# every start (InvalidRegistrarException).
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
