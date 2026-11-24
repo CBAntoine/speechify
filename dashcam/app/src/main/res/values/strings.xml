@@ -83,6 +83,7 @@
     <string name="action_scan_off">Stop the car scanner</string>
     <string name="scan_unavailable">The car scanner can\'t run on this phone.</string>
     <string name="scan_no_stream">The camera can\'t run the car scanner at this video quality. Try 1080p.</string>
+    <string name="scan_pending">The car scanner starts with the next recording.</string>
     <string name="scan_hot">Phone is hot: the scanner slowed down so recording isn\'t affected.</string>
     <string name="vehicle_car">Car</string>
     <string name="vehicle_truck">Truck</string>
@@ -113,6 +114,7 @@
     <string name="identify_rate_limited">Too many requests. Try again in a moment.</string>
     <string name="identify_refused">Claude declined to identify this vehicle.</string>
     <string name="identify_not_vehicle">Couldn\'t make out this vehicle. Try again when it\'s closer.</string>
+    <string name="identify_photo_unchecked">The photo couldn\'t be checked for plates on the phone, so it wasn\'t sent.</string>
     <string name="identify_failed">Couldn\'t identify it: %s</string>
     <string name="public_title">PUBLIC DATA</string>
     <string name="public_specs">Model specifications</string>
@@ -242,6 +244,7 @@
     <string name="api_key_label">API key</string>
     <string name="api_key_format_warning">Anthropic API keys start with sk-ant-</string>
     <string name="save">Save</string>
+    <string name="api_key_save_failed">Couldn\'t save the key on this phone. Try again.</string>
     <string name="remove">Remove</string>
     <string name="setting_claude_model">Claude model</string>
     <string name="model_opus">Claude Opus 5.5 · most accurate</string>

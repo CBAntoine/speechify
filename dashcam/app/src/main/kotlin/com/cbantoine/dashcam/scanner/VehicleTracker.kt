@@ -4,7 +4,12 @@ import kotlin.math.max
 
 /** A vehicle followed across frames. Only [VehicleTracker] changes it. */
 class TrackedVehicle internal constructor(val id: Int, box: NormBox, kind: VehicleKind, nowMs: Long) {
+    /** Smoothed across passes, for display. */
     var box: NormBox = box
+        private set
+
+    /** Exactly what the detector reported last time, for cropping. */
+    var rawBox: NormBox = box
         private set
     var lastSeenMs: Long = nowMs
         private set
@@ -24,6 +29,7 @@ class TrackedVehicle internal constructor(val id: Int, box: NormBox, kind: Vehic
 
     internal fun observe(detection: Detection, nowMs: Long, smoothing: Float, confirmHits: Int) {
         box = box.lerp(detection.box, smoothing)
+        rawBox = detection.box
         kindVotes[detection.kind.ordinal]++
         lastSeenMs = nowMs
         hits++

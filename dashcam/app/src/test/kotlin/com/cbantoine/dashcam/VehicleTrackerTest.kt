@@ -24,7 +24,10 @@ class VehicleTrackerTest {
         val second = tracker.active.single()
         assertThat(second.id).isEqualTo(first.id)
         assertThat(second.confirmed).isTrue()
+        // The display box is smoothed; the raw box is exactly the latest detection.
         assertThat(second.box.left).isGreaterThan(0.30f)
+        assertThat(second.box.left).isLessThan(0.32f)
+        assertThat(second.rawBox.left).isEqualTo(0.32f)
     }
 
     @Test

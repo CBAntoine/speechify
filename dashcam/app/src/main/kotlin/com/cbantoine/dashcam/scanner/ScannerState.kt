@@ -2,7 +2,13 @@ package com.cbantoine.dashcam.scanner
 
 import android.graphics.Bitmap
 
-enum class IdentifyProblem { NO_KEY, INVALID_KEY, OFFLINE, RATE_LIMITED, REFUSED, NOT_A_VEHICLE, FAILED }
+enum class IdentifyProblem {
+    NO_KEY, INVALID_KEY, OFFLINE, RATE_LIMITED, REFUSED, NOT_A_VEHICLE,
+
+    /** The photo couldn't be checked for plates on the phone, so it wasn't sent. */
+    PHOTO_UNCHECKED,
+    FAILED,
+}
 
 sealed interface IdentityState {
     /** Not asked yet. */

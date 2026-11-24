@@ -157,7 +157,9 @@ fun CameraScreen(onOpenClips: () -> Unit, onOpenSettings: () -> Unit) {
         problem = when {
             !scanWanted -> null
             scan.unavailable -> R.string.scan_unavailable
-            state.cameraReady && !state.scannerAvailable -> R.string.scan_no_stream
+            state.scannerBlocked -> R.string.scan_no_stream
+            // Turned on in Settings during a recording: the camera picks it up next time.
+            state.cameraReady && !state.scannerAvailable -> R.string.scan_pending
             scan.slowedForHeat -> R.string.scan_hot
             else -> null
         },

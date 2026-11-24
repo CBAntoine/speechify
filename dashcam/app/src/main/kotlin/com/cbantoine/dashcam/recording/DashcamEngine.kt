@@ -130,8 +130,8 @@ class DashcamEngine(
     private var imageAnalysis: ImageAnalysis? = null
     private var boundConfig: CameraConfig? = null
 
-    /** Set once this camera turned out unable to run the scanner stream next to the video. */
-    private var analysisBlocked = false
+    /** A video quality at which this camera turned out unable to run the scanner stream. */
+    private var analysisBlockedQuality: VideoQuality? = null
     private var appliedRotation: Int = holder.displayRotation.value
 
     private var session: Session? = null
@@ -334,6 +334,7 @@ class DashcamEngine(
                 hevcSupported = hevcSupported,
                 stabilizationSupported = stabilizationSupported,
                 scannerAvailable = withAnalysis,
+                scannerBlocked = settings.scannerEnabled && !withAnalysis,
                 issue = it.issue.takeUnless { issue ->
                     issue == RecorderIssue.PERMISSION_MISSING || issue == RecorderIssue.CAMERA_ERROR
                 },
@@ -385,7 +386,7 @@ class DashcamEngine(
                     .build(),
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            // YUV, the camera's native format: frames the scanner skips cost no conversion.
             .build()
     }
 
@@ -408,7 +409,7 @@ class DashcamEngine(
         quality = settings.quality,
         hevc = settings.useHevc,
         stabilization = settings.stabilization,
-        analysis = settings.scannerEnabled && !analysisBlocked,
+        analysis = settings.scannerEnabled && analysisBlockedQuality != settings.quality,
     )
 
     private fun buildRecorder(quality: VideoQuality, hevc: Boolean): Pair<Recorder, Boolean> {
@@ -453,11 +454,11 @@ class DashcamEngine(
 
     private fun onCameraState(state: CameraState) {
         val error = state.error
-        if (error?.code == CameraState.ERROR_STREAM_CONFIG && imageAnalysis != null && !analysisBlocked) {
+        if (error?.code == CameraState.ERROR_STREAM_CONFIG && imageAnalysis != null) {
             // The camera accepted the scanner stream but can't actually run it: recording wins.
             Log.w(TAG, "The camera can't run the scanner stream; rebinding without it")
-            analysisBlocked = true
             val settings = graph.settings.value
+            analysisBlockedQuality = boundConfig?.quality ?: settings.quality
             provider?.let { bindCamera(it, configFor(settings), settings) }
             return
         }

@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.camera.core.ImageProxy
@@ -41,10 +42,10 @@ internal class FrameProcessor {
     private val matrix = Matrix()
 
     fun load(image: ImageProxy): Frame {
-        val plane = image.planes[0]
         val bitmap: Bitmap
         val temporary: Boolean
-        if (plane.pixelStride == 4 && plane.rowStride == image.width * 4) {
+        val plane = image.planes.firstOrNull()
+        if (image.format == PixelFormat.RGBA_8888 && plane != null && plane.pixelStride == 4 && plane.rowStride == image.width * 4) {
             // RGBA rows with no padding are already a bitmap's memory layout.
             bitmap = frameBitmap?.takeIf { it.width == image.width && it.height == image.height }
                 ?: createBitmap(image.width, image.height).also { frameBitmap = it }
@@ -52,6 +53,7 @@ internal class FrameProcessor {
             bitmap.copyPixelsFromBuffer(plane.buffer)
             temporary = false
         } else {
+            // YUV frames: CameraX converts only the frames the scanner actually uses.
             bitmap = image.toBitmap()
             temporary = true
         }

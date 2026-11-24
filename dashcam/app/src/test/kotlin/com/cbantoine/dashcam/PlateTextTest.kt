@@ -66,6 +66,8 @@ class PlateTextTest {
         val votes = PlateVotes()
         votes.add(candidate("ABCD123"))
         assertThat(votes.best()!!.agreeing).isEqualTo(1)
+        // One read is never shown: it could be a badge or a sticker.
+        assertThat(votes.best()!!.isShowable).isFalse()
         votes.add(candidate("ABCD123"))
         val best = votes.best()!!
         assertThat(best.text).isEqualTo("ABCD 123")

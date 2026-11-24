@@ -16,8 +16,8 @@ data class PlateCandidate(val text: String, val key: String, val score: Float, v
 
 /** The plate a vehicle most likely carries, from all reads so far. */
 data class PlateReading(val text: String, val confidence: Float, val reads: Int, val agreeing: Int) {
-    /** Two matching reads, or one very clean read, before a plate is shown at all. */
-    val isShowable: Boolean get() = agreeing >= 2 || confidence >= 0.7f
+    /** Two matching reads before a plate is shown at all: a single read can be a badge or sticker. */
+    val isShowable: Boolean get() = agreeing >= 2
 }
 
 /**

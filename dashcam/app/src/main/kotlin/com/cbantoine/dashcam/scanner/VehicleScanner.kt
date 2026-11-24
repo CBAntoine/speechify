@@ -2,17 +2,25 @@ package com.cbantoine.dashcam.scanner
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.core.graphics.scale
 import com.cbantoine.dashcam.recording.FrameAnalyzer
 import com.cbantoine.dashcam.recording.RecorderStateHolder
 import com.cbantoine.dashcam.settings.DashcamSettings
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,8 +29,12 @@ import kotlinx.coroutines.launch
 /**
  * The car scanner. While the camera screen shows it, it takes frames from the engine's analysis
  * stream and, on the phone: detects vehicles, tracks them, names their colour and reads their
- * plates. With the user's API key it asks Claude for the make and model of the vehicle in focus
- * (sending a crop with the plate pixelated), then looks up recalls for that model.
+ * plates. With the user's API key it asks Claude for the make and model of the vehicle in focus,
+ * then looks up recalls for that model.
+ *
+ * Plates never leave the phone: before a photo is sent, it is read with on-device OCR and every
+ * line of text in it is pixelated, along with the area where each vehicle in it carries its plate.
+ * A photo that can't be checked isn't sent.
  *
  * Nothing is stored: everything lives in memory and is gone when the scan is cleared or the app
  * closes. All per-vehicle state is confined to one scanner thread.
@@ -44,6 +56,7 @@ class VehicleScanner(
     private val binding = FrameAnalyzer(executor, ImageAnalysis.Analyzer(::analyze))
     private val identifier = VehicleIdentifier(apiKeys)
     private val recalls = RecallsClient()
+    private val powerManager: PowerManager? = context.getSystemService(PowerManager::class.java)
 
     private val _state = MutableStateFlow(ScannerState())
     val state: StateFlow<ScannerState> = _state.asStateFlow()
@@ -69,6 +82,8 @@ class VehicleScanner(
     private var focusedSinceMs = 0L
     private var lastPassMs = 0L
     private var hot = false
+    private var thermalHot = false
+    private var lastThermalCheckMs = -THERMAL_CHECK_MS
     private var frameAspect = 16f / 9f
     private var ocrBusy = false
     private var identifyBusy = false
@@ -106,6 +121,7 @@ class VehicleScanner(
     /** Forgets every vehicle seen so far. */
     fun clear() = executor.execute {
         tracker.clear()
+        vehicles.values.forEach(::dropPhoto)
         vehicles.clear()
         identityByPlate.clear()
         selectedId = null
@@ -116,7 +132,8 @@ class VehicleScanner(
 
     /** A new key may fix vehicles that couldn't be identified with the old one (or without one). */
     fun onApiKeyChanged() {
-        identifier.reset()
+        // Closing the old HTTP client closes its sockets, which is network I/O: never on the main thread.
+        scope.launch(Dispatchers.IO) { identifier.reset() }
         executor.execute {
             vehicles.values.forEach { info ->
                 val failed = info.identity as? IdentityState.Failed
@@ -136,7 +153,7 @@ class VehicleScanner(
         try {
             if (!running) return
             val now = SystemClock.elapsedRealtime()
-            hot = recorder.state.value.thermalWarning
+            hot = isHot(now)
             if (now - lastPassMs < if (hot) HOT_PASS_INTERVAL_MS else PASS_INTERVAL_MS) return
             lastPassMs = now
             val detector = detector ?: loadDetector() ?: return
@@ -154,6 +171,16 @@ class VehicleScanner(
         } finally {
             image.close()
         }
+    }
+
+    /** Backs off earlier than recording does, and whether or not a recording is running. */
+    private fun isHot(now: Long): Boolean {
+        if (now - lastThermalCheckMs >= THERMAL_CHECK_MS) {
+            lastThermalCheckMs = now
+            thermalHot = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                (powerManager?.currentThermalStatus ?: PowerManager.THERMAL_STATUS_NONE) >= PowerManager.THERMAL_STATUS_MODERATE
+        }
+        return thermalHot || recorder.state.value.thermalWarning
     }
 
     private fun loadDetector(): VehicleDetector? {
@@ -189,18 +216,19 @@ class VehicleScanner(
             if (!track.confirmed) continue
             val info = vehicles.getOrPut(track.id) { VehicleInfo(track.id) }
             info.kind = track.kind
-            val seenNow = track.lastSeenMs == now
             // Between sightings the box stays where the vehicle was last seen, briefly.
             info.box = if (now - track.lastSeenMs <= COAST_MS) track.box else null
-            if (seenNow) {
+            if (track.lastSeenMs == now) {
                 info.lastSeenMs = now
-                sampleColour(info, frame, track.box, now)
-                captureViews(info, frame, track.box, now)
+                // Crops use the detector's own box: the smoothed one lags behind a moving car.
+                info.rawBox = track.rawBox
+                sampleColour(info, frame, track.rawBox, now)
+                captureViews(info, frame, track.rawBox, merged, now)
             }
         }
         if (!hot) readPlate(frame, now)
         updateFocus(now)
-        autoIdentify(now)
+        if (!hot) autoIdentify(now)
         evict()
         publish()
     }
@@ -219,7 +247,7 @@ class VehicleScanner(
     }
 
     /** Keeps the best (largest, least cut-off) view of each vehicle for its thumbnail and for Claude. */
-    private fun captureViews(info: VehicleInfo, frame: Frame, box: NormBox, now: Long) {
+    private fun captureViews(info: VehicleInfo, frame: Frame, box: NormBox, detections: List<Detection>, now: Long) {
         if (now - info.lastViewMs < VIEW_INTERVAL_MS) return
         val touchesEdge = box.left < 0.01f || box.right > 0.99f || box.top < 0.01f || box.bottom > 0.99f
         val quality = box.width * frame.width * box.height * frame.height * (if (touchesEdge) 0.5f else 1f)
@@ -230,13 +258,19 @@ class VehicleScanner(
         info.thumbnail = thumb
         info.viewQuality = quality
         info.lastViewMs = now
-        if (info.identity !is IdentityState.Ready) {
-            info.photo = frames.crop(frame, region, maxWidth = PHOTO_WIDTH)
-            info.photoVehicle = box
-            info.photoRegion = region
-            info.photoWidthPx = region.width * frame.width
-            info.photoJpeg = null
-        }
+        if (info.identity is IdentityState.Ready) return
+        val bitmap = frames.crop(frame, region, maxWidth = PHOTO_WIDTH) ?: return
+        dropPhoto(info)
+        info.photo = Photo(
+            bitmap = bitmap,
+            vehicle = box,
+            region = region,
+            widthPx = region.width * frame.width,
+            // Every other vehicle in the shot, so its plate gets pixelated as well.
+            others = detections
+                .filter { it.box.iou(box) < 0.7f && it.box.intersection(region) > 0f }
+                .map { it.box to it.kind },
+        )
     }
 
     // -------------------------------------------------------------------------------------------
@@ -247,14 +281,14 @@ class VehicleScanner(
         if (ocrBusy) return
         val target = vehicles.values
             .filter { info ->
-                val box = info.box
-                box != null && info.lastSeenMs == now && !info.plates.isSettled &&
+                val box = info.rawBox
+                box != null && info.box != null && info.lastSeenMs == now && !info.plates.isSettled &&
                     now - info.lastOcrMs >= OCR_INTERVAL_MS && box.width * frame.width >= MIN_PLATE_VEHICLE_PX
             }
-            .maxByOrNull { it.box!!.area / (1f + 0.2f * it.ocrAttempts) }
+            .maxByOrNull { it.rawBox!!.area / (1f + 0.2f * it.ocrAttempts) }
             ?: return
-        val vehicleBox = target.box ?: return
-        // Plates are on the lower part of a car, front or back.
+        val vehicleBox = target.rawBox ?: return
+        // Plates are on the lower part of a vehicle, front or back.
         val region = NormBox(
             vehicleBox.left - vehicleBox.width * 0.04f,
             vehicleBox.top + vehicleBox.height * 0.3f,
@@ -280,14 +314,17 @@ class VehicleScanner(
         val candidate = PlateText.best(lines)
         if (candidate != null) {
             info.plates.add(candidate)
-            // Where the plate sits on the vehicle, so it can be pixelated before a photo leaves the phone.
-            info.plateOnVehicle = vehicleBox.relative(region.absolute(candidate.box))
-            info.photoJpeg = null
-            // The same car seen earlier this session: reuse what Claude said about it.
             val plate = info.plates.best()
+            // Where the plate sits on the vehicle, learned only from reads that agree with the
+            // voted plate, so a badge or sticker can't move it.
+            if (plate != null && plate.text == candidate.text) {
+                info.plateOnVehicle = vehicleBox.relative(region.absolute(candidate.box))
+            }
+            // The same car seen earlier this session: reuse what Claude said about it.
             if (plate != null && plate.agreeing >= 2 && info.identity !is IdentityState.Ready) {
                 identityByPlate[plateKey(plate)]?.let { identity ->
                     info.identity = IdentityState.Ready(identity)
+                    dropPhoto(info)
                     fetchRecalls(info, identity)
                 }
             }
@@ -306,7 +343,7 @@ class VehicleScanner(
         val target = focusedId?.let { vehicles[it] } ?: return
         // Only a vehicle that has held the focus for a moment and is close enough to recognise.
         if (target.box == null || now - focusedSinceMs < FOCUS_DWELL_MS) return
-        if (target.identity != IdentityState.None || target.photoWidthPx < MIN_IDENTIFY_PX) return
+        if (target.identity != IdentityState.None || (target.photo?.widthPx ?: 0f) < MIN_IDENTIFY_PX) return
         lastAutoIdentifyMs = now
         autoIdentifiedThisRun++
         requestIdentify(target)
@@ -318,17 +355,65 @@ class VehicleScanner(
             info.identity = IdentityState.Failed(IdentifyProblem.NO_KEY)
             return
         }
-        val jpeg = photoForClaude(info) ?: return
+        val photo = info.photo ?: return
+        val working = photo.workingCopy() ?: return
         identifyBusy = true
         info.identity = IdentityState.Loading
-        val model = settings.value.scannerModel
+        val id = info.id
+        val kind = info.kind
+        val plateOnVehicle = info.plateOnVehicle
         val colour = info.colours.best()
-        val market = Locale.getDefault().getDisplayCountry(Locale.ENGLISH).ifBlank { null }
-        scope.launch {
-            val outcome = identifier.identify(jpeg, model, colour, market)
-            executor.execute {
+        // Read the exact photo that will be sent, enlarged so small text is found too.
+        val scale = min(OCR_MIN_WIDTH / working.width.toFloat(), 2.5f)
+        val probe = if (scale > 1f) working.scale((working.width * scale).roundToInt(), (working.height * scale).roundToInt()) else working
+        val reader = plateReader ?: PlateReader().also { plateReader = it }
+        reader.read(probe, executor) { lines ->
+            if (probe !== working) probe.recycle()
+            val jpeg = lines?.let { redact(working, photo, kind, plateOnVehicle, it) }
+            working.recycle()
+            if (jpeg == null) {
+                // Fail closed: a photo that couldn't be checked for plates is never sent.
                 identifyBusy = false
-                applyIdentity(info.id, outcome)
+                vehicles[id]?.identity = IdentityState.Failed(IdentifyProblem.PHOTO_UNCHECKED)
+                publish()
+            } else {
+                send(id, jpeg, colour)
+            }
+        }
+    }
+
+    /**
+     * Pixelates every line of text the phone can read in the photo (this vehicle's plate, any
+     * other vehicle's, stickers), and the area where each vehicle in it carries a plate, in case
+     * one was too small or blurred for OCR to find.
+     */
+    private fun redact(bitmap: Bitmap, photo: Photo, kind: VehicleKind, plateOnVehicle: NormBox?, lines: List<TextLine>): ByteArray {
+        lines.forEach { bitmap.pixelate(it.box.expanded(0.2f, 0.35f)) }
+        for ((vehicle, vehicleKind) in listOf(photo.vehicle to kind) + photo.others) {
+            bitmap.pixelate(photo.region.relative(vehicle.absolute(plateArea(vehicleKind))))
+        }
+        plateOnVehicle?.let { bitmap.pixelate(photo.region.relative(photo.vehicle.absolute(it)).expanded(0.3f, 0.45f)) }
+        return bitmap.toJpeg()
+    }
+
+    private fun send(id: Int, jpeg: ByteArray, colour: VehicleColour?) {
+        val model = settings.value.scannerModel
+        val market = Locale.getDefault().getDisplayCountry(Locale.ENGLISH).ifBlank { null }
+        scope.launch(Dispatchers.IO) {
+            var outcome: IdentifyOutcome = IdentifyOutcome.Failed("Something went wrong")
+            try {
+                outcome = identifier.identify(jpeg, model, colour, market)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.e(TAG, "Identification failed unexpectedly", e)
+            } finally {
+                // Always hand a result back, so the busy flag can never stay set.
+                val result = outcome
+                executor.execute {
+                    identifyBusy = false
+                    applyIdentity(id, result)
+                }
             }
         }
     }
@@ -350,8 +435,7 @@ class VehicleScanner(
         }
         val ready = info.identity as? IdentityState.Ready
         if (ready != null) {
-            info.photo = null
-            info.photoJpeg = null
+            dropPhoto(info)
             info.plates.best()?.takeIf { it.agreeing >= 2 }?.let { identityByPlate[plateKey(it)] = ready.identity }
             fetchRecalls(info, ready.identity)
         }
@@ -381,33 +465,24 @@ class VehicleScanner(
         }
     }
 
-    /** The vehicle photo as a JPEG with the licence plate pixelated. */
-    private fun photoForClaude(info: VehicleInfo): ByteArray? {
-        info.photoJpeg?.let { return it }
-        val photo = info.photo ?: return null
-        val vehicle = info.photoVehicle ?: return null
-        val region = info.photoRegion ?: return null
-        val copy = photo.copy(Bitmap.Config.ARGB_8888, true) ?: return null
-        // Where the plate was read, or else where plates usually are.
-        val plate = info.plateOnVehicle ?: DEFAULT_PLATE_ON_VEHICLE
-        copy.pixelate(region.relative(vehicle.absolute(plate)).expanded(0.3f, 0.45f))
-        return copy.toJpeg().also {
-            copy.recycle()
-            info.photoJpeg = it
-        }
-    }
-
     // -------------------------------------------------------------------------------------------
     // Bookkeeping
     // -------------------------------------------------------------------------------------------
 
     private fun retire(info: VehicleInfo) {
         info.box = null
-        // Keep a small JPEG instead of the bitmap, so a close enough vehicle can still be
-        // identified from the strip later.
-        val worthKeeping = info.photoWidthPx >= MIN_IDENTIFY_PX && info.identity !is IdentityState.Ready
-        if (info.photo != null && worthKeeping) photoForClaude(info)
-        info.photo = null
+        info.rawBox = null
+        val photo = info.photo ?: return
+        val bitmap = photo.bitmap ?: return
+        // A vehicle close enough to identify keeps a compressed photo, so it can still be
+        // identified from the strip. It is only ever sent after redact(), like any other.
+        if (photo.widthPx >= MIN_IDENTIFY_PX && info.identity !is IdentityState.Ready) {
+            photo.jpeg = bitmap.toJpeg(KEPT_JPEG_QUALITY)
+        } else {
+            info.photo = null
+        }
+        photo.bitmap = null
+        bitmap.recycle()
     }
 
     private fun retireAll() {
@@ -415,6 +490,11 @@ class VehicleScanner(
         vehicles.values.forEach(::retire)
         primaryId = null
         updateFocus(SystemClock.elapsedRealtime())
+    }
+
+    private fun dropPhoto(info: VehicleInfo) {
+        info.photo?.bitmap?.recycle()
+        info.photo = null
     }
 
     /** The profile panel follows the tapped vehicle, or else the closest one (without flickering). */
@@ -438,11 +518,16 @@ class VehicleScanner(
 
     private fun evict() {
         if (vehicles.size <= MAX_TRACKED) return
+        // Never a vehicle the tracker still follows, even while it is briefly out of view.
+        val tracked = tracker.active.mapTo(HashSet()) { it.id }
         vehicles.values
-            .filter { it.box == null && it.id != selectedId && it.id != focusedId }
+            .filter { it.id !in tracked && it.id != selectedId && it.id != focusedId }
             .sortedBy { it.lastSeenMs }
             .take(vehicles.size - MAX_TRACKED)
-            .forEach { vehicles.remove(it.id) }
+            .forEach { info ->
+                dropPhoto(info)
+                vehicles.remove(info.id)
+            }
     }
 
     private fun publish() {
@@ -460,9 +545,38 @@ class VehicleScanner(
 
     private fun plateKey(plate: PlateReading) = plate.text.replace(" ", "")
 
+    private fun plateArea(kind: VehicleKind) = when (kind) {
+        VehicleKind.CAR, VehicleKind.MOTORCYCLE -> CAR_PLATE_AREA
+        VehicleKind.TRUCK, VehicleKind.BUS -> LARGE_PLATE_AREA
+    }
+
+    /** The best view of a vehicle. It stays on the phone; only a redacted copy is ever sent. */
+    private class Photo(
+        var bitmap: Bitmap?,
+        /** The vehicle's box in the frame when the photo was taken. */
+        val vehicle: NormBox,
+        /** The part of the frame the photo shows. */
+        val region: NormBox,
+        val widthPx: Float,
+        /** Boxes and kinds of the other vehicles in the photo. */
+        val others: List<Pair<NormBox, VehicleKind>>,
+    ) {
+        /** Compressed copy, once the vehicle is out of view. */
+        var jpeg: ByteArray? = null
+
+        /** A mutable copy to redact. */
+        fun workingCopy(): Bitmap? =
+            bitmap?.copy(Bitmap.Config.ARGB_8888, true)
+                ?: jpeg?.let { BitmapFactory.decodeByteArray(it, 0, it.size, BitmapFactory.Options().apply { inMutable = true }) }
+    }
+
     /** Everything known about one vehicle. Scanner thread only. */
     private class VehicleInfo(val id: Int) {
+        /** Smoothed box for display, or null while out of view. */
         var box: NormBox? = null
+
+        /** The detector's latest box, for crops. */
+        var rawBox: NormBox? = null
         var kind = VehicleKind.CAR
         var lastSeenMs = 0L
         val plates = PlateVotes()
@@ -473,11 +587,7 @@ class VehicleScanner(
         var ocrAttempts = 0
         var lastColourMs = 0L
         var thumbnail: Bitmap? = null
-        var photo: Bitmap? = null
-        var photoVehicle: NormBox? = null
-        var photoRegion: NormBox? = null
-        var photoWidthPx = 0f
-        var photoJpeg: ByteArray? = null
+        var photo: Photo? = null
         var viewQuality = 0f
         var lastViewMs = 0L
         var identity: IdentityState = IdentityState.None
@@ -494,7 +604,7 @@ class VehicleScanner(
             identity = identity,
             recalls = recalls,
             lastSeenMs = lastSeenMs,
-            canIdentify = photo != null || photoJpeg != null,
+            canIdentify = photo != null,
         )
     }
 
@@ -502,6 +612,7 @@ class VehicleScanner(
         const val TAG = "VehicleScanner"
         const val PASS_INTERVAL_MS = 120L
         const val HOT_PASS_INTERVAL_MS = 1_000L
+        const val THERMAL_CHECK_MS = 1_000L
         const val MIN_SCORE = 0.4f
         const val MIN_BOX = 0.02f
         const val COAST_MS = 400L
@@ -510,6 +621,7 @@ class VehicleScanner(
         const val VIEW_REFRESH_MS = 4_000L
         const val THUMB_WIDTH = 240
         const val PHOTO_WIDTH = 640
+        const val KEPT_JPEG_QUALITY = 90
         const val OCR_INTERVAL_MS = 350L
         const val OCR_MIN_WIDTH = 960
         const val OCR_MAX_WIDTH = 1_280
@@ -525,7 +637,10 @@ class VehicleScanner(
         const val MAX_AUTO_IDENTIFY_PER_RUN = 40
         const val MAX_TRACKED = 12
 
-        /** Where a plate usually sits, relative to the vehicle's box. */
-        val DEFAULT_PLATE_ON_VEHICLE = NormBox(0.32f, 0.58f, 0.68f, 0.9f)
+        /** Where plates can be on a car seen from the front, back or at an angle (relative to its box). */
+        val CAR_PLATE_AREA = NormBox(0.2f, 0.5f, 0.8f, 0.95f)
+
+        /** Trucks and buses carry plates anywhere along the bottom, often at a corner. */
+        val LARGE_PLATE_AREA = NormBox(0f, 0.5f, 1f, 1f)
     }
 }

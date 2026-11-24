@@ -47,6 +47,8 @@ data class RecorderUiState(
     val stabilizationSupported: Boolean = false,
     /** The camera is also feeding the car scanner's analysis stream. */
     val scannerAvailable: Boolean = false,
+    /** The scanner is on in Settings but this camera can't run its stream at this video quality. */
+    val scannerBlocked: Boolean = false,
 ) {
     val isSessionActive: Boolean
         get() = phase == RecorderPhase.STARTING || phase == RecorderPhase.RECORDING ||

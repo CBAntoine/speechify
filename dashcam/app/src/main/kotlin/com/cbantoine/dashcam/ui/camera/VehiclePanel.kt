@@ -262,6 +262,7 @@ private fun IdentityStatus(
                 IdentifyProblem.RATE_LIMITED -> stringResource(R.string.identify_rate_limited)
                 IdentifyProblem.REFUSED -> stringResource(R.string.identify_refused)
                 IdentifyProblem.NOT_A_VEHICLE -> stringResource(R.string.identify_not_vehicle)
+                IdentifyProblem.PHOTO_UNCHECKED -> stringResource(R.string.identify_photo_unchecked)
                 IdentifyProblem.FAILED -> stringResource(R.string.identify_failed, state.detail.orEmpty())
             }
             Caption(message, color = DashcamPalette.Amber)
@@ -280,11 +281,12 @@ private fun PublicData(identity: VehicleIdentity?, recalls: RecallsState) {
     val country = LocalConfiguration.current.locales[0].country
     val query = identity?.let { stringResource(R.string.specs_search_query, it.yearsLabel.orEmpty(), it.title).trim() }
     LinkRow(stringResource(R.string.public_specs), enabled = query != null) {
-        query?.let { uriHandler.openUri("https://www.google.com/search?q=" + URLEncoder.encode(it, "UTF-8")) }
+        // runCatching: a phone with no browser throws instead of opening the link.
+        query?.let { runCatching { uriHandler.openUri("https://www.google.com/search?q=" + URLEncoder.encode(it, "UTF-8")) } }
     }
     LinkRow(stringResource(R.string.public_recalls), enabled = true) {
         // Canadian recalls are Transport Canada's; elsewhere the US database is the closest match.
-        uriHandler.openUri(if (country == "CA") TRANSPORT_CANADA_RECALLS else NHTSA_RECALLS)
+        runCatching { uriHandler.openUri(if (country == "CA") TRANSPORT_CANADA_RECALLS else NHTSA_RECALLS) }
     }
     if (identity != null) {
         val model = listOfNotNull(identity.yearsLabel, identity.title).joinToString(" ")

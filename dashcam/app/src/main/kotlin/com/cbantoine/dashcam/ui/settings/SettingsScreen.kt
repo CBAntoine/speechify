@@ -1,6 +1,7 @@
 package com.cbantoine.dashcam.ui.settings
 
 import android.Manifest
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -255,7 +256,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
                 section(R.string.section_scanner) {
                     item {
-                        val blocked = settings.scannerEnabled && recorder.cameraReady && !recorder.scannerAvailable
+                        val blocked = settings.scannerEnabled && recorder.scannerBlocked
                         SwitchSetting(
                             title = stringResource(R.string.setting_scanner),
                             summary = stringResource(if (blocked) R.string.setting_scanner_unavailable else R.string.setting_scanner_summary),
@@ -270,8 +271,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                             onSave = { key ->
                                 scope.launch {
                                     // The Keystore can take a moment; keep it off the main thread.
-                                    withContext(Dispatchers.Default) { graph.apiKeyStore.set(key) }
-                                    graph.vehicleScanner.onApiKeyChanged()
+                                    val saved = withContext(Dispatchers.Default) { graph.apiKeyStore.set(key) }
+                                    if (saved) {
+                                        graph.vehicleScanner.onApiKeyChanged()
+                                    } else {
+                                        Toast.makeText(context, R.string.api_key_save_failed, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             },
                             onRemove = {
