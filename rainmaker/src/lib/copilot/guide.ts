@@ -88,7 +88,7 @@ export const GUIDE: GuideTopic[] = [
     id: "settings",
     title: "Settings (agency profile and connections)",
     keywords: ["settings", "profile", "agency", "name", "address", "booking link", "keys", "connections", "sample data", "voice"],
-    text: "Settings holds the agency profile the agents and emails use: Agency name, Your name (signs messages), Reply-to email, Home city, Website, Booking link, Postal address for email footers (required for auto-send), Core offer, Services, Pricing, Phone, Proof and results, Writing voice and Target niches. It also shows which services are connected and lets you remove the sample businesses.",
+    text: "Settings holds the agency profile the agents and emails use: Agency name, Your name (signs messages), Reply-to email, Home city, Website, Booking link, Postal address for email footers (required for auto-send), Core offer, Services, Pricing, Phone, Proof and results, Writing voice and Target niches. It also shows which services are connected, lets you remove the sample businesses, and has Start fresh: it deletes every lead with its drafts, tasks, ad campaigns and activity, and their demo receptionists and AI guides in ElevenLabs, after you type DELETE (paying clients, orders and settings stay).",
   },
   {
     id: "keys",

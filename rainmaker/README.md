@@ -59,7 +59,7 @@ All of them, with defaults and optional overrides, are in [.env.example](.env.ex
 | **Sales** | Orders from the store: monthly recurring revenue, money collected this month, lifetime revenue, cancellations and unfinished checkouts. Each order shows its payment status and onboarding steps. Run or retry onboarding, open Stripe's billing portal for the client, cancel a subscription, or record a sale made outside the store. |
 | **Store & pricing** | Turn the store on, set every price and setup fee (with the margin at full usage beside each), hide products, pick the currency, yearly billing, headline and assistant name. Connect Stripe and PayPal webhooks with one button each, and sync the AI sales assistant. |
 | **Playbooks** | 14 client-finding plays: 13 from agency surveys and practitioner reports, and the AI website guide offer from your own playbook. Plus niche cheat sheets and a table of common GoHighLevel complaints next to what Rainmaker does instead. Research claims link to their source. |
-| **Settings** | Agency profile (agents read it every run), connection status, sample data. |
+| **Settings** | Agency profile (agents read it every run), connection status, sample data, and **Start fresh**: deletes every lead with its drafts, tasks, ad campaigns and activity, and the demo receptionists and AI guides built for them in ElevenLabs, after you type DELETE. Paying clients, orders and all settings stay. |
 
 ### How a prospect is scored
 

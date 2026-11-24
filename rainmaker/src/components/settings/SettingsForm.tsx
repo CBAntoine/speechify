@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles } from "lucide-react";
+import { Bot, Check, CircleX, Database, KeyRound, LoaderCircle, Lock, Mail, MapPin, Radar, Save, Sparkles, Trash2 } from "lucide-react";
 import { api, useToast } from "@/components/client";
 import { InstallButton } from "@/components/pwa";
 import { CopilotConnection } from "./CopilotConnection";
@@ -337,6 +337,7 @@ export function SettingsForm({
                 </button>
               )}
             </div>
+            <StartFresh />
           </div>
         </section>
 
@@ -360,6 +361,85 @@ export function SettingsForm({
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+type FreshPlan = { leads: number; drafts: number; tasks: number; campaigns: number; activity: number; keptClients: string[]; agents: number; knowledge: number };
+
+/** Delete every lead and what hangs off it (paying clients stay), after typing DELETE. */
+function StartFresh() {
+  const toast = useToast();
+  const router = useRouter();
+  const [plan, setPlan] = useState<FreshPlan | null>(null);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function prepare() {
+    setBusy(true);
+    try {
+      setPlan(await api<FreshPlan>("/api/settings/fresh"));
+      setTyped("");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await api<FreshPlan & { eleven: { deleted: number; failed: number } }>("/api/settings/fresh", { method: "POST", json: { confirm: typed } });
+      toast(`Started fresh: deleted ${r.leads} lead${r.leads === 1 ? "" : "s"}${r.eleven.failed ? `. ${r.eleven.failed} ElevenLabs agent(s) couldn't be deleted; remove them in ElevenLabs.` : "."}`);
+      setPlan(null);
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const n = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+  return (
+    <div className="stack" style={{ gap: 8, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+      <b className="small">Start fresh</b>
+      <div className="muted small">
+        Deletes every lead with its drafts, tasks, ad campaigns and activity, and the demo receptionists and AI guides built for them in ElevenLabs. Paying clients, orders, your
+        settings, prices and Autopilot settings stay.
+      </div>
+      {!plan ? (
+        <div>
+          <button className="btn sm danger" onClick={() => void prepare()} disabled={busy}>
+            {busy ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />} Start fresh…
+          </button>
+        </div>
+      ) : plan.leads === 0 && !plan.drafts && !plan.tasks && !plan.campaigns ? (
+        <div className="row wrap" style={{ gap: 8 }}>
+          <span className="small">There are no leads to delete.</span>
+          <button className="btn sm ghost" onClick={() => setPlan(null)}>
+            OK
+          </button>
+        </div>
+      ) : (
+        <div className="tip warn stack" style={{ gap: 8, alignItems: "stretch" }}>
+          <span className="small">
+            This deletes {n(plan.leads, "lead")}, {n(plan.drafts, "draft")}, {n(plan.tasks, "task")} and {n(plan.campaigns, "ad campaign")}
+            {plan.agents ? `, and ${n(plan.agents, "demo agent")} in ElevenLabs` : ""}. It can&apos;t be undone.
+            {plan.keptClients.length ? ` ${n(plan.keptClients.length, "paying client")} stay${plan.keptClients.length === 1 ? "s" : ""}: ${plan.keptClients.slice(0, 3).join(", ")}${plan.keptClients.length > 3 ? "…" : ""}.` : ""}
+          </span>
+          <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type DELETE to confirm" aria-label="Type DELETE to confirm" autoCapitalize="characters" autoComplete="off" />
+          <div className="row wrap" style={{ gap: 8 }}>
+            <button className="btn sm danger" onClick={() => void run()} disabled={busy || typed.trim().toUpperCase() !== "DELETE"}>
+              {busy ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />} Delete all leads
+            </button>
+            <button className="btn sm ghost" onClick={() => setPlan(null)} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

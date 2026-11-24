@@ -1,3 +1,5 @@
+import { deleteElevenResources } from "@/lib/elevenlabs/cleanup";
+import { elevenResourcesOf } from "@/lib/fresh";
 import { deleteLead, getLead, updateLead } from "@/lib/repo";
 import { HttpError, readBody, route, type IdParams } from "@/lib/http";
 import type { Lead } from "@/lib/types";
@@ -15,6 +17,10 @@ export const PATCH = route(async (req: Request, { params }: IdParams) => {
 });
 
 export const DELETE = route(async (_req: Request, { params }: IdParams) => {
-  await deleteLead((await params).id);
+  const id = (await params).id;
+  const lead = await getLead(id);
+  await deleteLead(id);
+  // Its demo receptionist and AI guide go too (never a client's live agent).
+  if (lead) await deleteElevenResources(elevenResourcesOf(lead));
   return Response.json({ ok: true });
 });
