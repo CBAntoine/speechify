@@ -53,6 +53,9 @@ export function Header(props: {
           <button className="btn primary" onClick={props.onNew}>
             + New VOD
           </button>
+          <a className="btn" href="/business" title="Who to clip, campaigns, accounts, autopilot and earnings">
+            Business
+          </a>
           {jobs.length > 0 && (
             <select
               className="btn"

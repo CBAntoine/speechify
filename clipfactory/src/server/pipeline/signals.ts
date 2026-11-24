@@ -17,6 +17,8 @@ export interface Signals {
   samples?: Record<number, string[]>;
   /** Comments that cite a moment. */
   mentions?: { t: number; likes: number; text: string }[];
+  /** Clips viewers made (Twitch): where each starts in the VOD, its length and views. */
+  clips?: { t: number; views: number; title: string; duration: number; url?: string }[];
   chapters?: { start: number; end: number; title: string }[];
   /** Human summary: what was found. */
   sources: string[];
@@ -156,6 +158,12 @@ export function audienceScore(s: Signals | null | undefined, duration: number): 
     for (const x of s.mentions) for (let k = Math.max(0, Math.floor(x.t) - 2); k <= Math.min(secs - 1, Math.floor(x.t) + 8); k++) m[k] += 1 + Math.log1p(x.likes);
     add(m, 0.5);
   }
+  if (s.clips?.length) {
+    // Each clip covers the moment someone thought worth keeping; popular ones count more.
+    const m = new Array<number>(secs).fill(0);
+    for (const x of s.clips) for (let k = Math.max(0, Math.floor(x.t)); k <= Math.min(secs - 1, Math.floor(x.t + Math.max(5, x.duration))); k++) m[k] += 1 + Math.log1p(x.views);
+    add(m, 0.9);
+  }
   return total;
 }
 
@@ -198,6 +206,10 @@ export function describeSignals(s: Signals, max = 30): string {
         lines.push(`- ${stamp(w.t)}: ${w.msgs} msgs, reaction ${w.score.toFixed(0)}${said.length ? ` — ${said.slice(0, 4).map((x) => JSON.stringify(x)).join(", ")}` : ""}`);
       }
     }
+  }
+  if (s.clips?.length) {
+    lines.push("Clips viewers made of this VOD (start time, length, views, title), most viewed first:");
+    for (const x of [...s.clips].sort((a, b) => b.views - a.views).slice(0, 20)) lines.push(`- ${stamp(x.t)} (${Math.round(x.duration)} s, ${x.views} views): ${JSON.stringify(x.title)}`);
   }
   if (s.mentions?.length) {
     lines.push("Viewer comments citing a time:");

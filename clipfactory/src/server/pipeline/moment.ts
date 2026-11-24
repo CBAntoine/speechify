@@ -39,6 +39,12 @@ export function readTranscript(c: Ctx): Transcript {
 
 // ── 03 Transcribe ────────────────────────────────────────────────────
 
+/** Whisper spells names it was primed with: the streamer's name, friends, games, slang. */
+function glossaryOf(c: Ctx): string | undefined {
+  const words = [...new Set([...(c.s.options.vocabulary ?? []), c.s.source?.uploader].filter((w): w is string => Boolean(w && w.trim())))];
+  return words.length ? `Glossary: ${words.join(", ")}.` : undefined;
+}
+
 async function transcribe(c: Ctx): Promise<Transcript> {
   const src = c.s.source!;
   const empty: Transcript = { engine: "none", words: [], segments: [] };
@@ -55,6 +61,8 @@ async function transcribe(c: Ctx): Promise<Transcript> {
     try {
       const args = ["--audio", c.path("audio16k.wav"), "--out", c.path("transcript.json"), "--duration", String(src.duration)];
       if (c.s.options.language) args.push("--language", c.s.options.language);
+      const glossary = glossaryOf(c);
+      if (glossary) args.push("--prompt", glossary);
       let lastLive = 0;
       const { result } = await py("cf_transcribe", args, {
         signal: c.signal,
@@ -420,6 +428,8 @@ export async function refineCaptions(c: Ctx) {
     const args = ["--audio", wav, "--out", out, "--model", best, "--no-diarize", "--duration", total.toFixed(1)];
     const lang = c.s.options.language || t.language;
     if (lang) args.push("--language", lang);
+    const glossary = glossaryOf(c);
+    if (glossary) args.push("--prompt", glossary);
     await py("cf_transcribe", args, { signal: c.signal, onLog: (l) => c.log(l, "info", "whisperx") });
     const fresh = (JSON.parse(fs.readFileSync(out, "utf8")) as Transcript).words;
     const { words, spans } = unsplice(fresh, splices, t.words);

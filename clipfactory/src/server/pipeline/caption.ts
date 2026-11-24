@@ -174,6 +174,8 @@ async function typeCaptions(c: Ctx, shorts: Short[]) {
       replay: replay ? { start: plan.body, end: total, label: "SLOW-MO REPLAY" } : undefined,
       title: o.titleBar ? { text: sh.headline || sh.title, from: 0, to: total, y: Math.round(OUT_H * 0.055) } : undefined,
       progress: o.progressBar ? { color: COLORS.LIME } : undefined,
+      watermark: o.watermark,
+      disclosure: o.disclosure,
     });
     fs.writeFileSync(c.path("shorts", sh.id, "captions.ass"), ass);
 

@@ -37,6 +37,9 @@ export function parseOptions(raw: unknown): Partial<JobOptions> {
     dub: Array.isArray(o.dub) ? (o.dub as unknown[]).filter((d): d is string => typeof d === "string" && /^[a-z]{2}$/.test(d)).slice(0, 6) : [],
   };
   if (typeof o.language === "string" && /^[a-z]{2}$/.test(o.language)) out.language = o.language;
+  if (typeof o.watermark === "string" && o.watermark.trim()) out.watermark = o.watermark.trim().slice(0, 40);
+  if (typeof o.disclosure === "string" && o.disclosure.trim()) out.disclosure = o.disclosure.trim().slice(0, 30);
+  if (Array.isArray(o.vocabulary)) out.vocabulary = (o.vocabulary as unknown[]).filter((v): v is string => typeof v === "string" && Boolean(v.trim())).map((v) => v.trim().slice(0, 40)).slice(0, 40);
   if (typeof o.instructions === "string" && o.instructions.trim()) out.instructions = o.instructions.trim().slice(0, 500);
   if (typeof o.name === "string" && o.name.trim()) out.name = o.name.trim().slice(0, 40);
   if (o.publish && typeof o.publish === "object") {

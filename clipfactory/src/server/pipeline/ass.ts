@@ -28,6 +28,10 @@ export interface CaptionPlan {
   title?: { text: string; from: number; to: number; y: number };
   /** A thin bar along the top edge that fills up over the short. */
   progress?: { color: string };
+  /** Your handle, small and see-through, for the whole short. */
+  watermark?: string;
+  /** Paid-promotion disclosure ("#ad"), top left for the whole short. */
+  disclosure?: string;
 }
 
 export interface Page {
@@ -127,6 +131,7 @@ export function buildAss(plan: CaptionPlan): string {
     `Style: Tag,${font},${Math.round(W * 0.05)},${black},${black},${accent},${shadow},0,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1`,
     `Style: Title,${font},${Math.round(W * 0.074)},${black},${black},${white},${assColor("#000000", 0xa0)},0,0,0,0,100,100,1,0,3,${Math.round(W * 0.02)},0,8,60,60,0,1`,
     `Style: Bar,${font},20,${white},${white},${black},${black},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
+    `Style: Mark,${font},${Math.round(W * 0.036)},${assColor("#ffffff", 0x70)},${white},${assColor("#000000", 0x90)},${black},0,0,0,0,100,100,2,0,1,2,0,5,40,40,0,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -151,6 +156,15 @@ export function buildAss(plan: CaptionPlan): string {
   if (plan.title && plan.title.text.trim()) {
     const text = assText(plan.title.text).toUpperCase();
     ev(4, plan.title.from, plan.title.to, "Title", `{\\pos(${cx},${plan.title.y})\\fad(180,0)}${lineBreak(text.split(" "), 22)}`);
+  }
+
+  if (plan.watermark?.trim()) {
+    // Low on the frame, clear of the captions and of the apps' own buttons along the bottom.
+    ev(0, 0, plan.duration, "Mark", `{\\pos(${cx},${Math.round(H * 0.8)})}${assText(plan.watermark)}`);
+  }
+
+  if (plan.disclosure?.trim()) {
+    ev(5, 0, plan.duration, "Tag", `{\\an7\\pos(${Math.round(W * 0.04)},${Math.round(H * (plan.title ? 0.135 : 0.03))})\\fscx70\\fscy70}${assText(plan.disclosure)}`);
   }
 
   if (plan.progress && plan.duration > 1) {

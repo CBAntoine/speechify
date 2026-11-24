@@ -1,6 +1,6 @@
 # Clip Factory /18
 
-Turn a long gameplay VOD with a facecam into captioned 9:16 shorts, and post them to your YouTube channel. Paste a YouTube, Twitch or Kick link (or drop a recording), and Clip Factory pulls it, finds the moments worth posting, puts the facecam on top and the action below, cleans the audio, cuts each short like an editor would (a cold open on the payoff, punch-in zooms, a whoosh into the cut, word-timed captions with the key words lit), exports platform-ready MP4s with titles and hashtags, and can post them as Shorts, right away or on a schedule.
+Turn a long gameplay VOD with a facecam into captioned 9:16 shorts, and post them to YouTube, TikTok and Instagram. Or let it run your clipping business: it finds who to clip, takes their new VODs as they're published, makes the shorts, posts them across your accounts, and tracks what each paid campaign owes you. Paste a YouTube, Twitch or Kick link (or drop a recording), and Clip Factory pulls it, finds the moments worth posting, puts the facecam on top and the action below, cleans the audio, cuts each short like an editor would (a cold open on the payoff, punch-in zooms, a whoosh into the cut, word-timed captions with the key words lit), exports platform-ready MP4s with titles and hashtags, and can post them as Shorts, right away or on a schedule.
 
 Up to 18 open-source repos do the work, with Claude (Opus 5.5) as the orchestrator that picks the moments. Every step shows up live in a dashboard modelled on the "Clip Factory /18" video: program monitor, 9:16 output, inspector, render queue, timeline and the 18-repo stack.
 
@@ -81,6 +81,61 @@ Each post uses the title, description and hashtags Clip Factory wrote, with `#Sh
 
 Uploads count against your Google Cloud project's YouTube API quota and YouTube's own daily upload limit for the channel. If you hit either, the short shows why and you can post it again later.
 
+## Run it as a clipping business
+
+Open **Business** (top of the dashboard, or http://127.0.0.1:3200/business). [docs/clipping-playbook.md](docs/clipping-playbook.md) has the research behind it: how the top clipping tools work, how clippers get paid, the platform rules, and a top earner's workflow mapped to what this automates.
+
+### Set up (once)
+
+1. **Sources & keys.** Each is optional; add the ones for where your creators are.
+   - **Twitch:** make an app at [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) (any OAuth redirect URL), then paste its client ID and secret. This gives live viewers, new VODs, and the clips viewers make.
+   - **Kick:** make an app at kick.com/settings/developer. This gives who's live and how many are watching. Kick's API doesn't list VODs, so paste Kick VOD links into New VOD yourself.
+   - **YouTube:** an API key (Google Cloud → YouTube Data API v3), or just your connected channel. This gives channels' new long videos and trending long-form.
+2. **Creators.** Paste channel links. Mark each one's permission:
+   - A **paid campaign** on file counts as permission.
+   - **Allowed:** they've said clips are welcome. Note where.
+   - **Ask first:** the default. Ranked, never clipped.
+   - **No clips.**
+3. **Campaigns.** For each campaign you join (Content Rewards at contentrewards.com/c/discover, Vyro, a streamer's Discord), enter:
+   - its rate per 1,000 views, the views it pays after, its cap and fee;
+   - its submission window: 30 minutes on Content Rewards, where only views after you submit count;
+   - its rules: required caption text, hashtags, mentions, platforms, length, an on-screen "#ad", and direction for Claude.
+4. **Accounts.** Your connected YouTube channel appears by itself.
+   - **TikTok:** make a **Desktop** app at developers.tiktok.com with Login Kit and the Content Posting API, and register `http://127.0.0.1:3200/api/accounts/tiktok/callback` as its redirect URI. Then press Connect.
+     - **Drafts mode** sends each short to your TikTok inbox and you tap Post. It works before TikTok audits your app, with at most 5 drafts waiting at a time.
+     - **Direct post** needs TikTok's audit before it can post publicly. Until then, it only posts private videos to a private account.
+   - **Instagram Reels:** paste a long-lived token for a Business or Creator account. Meta documents direct video uploads for **Facebook Login for Business** tokens (`EAA…`, Instagram linked to a Facebook Page). An Instagram Login token (`IG…`) may be refused for uploads.
+   - Give an account one or more creators to make it a theme page. Accounts with none take anyone. Each short goes to one account per platform.
+5. **Autopilot settings:** how often to scan, VODs per day, shorts per VOD, the lowest score worth posting, posting hours, the gap between posts, your watermark handle, the edit options. Optionally, "Ask me before posting".
+
+### Then
+
+Turn the autopilot on. The dashboard's server runs it (so does `npm run autopilot` on an always-on machine; only one runs at a time). Each scan:
+
+1. **Ranks your creators.** Score = pay 35% + audience 25% + a fresh unclipped VOD 20% + community clipping 10% + your own results 10%, each shown with its reasons.
+2. **Clips the best new VODs** from creators you may clip, up to your daily limit. Each job carries:
+   - the campaign's rules and length limits;
+   - the creator's word list (for names and slang in the captions);
+   - what has worked for you with that creator, as direction for Claude.
+3. **Fast lane (optional, Twitch):** turns the clips viewers made in the last few hours into shorts.
+4. **Schedules** each finished job's shorts that clear your score bar: one account per platform, inside posting hours, spaced out, under each account's daily limit.
+5. **Posts** them when their slot comes. YouTube uploads early and publishes itself at its time.
+6. **Refreshes views** every 3 hours and works out what each campaign owes: its rate, threshold, cap and fee, and only views after submission where the campaign works that way.
+
+Campaigns don't take submissions through an API (Content Rewards has none). When a post goes live, it appears under **Submit to campaigns** with the campaign's countdown. Turn on **Alert me** for a browser notification, copy the link, submit it on the campaign page, and press **Submitted**. If you can't always be there within 30 minutes, turn on **Ask me before posting** and post when you are. Record payouts as they arrive.
+
+From the terminal: `npm run autopilot` runs it, `npm run autopilot -- --scout` ranks your creators and suggests new ones, and `npm run autopilot -- --stats` prints earnings and what's left to submit.
+
+### Limits worth knowing
+
+- **Permission matters more than any feature.** A campaign licenses its footage for its own clips only. Clip anyone else only with their written permission.
+- **Platforms' originality rules apply regardless of permission.**
+  - YouTube's reused-content policy can stop a clip channel's monetisation; campaign payouts don't depend on it.
+  - TikTok and Instagram push unoriginal reposts down.
+  - Posting the same file to two accounts on one platform links them, which is why each short goes to one account per platform.
+- **Keep the pace human.** Defaults: 4–5 posts per account per day. Bulk automation and coordinated account networks break TikTok's rules. Never buy views: it gets you banned from every campaign.
+- **Read-only where the API is.** Discovery only reads what Twitch, Kick and YouTube publish through their APIs, and keeps Twitch data for 24 hours at most (Twitch's terms). Nothing scrapes Kick or the campaign sites.
+
 ## The 18 repos, and what runs when one isn't installed
 
 Each step uses the real repo when it's installed and a built-in equivalent when it isn't. The stack panel marks which one ran for each step (hover a row for details).
@@ -149,6 +204,13 @@ All optional. Put them in `.env.local`.
 | `CF_GITHUB_TOKEN` | Raises the GitHub rate limit for the star counts in the header. |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | Your Google OAuth client, instead of dropping its JSON into the dashboard. |
 | `CF_ALLOWED_HOSTS` | Other hostnames allowed to use the server (for example your computer's LAN name). |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Your Twitch app, instead of entering it under Business → Sources & keys. |
+| `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET` | Your Kick app. |
+| `YOUTUBE_API_KEY` | YouTube Data API key for the scout (otherwise it uses your connected channel). |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` / `TIKTOK_REDIRECT_URI` | Your TikTok app. |
+| `CF_AUTOPILOT` | `off` keeps the dashboard's server from running the autopilot (when `npm run autopilot` runs it elsewhere). |
+| `CF_CLIP_LANE_MIN_VIEWS` | Views a viewer's Twitch clip needs before the fast lane takes it (default 2000). |
+| `CF_IG_API_VERSION` | Graph API version for Instagram (default `v24.0`). |
 
 ## Notes
 
@@ -156,4 +218,4 @@ All optional. Put them in `.env.local`.
 - On a CPU, a 90-second test VOD becomes 2–3 shorts in about 4 minutes. Most of the time goes to the final slow-preset encodes and the second caption pass. A GPU and `--full` make the AI steps fast.
 - On headless Linux, MediaPipe needs `sudo apt install libegl1 libgles2`. Without them it falls back to OpenCV.
 - Only clip streams you have the rights to post.
-- Tests: `npm test` covers the captions, layout and tracking maths, moment picking and cut points, dead-air cutting, subtitle parsing, audience signals, the edit (cold open, punch-ins, stressed words, bleeps, sound effects), the composed FFmpeg graph (run through FFmpeg), the Claude requests (picking and watching), and YouTube login, upload and scheduling (against mock servers).
+- Tests: `npm test` covers the captions, layout and tracking maths, moment picking and cut points, dead-air cutting, subtitle parsing, audience signals, the edit (cold open, punch-ins, stressed words, bleeps, sound effects), the composed FFmpeg graph (run through FFmpeg), the Claude requests (picking and watching), YouTube login, upload and scheduling, and the clipping business end to end against stand-ins for Twitch, TikTok and Instagram: scouting, campaigns, scheduling, posting, view tracking and earnings.

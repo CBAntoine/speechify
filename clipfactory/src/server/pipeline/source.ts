@@ -40,7 +40,10 @@ interface InfoJson {
 
 async function fetchAudience(c: Ctx) {
   const o = c.s.options;
-  if (!o.audience || !o.url || !c.m.ytdlp) return;
+  if (!o.audience || !o.url) return;
+  const twitchVod = /twitch\.tv\/videos\/(\d+)/i.exec(o.url)?.[1];
+  if (twitchVod) return twitchAudience(c, twitchVod);
+  if (!c.m.ytdlp) return;
   const read = (f: string) => {
     try {
       return JSON.parse(fs.readFileSync(c.path(f), "utf8")) as InfoJson;
@@ -87,11 +90,39 @@ async function fetchAudience(c: Ctx) {
   s.mentions = commentMentions(more?.comments, duration);
   if (s.mentions.length) s.sources.push(`${s.mentions.length} timestamped comments`);
   s.chapters = (info.chapters ?? []).map((ch) => ({ start: ch.start_time, end: ch.end_time, title: ch.title }));
-  fs.writeFileSync(c.path("signals.json"), JSON.stringify(s));
   if (!s.sources.length) {
+    fs.writeFileSync(c.path("signals.json"), JSON.stringify(s));
     c.log("No audience signals on this video (not enough views for Most replayed, no chat replay, no timestamped comments)", "info", "ytdlp");
     return;
   }
+  saveSignals(c, s);
+}
+
+/** Twitch: the clips viewers made of this VOD, each placed at the second it starts. */
+async function twitchAudience(c: Ctx, videoId: string) {
+  const { clipsOfVod, twitchCreds } = await import("../biz/twitch.ts");
+  if (!twitchCreds()) {
+    c.log("Add a Twitch app (Autopilot → Sources) to use the clips viewers made of this VOD as a signal", "info", "ytdlp");
+    return;
+  }
+  c.log("Reading which moments Twitch viewers clipped", "info", "ytdlp");
+  const got = await clipsOfVod(videoId);
+  if (!got) return;
+  const { twitchDuration } = await import("../biz/twitch.ts");
+  const duration = Math.max(c.s.source?.duration ?? 0, twitchDuration(got.video.duration), 1);
+  const s: Signals = { duration, clips: got.clips, sources: [] };
+  if (got.clips.length) s.sources.push(`${got.clips.length} community clips`);
+  if (!s.sources.length) {
+    fs.writeFileSync(c.path("signals.json"), JSON.stringify(s));
+    c.log("No community clips of this VOD yet", "info", "ytdlp");
+    return;
+  }
+  saveSignals(c, s);
+}
+
+function saveSignals(c: Ctx, s: Signals) {
+  const duration = s.duration;
+  fs.writeFileSync(c.path("signals.json"), JSON.stringify(s));
   const score = audienceScore(s, duration);
   // A reduce, not Math.min(...score): a day-long stream has 86,400 values.
   const lo = score.reduce((m, v) => Math.min(m, v), Infinity);

@@ -1542,3 +1542,395 @@ code.copy {
   left: 6px;
   top: 6px;
 }
+
+/* ── Business ───────────────────────────────────────────── */
+
+.crumb-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.crumb-link:hover {
+  color: var(--text);
+}
+
+.count.money {
+  color: var(--money);
+  text-shadow: 0 0 28px rgba(61, 255, 106, 0.22);
+  font-size: clamp(38px, 6vw, 64px);
+}
+
+.biz-status {
+  font: 600 11px/1.5 var(--mono);
+  color: var(--dim);
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.biz-status.on {
+  border-style: solid;
+  border-color: rgba(200, 255, 61, 0.35);
+  color: var(--text);
+}
+
+.biz-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 860px) {
+  .biz-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .biz-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-width: 0;
+}
+
+.tile-v {
+  font: 400 26px/1 var(--display);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-l {
+  margin-top: 6px;
+  font: 600 9.5px/1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.biz-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.biz-row {
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 8px 9px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.biz-row.urgent {
+  border-color: rgba(255, 176, 58, 0.6);
+}
+
+.opp-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.opp-name {
+  font: 600 13px/1.3 var(--sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opp-name a {
+  text-decoration: none;
+}
+
+.opp-name a:hover {
+  text-decoration: underline;
+}
+
+.opp-name .pill {
+  position: static;
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+
+.opp-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.rank {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.score {
+  font: 400 24px/1 var(--display);
+  min-width: 34px;
+  text-align: right;
+}
+
+.plat {
+  font: 700 9px/1 var(--mono);
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 3px;
+  vertical-align: 2px;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-grid;
+  place-items: center;
+  background: var(--panel-hi);
+  color: var(--dim);
+  font: 700 12px/1 var(--mono);
+}
+
+.meter {
+  height: 4px;
+  margin: 5px 0 4px;
+  background: var(--line-soft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--lime);
+  border-radius: 3px;
+}
+
+.reasons {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+  font: 500 12px/1.45 var(--sans);
+  color: var(--text);
+}
+
+.biz-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.biz-form .wide {
+  grid-column: 1 / -1;
+}
+
+.biz-form .field input,
+.biz-form .field select,
+.biz-row .field input {
+  width: 100%;
+  min-width: 0;
+}
+
+.biz .chipbtn {
+  text-decoration: none;
+}
+
+.biz .chipbtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chipbtn.vocab,
+.chipbtn.grow {
+  flex: 1 1 180px;
+  min-width: 0;
+  text-transform: none;
+  color: var(--text);
+  cursor: text;
+}
+
+.sub {
+  margin: 14px 0 6px;
+  font: 700 10.5px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.countdown {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.biz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 12px/1.4 var(--sans);
+}
+
+.biz-table th {
+  text-align: left;
+  font: 700 9.5px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 6px 4px;
+}
+
+.biz-table td {
+  padding: 6px 4px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.biz-table td.mono,
+.biz-table th:not(:first-child) {
+  text-align: right;
+}
+
+.connects,
+.keys {
+  display: grid;
+  gap: 4px;
+}
+
+.keyblock .toggles input,
+.connects .toggles input {
+  background: #121219;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: 600 12px/1 var(--mono);
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.biz-log {
+  max-height: 220px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+.biz-log .warn {
+  color: var(--amber);
+}
+
+.biz-log .t {
+  color: var(--faint);
+  margin-right: 6px;
+}
+
+/* Views per day: one series (#7aa61a, inside the dark-surface lightness band), thin bars, recessive axis. */
+.daily {
+  margin: 0;
+}
+
+.daily-title {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+
+.daily-plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 110px;
+  border-bottom: 1px solid var(--line);
+}
+
+.daily-col {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  outline: none;
+}
+
+.daily-bar {
+  width: 70%;
+  max-width: 22px;
+  background: #7aa61a;
+  border-radius: 4px 4px 0 0;
+}
+
+.daily-col:hover .daily-bar,
+.daily-col:focus-visible .daily-bar {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--dim);
+}
+
+.daily-max {
+  position: absolute;
+  top: -2px;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.daily-tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: 500 11px/1.4 var(--sans);
+  color: var(--text);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.daily-col:hover .daily-tip,
+.daily-col:focus-visible .daily-tip {
+  display: block;
+}
+
+.daily-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--faint);
+  margin-top: 4px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.biz .opp-name .pill,
+.biz .sub .pill {
+  font-size: 9px;
+  padding: 3px 5px;
+  box-shadow: none;
+}

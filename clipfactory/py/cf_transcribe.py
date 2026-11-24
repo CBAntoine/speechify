@@ -2,6 +2,7 @@
 
     python cf_transcribe.py --audio audio16k.wav --out transcript.json
         [--engine auto|whisperx|faster-whisper|whisper] [--model small] [--language en] [--no-diarize]
+        [--prompt "Glossary: names and slang to spell right"]
 
 auto tries WhisperX, then faster-whisper, then OpenAI Whisper.
 Writes {"engine","language","words":[{"w","s","e"}],"segments":[{"s","e","text"}]}.
@@ -18,6 +19,7 @@ from cf_common import emit, fail, log, progress, result, torch_device  # noqa: E
 
 ENGINES = ["whisperx", "faster-whisper", "whisper"]
 DIARIZE = True
+PROMPT = None
 MODULE = {"whisperx": "whisperx", "faster-whisper": "faster_whisper", "whisper": "whisper"}
 
 
@@ -71,7 +73,8 @@ def run_whisperx(path, model_name, language, device, duration):
     compute = "float16" if device == "cuda" else "int8"
     dev = "cuda" if device == "cuda" else "cpu"
     progress(0.05, "loading WhisperX")
-    model = whisperx.load_model(model_name, dev, compute_type=compute, language=language or None)
+    opts = {"initial_prompt": PROMPT} if PROMPT else None
+    model = whisperx.load_model(model_name, dev, compute_type=compute, language=language or None, asr_options=opts)
     audio = whisperx.load_audio(path)
     progress(0.15, "transcribing")
     out = model.transcribe(audio, batch_size=16 if dev == "cuda" else 4)
@@ -102,7 +105,7 @@ def run_faster(path, model_name, language, device, duration):
     dev = "cuda" if device == "cuda" else "cpu"
     progress(0.03, "loading faster-whisper")
     model = WhisperModel(model_name, device=dev, compute_type="float16" if dev == "cuda" else "int8")
-    segs, info = model.transcribe(path, language=language or None, word_timestamps=True, vad_filter=True)
+    segs, info = model.transcribe(path, language=language or None, word_timestamps=True, vad_filter=True, initial_prompt=PROMPT)
     total = duration or getattr(info, "duration", 0) or 0
     raw, segments = [], []
     for seg in segs:
@@ -121,7 +124,7 @@ def run_whisper(path, model_name, language, device, duration):
     progress(0.03, "loading Whisper")
     model = whisper.load_model(model_name, device="cuda" if device == "cuda" else "cpu")
     progress(0.1, "transcribing")
-    out = model.transcribe(path, language=language or None, word_timestamps=True, verbose=None, fp16=device == "cuda")
+    out = model.transcribe(path, language=language or None, word_timestamps=True, verbose=None, fp16=device == "cuda", initial_prompt=PROMPT)
     raw, segments = [], []
     for seg in out["segments"]:
         segments.append({"s": round(seg["start"], 3), "e": round(seg["end"], 3), "text": seg["text"].strip()})
@@ -151,9 +154,11 @@ def main():
     ap.add_argument("--language", default="")
     ap.add_argument("--duration", type=float, default=0)
     ap.add_argument("--no-diarize", action="store_true", help="skip speaker labels (the caller already has them)")
+    ap.add_argument("--prompt", default="", help="glossary for the decoder: names and slang to spell right")
     args = ap.parse_args()
-    global DIARIZE
+    global DIARIZE, PROMPT
     DIARIZE = not args.no_diarize
+    PROMPT = args.prompt.strip() or None
 
     order = ENGINES if args.engine == "auto" else [args.engine]
     available = [e for e in order if importlib.util.find_spec(MODULE[e]) is not None]

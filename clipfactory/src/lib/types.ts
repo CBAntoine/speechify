@@ -181,6 +181,12 @@ export interface JobOptions {
   sfx: boolean;
   /** Use YouTube's Most replayed graph, live-chat replay and timestamped comments when the VOD has them. */
   audience: boolean;
+  /** Your handle, burned small on every short (discourages reuploads). */
+  watermark?: string;
+  /** Paid-promotion disclosure burned into the video, e.g. "#ad". */
+  disclosure?: string;
+  /** Names and slang for the transcription to spell right. */
+  vocabulary?: string[];
   /** Transcription language hint (ISO 639-1). Empty = detect. */
   language?: string;
   /** Extra direction for picking moments, e.g. "only funny fails". */

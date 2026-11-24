@@ -25,13 +25,16 @@ export function Shelf({ job, yt, onPlay, onPost, onPostAll }: { job: JobState | 
     <section className="panel" aria-label="Shipped shorts">
       <div className="ph" style={{ overflow: "visible" }}>
         <span className="name" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>SHIPPED / workspace/{job.id}/export</span>
-        {done.some((s) => !s.youtube || s.youtube.status === "failed") ? (
-          <button className="btn yt" onClick={onPostAll} title={yt?.connected ? `Post to ${yt.channel?.title ?? "YouTube"}` : "Connect a YouTube channel first"}>
-            ▶ Post all to YouTube
-          </button>
-        ) : (
-          <span className="right">posting order</span>
-        )}
+        <span className="toggles" style={{ flexWrap: "nowrap" }}>
+          <QueueButton jobId={job.id} />
+          {done.some((s) => !s.youtube || s.youtube.status === "failed") ? (
+            <button className="btn yt" onClick={onPostAll} title={yt?.connected ? `Post to ${yt.channel?.title ?? "YouTube"}` : "Connect a YouTube channel first"}>
+              ▶ Post all to YouTube
+            </button>
+          ) : (
+            <span className="right">posting order</span>
+          )}
+        </span>
       </div>
       <div className="pb" style={{ display: "grid", gap: 12 }}>
         <div className="shelf">
@@ -95,5 +98,25 @@ export function Shelf({ job, yt, onPlay, onPost, onPostAll }: { job: JobState | 
         </div>
       </div>
     </section>
+  );
+}
+
+/** Hand the shorts that clear the autopilot's score bar to your connected accounts (TikTok, Instagram, YouTube), spread over posting hours. */
+function QueueButton({ jobId }: { jobId: string }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const queue = async () => {
+    setMsg("…");
+    const r = await fetch("/api/biz", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "post.schedule", jobId }) }).catch(() => null);
+    const body = (await r?.json().catch(() => ({}))) as { result?: { scheduled?: number }; error?: string };
+    setMsg(r?.ok ? `${body.result?.scheduled ?? 0} queued` : (body.error ?? "Couldn't queue them"));
+    setTimeout(() => setMsg(null), 6000);
+  };
+  return (
+    <>
+      {msg && <span className="hint" style={{ alignSelf: "center" }}>{msg}</span>}
+      <button className="btn" onClick={() => void queue()} title="Schedule these shorts on your connected accounts (Business page): TikTok, Instagram and YouTube, spread over your posting hours">
+        Queue to my accounts
+      </button>
+    </>
   );
 }

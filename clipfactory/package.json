@@ -11,6 +11,7 @@
     "setup": "node scripts/setup.mjs",
     "doctor": "node scripts/factory.ts --doctor",
     "factory": "node scripts/factory.ts",
+    "autopilot": "node scripts/autopilot.ts",
     "demo-vod": "node scripts/demo-vod.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts"

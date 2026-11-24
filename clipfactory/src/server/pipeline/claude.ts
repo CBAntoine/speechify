@@ -99,7 +99,7 @@ How to cut it:
 - End right after the payoff and the reaction; don't trail off.
 - replay_at is the second of the climax, the frame worth replaying in slow motion.
 
-Audience signals, when given, are the strongest evidence you have: chat spikes (laughs, hype, people typing "clip it"), the parts viewers replayed most, and comments that cite a time. Chat reacts a few seconds after the moment, so the moment itself starts earlier. Prefer moments the audience reacted to, and make sure the clip includes the cause of the reaction, not just the aftermath.
+Audience signals, when given, are the strongest evidence you have: clips viewers already made of this VOD, chat spikes (laughs, hype, people typing "clip it"), the parts viewers replayed most, and comments that cite a time. Chat reacts a few seconds after the moment, so the moment itself starts earlier. Prefer moments the audience reacted to, and make sure the clip includes the cause of the reaction, not just the aftermath.
 
 Cold open: if the payoff is a sudden, visual or loud beat (a crash, a kill, a scream, a reveal) and the build-up is longer than a few seconds, set use_teaser and give teaser_start/teaser_end: 1–2.5 s of the payoff, inside the clip. The short opens on it, then rewinds to the setup. Don't tease conversations, slow reveals or jokes whose punch line needs the setup.
 
