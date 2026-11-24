@@ -2,10 +2,12 @@ package com.cbantoine.dashcam.recording
 
 import android.content.Context
 import android.view.Surface
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.SurfaceRequest
 import androidx.core.content.edit
 import com.cbantoine.dashcam.settings.VideoQuality
 import com.cbantoine.dashcam.telemetry.GpsFix
+import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +45,8 @@ data class RecorderUiState(
     val supportedQualities: List<VideoQuality> = emptyList(),
     val hevcSupported: Boolean = false,
     val stabilizationSupported: Boolean = false,
+    /** The camera is also feeding the car scanner's analysis stream. */
+    val scannerAvailable: Boolean = false,
 ) {
     val isSessionActive: Boolean
         get() = phase == RecorderPhase.STARTING || phase == RecorderPhase.RECORDING ||
@@ -58,6 +62,9 @@ interface RecorderController {
     fun cancelAutoStop()
 }
 
+/** Something that wants camera frames from the engine's analysis stream (the car scanner). */
+class FrameAnalyzer(val executor: Executor, val analyzer: ImageAnalysis.Analyzer)
+
 /** Shared, observable recorder state. The service writes it; the UI and tile read it. */
 class RecorderStateHolder {
     private val _state = MutableStateFlow(RecorderUiState())
@@ -70,6 +77,9 @@ class RecorderStateHolder {
 
     /** Display rotation reported by the camera screen while it is visible. */
     val displayRotation = MutableStateFlow(Surface.ROTATION_90)
+
+    /** Attached to the analysis stream while set; frames stop when it is null. */
+    val frameAnalyzer = MutableStateFlow<FrameAnalyzer?>(null)
 
     @Volatile
     var controller: RecorderController? = null

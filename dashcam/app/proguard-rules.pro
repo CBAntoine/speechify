@@ -7,3 +7,6 @@
     *** Companion;
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+# LiteRT's native code calls back into these classes, so keep them whole (they are small).
+-keep class org.tensorflow.lite.** { *; }

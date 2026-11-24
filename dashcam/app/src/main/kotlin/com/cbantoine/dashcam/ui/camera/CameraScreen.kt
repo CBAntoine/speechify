@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,6 +96,7 @@ import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cbantoine.dashcam.MainActivity
 import com.cbantoine.dashcam.R
@@ -107,6 +109,7 @@ import com.cbantoine.dashcam.recording.RecorderUiState
 import com.cbantoine.dashcam.recording.RecordingService
 import com.cbantoine.dashcam.recording.SpeedFormat
 import com.cbantoine.dashcam.recording.ZoomInfo
+import com.cbantoine.dashcam.scanner.ScannerState
 import com.cbantoine.dashcam.settings.DashcamSettings
 import com.cbantoine.dashcam.settings.MountOrientation
 import com.cbantoine.dashcam.settings.SpeedUnit
@@ -124,6 +127,7 @@ import kotlinx.coroutines.launch
 fun CameraScreen(onOpenClips: () -> Unit, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     val graph = context.appGraph
+    val scope = rememberCoroutineScope()
     val holder = graph.recorderState
     val state by holder.state.collectAsStateWithLifecycle()
     val settings by graph.settings.collectAsStateWithLifecycle()
@@ -131,9 +135,54 @@ fun CameraScreen(onOpenClips: () -> Unit, onOpenSettings: () -> Unit) {
     val gps by holder.gps.collectAsStateWithLifecycle()
     val gForce by holder.gForce.collectAsStateWithLifecycle()
     val inPip = rememberIsInPictureInPicture()
+    val scanner = graph.vehicleScanner
+    val scan by scanner.state.collectAsStateWithLifecycle()
+    val hasApiKey by graph.apiKeyStore.hasKey.collectAsStateWithLifecycle()
+    var panelOpen by rememberSaveable { mutableStateOf(true) }
 
     LockOrientation(settings.orientation)
     ReportDisplayRotation(holder, enabled = !inPip)
+
+    // The scanner only runs while someone can see it: never in the background or in PiP.
+    val scanWanted = settings.scannerEnabled && settings.scanActive
+    val scanRunning = scanWanted && state.scannerAvailable && !inPip
+    LifecycleStartEffect(scanRunning) {
+        scanner.setActive(scanRunning)
+        onStopOrDispose { scanner.setActive(false) }
+    }
+    val scanHud = ScanHud(
+        shown = settings.scannerEnabled,
+        active = scanWanted,
+        state = scan,
+        problem = when {
+            !scanWanted -> null
+            scan.unavailable -> R.string.scan_unavailable
+            state.cameraReady && !state.scannerAvailable -> R.string.scan_no_stream
+            scan.slowedForHeat -> R.string.scan_hot
+            else -> null
+        },
+        hasApiKey = hasApiKey,
+        panelOpen = panelOpen,
+        onToggle = {
+            val turningOff = settings.scanActive
+            if (turningOff) {
+                // Stop frames first so nothing is re-added after the clear.
+                scanner.setActive(false)
+                scanner.clear()
+            }
+            panelOpen = true
+            scope.launch { graph.settingsRepository.update { it.copy(scanActive = !turningOff) } }
+        },
+        onSelect = { id ->
+            scanner.select(id)
+            panelOpen = true
+        },
+        onIdentify = scanner::identify,
+        onClosePanel = {
+            scanner.select(null)
+            panelOpen = false
+        },
+    )
 
     Box(
         Modifier
@@ -160,6 +209,9 @@ fun CameraScreen(onOpenClips: () -> Unit, onOpenSettings: () -> Unit) {
             interactive = !inPip,
             onZoomRatioChanged = { ratio -> holder.controller?.setZoom(ratio) },
         )
+        if (!inPip && scan.running) {
+            ScannerOverlay(scan, onSelect = scanHud.onSelect, modifier = Modifier.fillMaxSize())
+        }
         if (inPip) {
             PipBadge(state, Modifier.align(Alignment.TopStart).padding(8.dp))
         } else {
@@ -176,10 +228,31 @@ fun CameraScreen(onOpenClips: () -> Unit, onOpenSettings: () -> Unit) {
                 onZoom = { ratio -> holder.controller?.setZoom(ratio) },
                 onOpenClips = onOpenClips,
                 onOpenSettings = onOpenSettings,
+                scan = scanHud,
             )
         }
     }
 }
+
+/** What the HUD needs to show the car scanner. */
+private class ScanHud(
+    /** The scanner is enabled in Settings, so the Scan chip is shown. */
+    val shown: Boolean,
+    /** The user switched scanning on. */
+    val active: Boolean,
+    val state: ScannerState,
+    /** Why scanning can't run (or is slowed) right now, as a string resource. */
+    val problem: Int?,
+    val hasApiKey: Boolean,
+    val panelOpen: Boolean,
+    val onToggle: () -> Unit,
+    val onSelect: (Int) -> Unit,
+    val onIdentify: (Int) -> Unit,
+    val onClosePanel: () -> Unit,
+)
+
+private val RailWidth = 80.dp
+private val PanelWidth = 300.dp
 
 @Composable
 private fun Viewfinder(
@@ -228,6 +301,7 @@ private fun CameraHud(
     onZoom: (Float) -> Unit,
     onOpenClips: () -> Unit,
     onOpenSettings: () -> Unit,
+    scan: ScanHud,
 ) {
     val haptics = LocalHapticFeedback.current
     BoxWithConstraints(
@@ -257,17 +331,66 @@ private fun CameraHud(
 
         Column(Modifier.align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusPill(state)
-            InfoChips(state, settings)
+            InfoChips(state, settings, scan)
         }
 
-        Banners(
-            state = state,
-            settings = settings,
-            modifier = Modifier
+        val focused = scan.state.focused
+        val showPanel = scan.active && scan.state.running && scan.panelOpen && focused != null
+        val showStrip = scan.active && scan.state.tracked.isNotEmpty()
+        val scannerColumn = showPanel || showStrip
+        // Beside the panel, banners move under the chips so they never cover it.
+        val bannerModifier = if (landscape && scannerColumn) {
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 100.dp)
+                .widthIn(max = minOf(460.dp, maxWidth - PanelWidth - RailWidth - 36.dp))
+        } else {
+            Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = if (landscape) 0.dp else 88.dp)
-                .widthIn(max = 460.dp),
-        )
+                .widthIn(max = 460.dp)
+        }
+        Banners(state = state, settings = settings, scanProblem = scan.problem, modifier = bannerModifier)
+
+        if (scannerColumn) {
+            val columnModifier = if (landscape) {
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = RailWidth + 12.dp)
+                    .width(PanelWidth)
+                    .fillMaxHeight()
+            } else {
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 96.dp, bottom = 236.dp)
+                    .fillMaxWidth()
+            }
+            Box(columnModifier) {
+                if (showPanel) {
+                    VehiclePanel(
+                        vehicle = focused,
+                        hasApiKey = scan.hasApiKey,
+                        onIdentify = { scan.onIdentify(focused.id) },
+                        onOpenSettings = onOpenSettings,
+                        onClose = scan.onClosePanel,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .padding(bottom = if (showStrip) 112.dp else 0.dp),
+                    )
+                }
+                if (showStrip) {
+                    TrackedStrip(
+                        vehicles = scan.state.tracked,
+                        focusedId = scan.state.focusedId,
+                        onSelect = scan.onSelect,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth(),
+                    )
+                }
+            }
+        }
 
         ProtectToast(state, Modifier.align(Alignment.Center))
 
@@ -289,7 +412,10 @@ private fun CameraHud(
                 onZoom = onZoom,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (landscape) 0.dp else 132.dp),
+                    .padding(
+                        bottom = if (landscape) 0.dp else 132.dp,
+                        end = if (landscape && scannerColumn) PanelWidth + RailWidth + 24.dp else 0.dp,
+                    ),
             )
         }
 
@@ -455,11 +581,12 @@ private fun StatusPill(state: RecorderUiState) {
 }
 
 @Composable
-private fun InfoChips(state: RecorderUiState, settings: DashcamSettings) {
+private fun InfoChips(state: RecorderUiState, settings: DashcamSettings, scan: ScanHud) {
     val quality = (state.quality ?: settings.quality).label
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         HudChip(stringResource(R.string.loop_chip, quality, settings.clipMinutes))
         HudChip(if (state.hevc) "HEVC" else "H.264")
+        if (scan.shown) ScanChip(active = scan.active, slowed = scan.state.slowedForHeat, onClick = scan.onToggle)
     }
 }
 
@@ -556,7 +683,7 @@ private fun ZoomChips(zoom: ZoomInfo, onZoom: (Float) -> Unit, modifier: Modifie
 }
 
 @Composable
-private fun Banners(state: RecorderUiState, settings: DashcamSettings, modifier: Modifier) {
+private fun Banners(state: RecorderUiState, settings: DashcamSettings, scanProblem: Int?, modifier: Modifier) {
     val context = LocalContext.current
     val graph = context.appGraph
     val scope = rememberCoroutineScope()
@@ -585,6 +712,13 @@ private fun Banners(state: RecorderUiState, settings: DashcamSettings, modifier:
             )
         } else if (state.thermalWarning) {
             Banner(Icons.Rounded.Thermostat, stringResource(R.string.thermal_warning), DashcamPalette.Amber)
+        }
+        scanProblem?.let { problem ->
+            Banner(
+                icon = if (problem == R.string.scan_hot) Icons.Rounded.Thermostat else Icons.Rounded.ErrorOutline,
+                text = stringResource(problem),
+                accent = DashcamPalette.Amber,
+            )
         }
         state.stopCountdownSec?.let { seconds ->
             Banner(

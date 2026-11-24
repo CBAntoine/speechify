@@ -5,6 +5,8 @@ import android.content.Context
 import com.cbantoine.dashcam.recording.RecorderStateHolder
 import com.cbantoine.dashcam.recording.RecordingNotifications
 import com.cbantoine.dashcam.recording.SessionMarker
+import com.cbantoine.dashcam.scanner.ApiKeyStore
+import com.cbantoine.dashcam.scanner.VehicleScanner
 import com.cbantoine.dashcam.settings.DashcamSettings
 import com.cbantoine.dashcam.settings.SettingsRepository
 import com.cbantoine.dashcam.storage.ClipRepository
@@ -35,6 +37,8 @@ class AppGraph(app: Application) {
     val clipRepository = ClipRepository(app, settings)
     val recorderState = RecorderStateHolder()
     val sessionMarker = SessionMarker(app)
+    val apiKeyStore = ApiKeyStore(app)
+    val vehicleScanner = VehicleScanner(app, appScope, settings, recorderState, apiKeyStore)
 }
 
 val Context.appGraph: AppGraph

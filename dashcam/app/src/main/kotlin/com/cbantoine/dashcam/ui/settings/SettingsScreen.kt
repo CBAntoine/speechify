@@ -11,16 +11,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -54,13 +58,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cbantoine.dashcam.BuildConfigInfo
 import com.cbantoine.dashcam.R
 import com.cbantoine.dashcam.appGraph
+import com.cbantoine.dashcam.settings.ClaudeModel
 import com.cbantoine.dashcam.settings.DashcamSettings
 import com.cbantoine.dashcam.settings.ImpactSensitivity
 import com.cbantoine.dashcam.settings.MountOrientation
 import com.cbantoine.dashcam.settings.SpeedUnit
 import com.cbantoine.dashcam.settings.VideoQuality
 import com.cbantoine.dashcam.ui.SystemAccess
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +76,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val graph = context.appGraph
     val settings by graph.settings.collectAsStateWithLifecycle()
     val recorder by graph.recorderState.state.collectAsStateWithLifecycle()
+    val hasApiKey by graph.apiKeyStore.hasKey.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val update: ((DashcamSettings) -> DashcamSettings) -> Unit = { transform ->
         scope.launch { graph.settingsRepository.update(transform) }
@@ -242,6 +250,77 @@ fun SettingsScreen(onBack: () -> Unit) {
                             },
                             onSelect = { sensitivity -> update { it.copy(impactSensitivity = sensitivity) } },
                         )
+                    }
+                }
+
+                section(R.string.section_scanner) {
+                    item {
+                        val blocked = settings.scannerEnabled && recorder.cameraReady && !recorder.scannerAvailable
+                        SwitchSetting(
+                            title = stringResource(R.string.setting_scanner),
+                            summary = stringResource(if (blocked) R.string.setting_scanner_unavailable else R.string.setting_scanner_summary),
+                            checked = settings.scannerEnabled,
+                            onCheckedChange = { on -> update { it.copy(scannerEnabled = on, scanActive = it.scanActive && on) } },
+                        )
+                    }
+                    item {
+                        ApiKeySetting(
+                            hasKey = hasApiKey,
+                            enabled = settings.scannerEnabled,
+                            onSave = { key ->
+                                scope.launch {
+                                    // The Keystore can take a moment; keep it off the main thread.
+                                    withContext(Dispatchers.Default) { graph.apiKeyStore.set(key) }
+                                    graph.vehicleScanner.onApiKeyChanged()
+                                }
+                            },
+                            onRemove = {
+                                graph.apiKeyStore.clear()
+                                graph.vehicleScanner.onApiKeyChanged()
+                            },
+                        )
+                    }
+                    item {
+                        SwitchSetting(
+                            title = stringResource(R.string.setting_auto_identify),
+                            summary = stringResource(R.string.setting_auto_identify_summary),
+                            checked = settings.scannerAutoIdentify,
+                            enabled = settings.scannerEnabled,
+                            onCheckedChange = { on -> update { it.copy(scannerAutoIdentify = on) } },
+                        )
+                    }
+                    item {
+                        ChoiceSetting(
+                            title = stringResource(R.string.setting_claude_model),
+                            selected = settings.scannerModel,
+                            options = ClaudeModel.entries,
+                            label = { model ->
+                                stringResource(
+                                    when (model) {
+                                        ClaudeModel.OPUS_5_5 -> R.string.model_opus
+                                        ClaudeModel.SONNET_5_5 -> R.string.model_sonnet
+                                        ClaudeModel.HAIKU_5_5 -> R.string.model_haiku
+                                    },
+                                )
+                            },
+                            onSelect = { model -> update { it.copy(scannerModel = model) } },
+                        )
+                    }
+                    item {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Icon(
+                                Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.scanner_privacy),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
 
@@ -434,6 +513,69 @@ private fun <T> ChoiceSetting(
                 }
             },
             confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+@Composable
+private fun ApiKeySetting(hasKey: Boolean, enabled: Boolean, onSave: (String) -> Unit, onRemove: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ListItem(
+        onClick = { open = true },
+        enabled = enabled,
+        supportingContent = {
+            Text(
+                stringResource(if (hasKey) R.string.api_key_saved else R.string.api_key_missing),
+                color = if (hasKey) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+            )
+        },
+        colors = rowColors(),
+    ) { Text(stringResource(R.string.setting_api_key)) }
+    if (open) {
+        val keyState = rememberTextFieldState()
+        val key = keyState.text.toString().trim()
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text(stringResource(R.string.setting_api_key)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.api_key_dialog_text), style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.size(12.dp))
+                    // Obscures the key and blocks copying it back out.
+                    OutlinedSecureTextField(
+                        state = keyState,
+                        label = { Text(stringResource(R.string.api_key_label)) },
+                        supportingText = if (key.isNotEmpty() && !key.startsWith("sk-ant-")) {
+                            { Text(stringResource(R.string.api_key_format_warning)) }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSave(key)
+                        open = false
+                    },
+                    enabled = key.isNotEmpty(),
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                Row {
+                    if (hasKey) {
+                        TextButton(
+                            onClick = {
+                                onRemove()
+                                open = false
+                            },
+                        ) { Text(stringResource(R.string.remove)) }
+                    }
+                    TextButton(onClick = { open = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            },
         )
     }
 }

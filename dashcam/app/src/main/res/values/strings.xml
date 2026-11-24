@@ -75,6 +75,66 @@
     <string name="dismiss">Dismiss</string>
     <string name="zoom_value">%sx</string>
 
+    <!-- Car scanner -->
+    <string name="scan_chip">Scan</string>
+    <string name="scan_chip_live">PLATE SCAN · LIVE</string>
+    <string name="scan_chip_hot">PLATE SCAN · SLOWED</string>
+    <string name="action_scan_on">Start the car scanner</string>
+    <string name="action_scan_off">Stop the car scanner</string>
+    <string name="scan_unavailable">The car scanner can\'t run on this phone.</string>
+    <string name="scan_no_stream">The camera can\'t run the car scanner at this video quality. Try 1080p.</string>
+    <string name="scan_hot">Phone is hot: the scanner slowed down so recording isn\'t affected.</string>
+    <string name="vehicle_car">Car</string>
+    <string name="vehicle_truck">Truck</string>
+    <string name="vehicle_bus">Bus</string>
+    <string name="vehicle_motorcycle">Motorcycle</string>
+    <string name="vehicle_label">%1$s %2$s</string>
+    <string name="plate_label">PLATE</string>
+    <string name="plate_read">PLATE READ · %1$d%%</string>
+    <string name="plate_none">No plate read yet</string>
+    <string name="plate_hint">Plates can be read when the vehicle is close.</string>
+    <string name="profile_title">VEHICLE PROFILE</string>
+    <string name="profile_year">EST. YEAR</string>
+    <string name="profile_body">BODY</string>
+    <string name="profile_colour">COLOUR</string>
+    <string name="profile_specs">MODEL SPECS</string>
+    <string name="profile_generation">GENERATION</string>
+    <string name="profile_typical">Typical for this model and years, not this exact car.</string>
+    <string name="confidence_high">High confidence</string>
+    <string name="confidence_medium">Medium confidence</string>
+    <string name="confidence_low">Low confidence</string>
+    <string name="identify">Identify make and model</string>
+    <string name="identifying">Identifying…</string>
+    <string name="identify_retry">Try again</string>
+    <string name="identify_too_far">Too far away to identify. It will be once it\'s closer.</string>
+    <string name="identify_needs_key">Add your Anthropic API key in Settings to identify make and model.</string>
+    <string name="identify_invalid_key">Your API key was rejected. Check it in Settings.</string>
+    <string name="identify_offline">No internet connection.</string>
+    <string name="identify_rate_limited">Too many requests. Try again in a moment.</string>
+    <string name="identify_refused">Claude declined to identify this vehicle.</string>
+    <string name="identify_not_vehicle">Couldn\'t make out this vehicle. Try again when it\'s closer.</string>
+    <string name="identify_failed">Couldn\'t identify it: %s</string>
+    <string name="public_title">PUBLIC DATA</string>
+    <string name="public_specs">Model specifications</string>
+    <string name="public_recalls">Model recall notices</string>
+    <plurals name="recalls_count">
+        <item quantity="one">%1$d recall on record for %2$s (US data)</item>
+        <item quantity="other">%1$d recalls on record for %2$s (US data)</item>
+    </plurals>
+    <string name="recalls_none">No recalls on record for %s (US data)</string>
+    <string name="recalls_loading">Checking recalls…</string>
+    <string name="recalls_failed">Recall data is unavailable right now.</string>
+    <string name="vin_needed">VIN needed for vehicle history</string>
+    <string name="vin_needed_detail">Accident and ownership history need the vehicle\'s VIN and the owner\'s consent. Plates don\'t link to public records.</string>
+    <plurals name="tracked_count">
+        <item quantity="one">%d VEHICLE TRACKED</item>
+        <item quantity="other">%d VEHICLES TRACKED</item>
+    </plurals>
+    <string name="scan_privacy">Plates are read on this phone and never uploaded. Nothing from the scanner is saved.</string>
+    <string name="close">Close</string>
+    <string name="unknown_value">—</string>
+    <string name="specs_search_query">%1$s %2$s specifications</string>
+
     <!-- Library -->
     <string name="library_title">Clips</string>
     <string name="filter_all">All</string>
@@ -169,6 +229,25 @@
     <string name="setting_permissions">App permissions</string>
     <string name="setting_permissions_summary">Camera, microphone, location, notifications</string>
     <string name="setting_version">Version</string>
+    <string name="section_scanner">Car scanner</string>
+    <string name="setting_scanner">Car scanner</string>
+    <string name="setting_scanner_summary">Finds vehicles, reads plates and names colours on the phone. Uses a second camera stream; turn it off if recording ever stutters.</string>
+    <string name="setting_scanner_unavailable">This camera can\'t run the scanner at the current video quality.</string>
+    <string name="setting_auto_identify">Identify make and model automatically</string>
+    <string name="setting_auto_identify_summary">Asks Claude about the vehicle in focus, at most every 8 seconds. Each identification is one request on your Anthropic account.</string>
+    <string name="setting_api_key">Anthropic API key</string>
+    <string name="api_key_saved">Saved on this phone, encrypted</string>
+    <string name="api_key_missing">Not set. Needed for make and model.</string>
+    <string name="api_key_dialog_text">Create a key in the Claude Console (console.anthropic.com). It is encrypted with the Android Keystore and only ever sent to Anthropic.</string>
+    <string name="api_key_label">API key</string>
+    <string name="api_key_format_warning">Anthropic API keys start with sk-ant-</string>
+    <string name="save">Save</string>
+    <string name="remove">Remove</string>
+    <string name="setting_claude_model">Claude model</string>
+    <string name="model_opus">Claude Opus 5.5 · most accurate</string>
+    <string name="model_sonnet">Claude Sonnet 5.5 · balanced</string>
+    <string name="model_haiku">Claude Haiku 5.5 · fastest, lowest cost</string>
+    <string name="scanner_privacy">Plates are read on this phone and never uploaded. Photos sent to Claude have the plate pixelated. Owner details aren\'t public, so the scanner never looks people up.</string>
     <string name="applies_next_recording">Video changes apply to the next recording.</string>
 
     <!-- Onboarding -->

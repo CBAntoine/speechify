@@ -29,10 +29,16 @@ background while you use Maps, Waze, Spotify or anything else, with the screen o
   (picture-in-picture) preview.
 - **Crash resilient.** Each clip is its own file, and CameraX 1.7's Media3 muxer protects
   against corruption, so a crash or dead battery can only cost the clip in progress.
+- **Car scanner.** Tap **Scan** and the HUD tracks vehicles with corner brackets, reads their
+  licence plates on the phone and names their colour. With your own Anthropic API key, Claude
+  identifies the make, model, model years, body style and typical specs of the car in focus.
+  The panel then shows that model's recall record (NHTSA) and links to its specifications and
+  to Transport Canada's recall search. It never looks up owners or vehicle history: that needs
+  the VIN and the owner's consent.
 
 ## Install the APK
 
-1. Copy the APK (e.g. `Dashcam-1.0.1.apk`) to your phone, or download it straight onto the phone.
+1. Copy the APK (e.g. `Dashcam-1.1.0.apk`) to your phone, or download it straight onto the phone.
 2. Open it. If Android asks, allow your browser or file manager to **install unknown apps**.
 3. Open **Dashcam**, grant the camera (required), microphone, location and notification
    permissions, and allow background activity when asked.
@@ -48,6 +54,26 @@ Requires Android 8.0 or newer. Built and tested against Android 17 (API 37).
 4. Tap **Protect** in the app or the notification to keep the current clip. Impacts are
    protected automatically.
 5. Browse, play, share or delete clips under **Clips**.
+
+### Car scanner
+
+1. In **Settings → Car scanner → Anthropic API key**, paste a key from the Claude Console
+   (console.anthropic.com). It is encrypted with the Android Keystore, stays on this phone and is
+   only ever sent to Anthropic. Without a key the scanner still tracks cars, reads plates and
+   names colours; only make and model need it.
+2. On the camera screen, tap **Scan** (top left). It reads **PLATE SCAN · LIVE** while running.
+   Tap a box's label or a thumbnail in the strip to see that vehicle's profile.
+3. Plates are readable when a vehicle is close: a few car lengths at the default 1080p.
+4. Identification uses Claude Opus 5.5 by default. You can pick Sonnet 5.5 or Haiku 5.5 (fastest
+   and cheapest) in Settings. Each identification is one request billed to your Anthropic
+   account. Automatic identification only asks about the vehicle in focus, at most every
+   8 seconds and 40 times per scan, and never twice for the same plate. You can turn it off and
+   tap **Identify** instead.
+
+Privacy: plates are read on the phone and never uploaded. The photo sent to Claude is cropped to
+the vehicle with its plate pixelated. Nothing the scanner sees is saved; it is forgotten when you
+turn **Scan** off. The scanner only runs while the camera screen is visible, and it slows down when
+the phone gets hot so recording is never affected.
 
 ### Keep Android from stopping it
 
@@ -98,10 +124,14 @@ keyPassword=…
 | `recording/OverlayRenderer` | Draws the date/speed text on the GPU overlay, pre-rotated for the output orientation. It redraws only when the text changes. |
 | `storage/ClipRepository` | `Dashcam/loop` and `Dashcam/protected` on each storage volume, the storage budget, sidecars and Gallery export. All file operations run on one thread. |
 | `telemetry/*` | GPS (platform `LocationManager`, no Play Services needed) and accelerometer impact detection. |
-| `ui/*` | Jetpack Compose + Material 3: the camera HUD, clip library, Media3 player, settings and onboarding. Navigation 3 handles screens. |
+| `scanner/*` | The car scanner. Frames come from an `ImageAnalysis` stream that the engine binds only when the camera can carry it without lowering the video quality. EfficientDet-Lite0 (LiteRT, on the CPU) runs on two square tiles of each frame. An IoU tracker follows vehicles; ML Kit reads plates, with format-aware voting across frames. Colours are named in HSV. Claude identification goes through the Anthropic Java SDK with structured JSON output, low effort and server-side fallbacks. Recalls come from NHTSA's public API. |
+| `ui/*` | Jetpack Compose + Material 3: the camera HUD, scanner overlay, clip library, Media3 player, settings and onboarding. Navigation 3 handles screens. |
 
 Clips are stored in the app's folder (`Android/data/com.cbantoine.dashcam/files/Dashcam`),
 which is removed if you uninstall the app. Protected clips copied to the Gallery are kept.
+
+The bundled vehicle detector (`app/src/main/assets/vehicle_detector.tflite`) is TensorFlow's
+EfficientDet-Lite0 detection model, used under the Apache License 2.0.
 
 ## Good to know
 

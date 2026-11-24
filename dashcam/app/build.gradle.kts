@@ -26,8 +26,13 @@ android {
         applicationId = "com.cbantoine.dashcam"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
+
+        // Phones only: keeps the on-device ML native libraries out of x86 builds.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -62,8 +67,34 @@ android {
         compose = true
     }
 
+    // The detector model is memory-mapped straight from the APK.
+    androidResources {
+        noCompress += "tflite"
+    }
+
+    packaging {
+        resources {
+            excludes += listOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "META-INF/INDEX.LIST",
+                "META-INF/*.kotlin_module",
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                // GraalVM native-image configs and coroutine debug probes: unused on Android.
+                "META-INF/native-image/**",
+                "DebugProbesKt.bin",
+            )
+        }
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    lint {
+        // A phone-mounted dashcam: the x86 ABIs are left out on purpose (see abiFilters).
+        disable += "ChromeOsAbiSupport"
     }
 }
 
@@ -103,6 +134,13 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+
+    // Car scanner: on-device detection and plate text, cloud make/model identification.
+    implementation(libs.litert)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.anthropic.java)
+    // The SDK's Jackson Kotlin module needs reflection that matches this Kotlin version.
+    implementation(libs.kotlin.reflect)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.PowerManager
 import android.util.Log
+import android.util.Size
 import androidx.annotation.MainThread
 import androidx.annotation.RequiresApi
 import androidx.camera.core.AspectRatio
@@ -20,11 +21,13 @@ import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraState
 import androidx.camera.core.DynamicRange
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.SessionConfig
 import androidx.camera.core.SurfaceRequest
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.effects.OverlayEffect
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
@@ -79,12 +82,13 @@ class DashcamEngine(
         fun onSessionFinished()
     }
 
-    private data class CameraConfig(val quality: VideoQuality, val hevc: Boolean, val stabilization: Boolean) {
-        companion object {
-            fun from(settings: DashcamSettings) =
-                CameraConfig(settings.quality, settings.useHevc, settings.stabilization)
-        }
-    }
+    private data class CameraConfig(
+        val quality: VideoQuality,
+        val hevc: Boolean,
+        val stabilization: Boolean,
+        /** Also bind the car scanner's analysis stream. */
+        val analysis: Boolean,
+    )
 
     private class Session(val audio: Boolean) {
         var muted = false
@@ -123,7 +127,11 @@ class DashcamEngine(
     private var camera: Camera? = null
     private var preview: Preview? = null
     private var videoCapture: VideoCapture<Recorder>? = null
+    private var imageAnalysis: ImageAnalysis? = null
     private var boundConfig: CameraConfig? = null
+
+    /** Set once this camera turned out unable to run the scanner stream next to the video. */
+    private var analysisBlocked = false
     private var appliedRotation: Int = holder.displayRotation.value
 
     private var session: Session? = null
@@ -172,6 +180,7 @@ class DashcamEngine(
         scope.launch { impacts.gForce.collect { holder.gForce.value = it } }
         scope.launch { holder.displayRotation.collect(::onDisplayRotation) }
         scope.launch { graph.settings.collect(::onSettingsChanged) }
+        scope.launch { holder.frameAnalyzer.collect(::applyFrameAnalyzer) }
         startTicker()
         scope.launch { bindWhenReady() }
     }
@@ -191,6 +200,7 @@ class DashcamEngine(
             it.cameraState.removeObservers(service)
             it.zoomState.removeObservers(service)
         }
+        imageAnalysis?.clearAnalyzer()
         provider?.unbindAll()
         overlayEffect?.close()
         overlayThread.quitSafely()
@@ -216,7 +226,7 @@ class DashcamEngine(
             return
         }
         val settings = graph.settingsRepository.settings.first()
-        if (camera == null && !cooling) bindCamera(cameraProvider, CameraConfig.from(settings), settings)
+        if (camera == null && !cooling) bindCamera(cameraProvider, configFor(settings), settings)
     }
 
     @MainThread
@@ -265,21 +275,27 @@ class DashcamEngine(
             overlayEffect = it
         }
 
+        val newAnalysis = if (config.analysis) buildAnalysis(rotation, quality) else null
+
         camera?.cameraInfo?.let {
             it.cameraState.removeObservers(service)
             it.zoomState.removeObservers(service)
         }
+        imageAnalysis?.clearAnalyzer()
+        imageAnalysis = null
         // Preferred: preview + video sharing one stream through the overlay effect, so the
-        // viewfinder can disappear without affecting the recording.
-        val shared = try {
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                service, selector, SessionConfig.Builder(newPreview, newVideo).addEffect(effect).build(),
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Shared preview/video stream unavailable; recording without a live preview", e)
-            null
+        // viewfinder can disappear without affecting the recording. The scanner's analysis
+        // stream joins them only if the camera can run it without lowering the video quality.
+        var shared: Camera? = null
+        if (newAnalysis != null) {
+            shared = bindShared(cameraProvider, selector, effect, newPreview, newVideo, newAnalysis)
+            if (shared != null && videoDowngraded(newVideo, quality)) {
+                Log.w(TAG, "The scanner stream would lower the video quality; binding without it")
+                shared = null
+            }
         }
+        val withAnalysis = shared != null
+        if (shared == null) shared = bindShared(cameraProvider, selector, effect, newPreview, newVideo, null)
         val previewAvailable = shared != null
         val bound = shared ?: try {
             // Fallback: video only. No viewfinder, but recording in the background stays reliable.
@@ -296,6 +312,8 @@ class DashcamEngine(
         camera = bound
         preview = newPreview
         videoCapture = newVideo
+        imageAnalysis = if (withAnalysis) newAnalysis else null
+        applyFrameAnalyzer(holder.frameAnalyzer.value)
         boundConfig = config
         bindFailures = 0
         appliedRotation = rotation
@@ -315,6 +333,7 @@ class DashcamEngine(
                 supportedQualities = supported,
                 hevcSupported = hevcSupported,
                 stabilizationSupported = stabilizationSupported,
+                scannerAvailable = withAnalysis,
                 issue = it.issue.takeUnless { issue ->
                     issue == RecorderIssue.PERMISSION_MISSING || issue == RecorderIssue.CAMERA_ERROR
                 },
@@ -330,6 +349,67 @@ class DashcamEngine(
         bindFailures++
         if (bindFailures >= MAX_BIND_FAILURES) failSession(RecorderIssue.CAMERA_ERROR) else scheduleRetry(2_000L * bindFailures)
     }
+
+    private fun bindShared(
+        cameraProvider: ProcessCameraProvider,
+        selector: CameraSelector,
+        effect: OverlayEffect,
+        preview: Preview,
+        video: VideoCapture<Recorder>,
+        analysis: ImageAnalysis?,
+    ): Camera? = try {
+        cameraProvider.unbindAll()
+        val config = SessionConfig.Builder(listOfNotNull(preview, video, analysis)).addEffect(effect).build()
+        cameraProvider.bindToLifecycle(service, selector, config)
+    } catch (e: Exception) {
+        if (analysis != null) {
+            Log.w(TAG, "The camera can't add the scanner stream", e)
+        } else {
+            Log.w(TAG, "Shared preview/video stream unavailable; recording without a live preview", e)
+        }
+        null
+    }
+
+    /**
+     * The car scanner's frames. Full HD reads plates from further away; next to higher
+     * resolution video a 720p stream is far more likely to fit.
+     */
+    private fun buildAnalysis(rotation: Int, quality: VideoQuality): ImageAnalysis {
+        val size = if (quality.ordinal <= VideoQuality.FHD.ordinal) Size(1920, 1080) else Size(1280, 720)
+        return ImageAnalysis.Builder()
+            .setTargetRotation(rotation)
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                    .setResolutionStrategy(ResolutionStrategy(size, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                    .build(),
+            )
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .build()
+    }
+
+    /** True if CameraX settled for a lower video resolution than [quality] to fit another stream. */
+    private fun videoDowngraded(video: VideoCapture<Recorder>, quality: VideoQuality): Boolean {
+        val size = video.resolutionInfo?.resolution ?: return false
+        return minOf(size.width, size.height) < quality.shortSidePx * 0.95f
+    }
+
+    private fun applyFrameAnalyzer(frameAnalyzer: FrameAnalyzer?) {
+        val analysis = imageAnalysis ?: return
+        if (frameAnalyzer == null) {
+            analysis.clearAnalyzer()
+        } else {
+            analysis.setAnalyzer(frameAnalyzer.executor, frameAnalyzer.analyzer)
+        }
+    }
+
+    private fun configFor(settings: DashcamSettings) = CameraConfig(
+        quality = settings.quality,
+        hevc = settings.useHevc,
+        stabilization = settings.stabilization,
+        analysis = settings.scannerEnabled && !analysisBlocked,
+    )
 
     private fun buildRecorder(quality: VideoQuality, hevc: Boolean): Pair<Recorder, Boolean> {
         fun builder() = Recorder.Builder()
@@ -352,14 +432,16 @@ class DashcamEngine(
             it.cameraState.removeObservers(service)
             it.zoomState.removeObservers(service)
         }
+        imageAnalysis?.clearAnalyzer()
         provider?.unbindAll()
         camera = null
         cameraOpen = false
         preview = null
         videoCapture = null
+        imageAnalysis = null
         boundConfig = null
         holder.surfaceRequest.value = null
-        holder.update { it.copy(cameraReady = false) }
+        holder.update { it.copy(cameraReady = false, scannerAvailable = false) }
     }
 
     private fun onSurfaceRequested(request: SurfaceRequest) {
@@ -371,6 +453,14 @@ class DashcamEngine(
 
     private fun onCameraState(state: CameraState) {
         val error = state.error
+        if (error?.code == CameraState.ERROR_STREAM_CONFIG && imageAnalysis != null && !analysisBlocked) {
+            // The camera accepted the scanner stream but can't actually run it: recording wins.
+            Log.w(TAG, "The camera can't run the scanner stream; rebinding without it")
+            analysisBlocked = true
+            val settings = graph.settings.value
+            provider?.let { bindCamera(it, configFor(settings), settings) }
+            return
+        }
         val issue = if (error == null) {
             null
         } else {
@@ -399,6 +489,7 @@ class DashcamEngine(
         appliedRotation = rotation
         preview?.targetRotation = rotation
         videoCapture?.targetRotation = rotation
+        imageAnalysis?.targetRotation = rotation
         camera?.let { overlay.outputRotationDegrees = it.cameraInfo.getSensorRotationDegrees(rotation) }
     }
 
@@ -413,7 +504,7 @@ class DashcamEngine(
         impacts.setThreshold(settings.impactSensitivity.thresholdG)
         tick()
         val cameraProvider = provider ?: return
-        val config = CameraConfig.from(settings)
+        val config = configFor(settings)
         if (session == null && !stopping && boundConfig != null && config != boundConfig) {
             bindCamera(cameraProvider, config, settings)
         }
@@ -470,7 +561,7 @@ class DashcamEngine(
             if (session !== newSession || cooling) return@launch
             when {
                 cameraProvider == null -> Unit // bindWhenReady() starts the first clip once bound.
-                boundConfig != CameraConfig.from(latest) || camera == null -> bindCamera(cameraProvider, CameraConfig.from(latest), latest)
+                boundConfig != configFor(latest) || camera == null -> bindCamera(cameraProvider, configFor(latest), latest)
                 else -> startClip()
             }
         }
@@ -1039,3 +1130,11 @@ internal fun Quality.toVideoQuality(): VideoQuality? = when (this) {
     Quality.UHD -> VideoQuality.UHD
     else -> null
 }
+
+private val VideoQuality.shortSidePx: Int
+    get() = when (this) {
+        VideoQuality.HD -> 720
+        VideoQuality.FHD -> 1080
+        VideoQuality.QHD -> 1440
+        VideoQuality.UHD -> 2160
+    }

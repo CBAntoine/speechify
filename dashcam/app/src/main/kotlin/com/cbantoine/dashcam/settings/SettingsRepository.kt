@@ -53,6 +53,10 @@ class SettingsRepository(context: Context) {
         val pictureInPicture = booleanPreferencesKey("picture_in_picture")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val batteryPromptDismissed = booleanPreferencesKey("battery_prompt_dismissed")
+        val scannerEnabled = booleanPreferencesKey("scanner_enabled")
+        val scanActive = booleanPreferencesKey("scan_active")
+        val scannerAutoIdentify = booleanPreferencesKey("scanner_auto_identify")
+        val scannerModel = stringPreferencesKey("scanner_model")
     }
 
     private fun read(p: Preferences): DashcamSettings {
@@ -79,6 +83,10 @@ class SettingsRepository(context: Context) {
             pictureInPicture = p[Keys.pictureInPicture] ?: d.pictureInPicture,
             onboardingDone = p[Keys.onboardingDone] ?: d.onboardingDone,
             batteryPromptDismissed = p[Keys.batteryPromptDismissed] ?: d.batteryPromptDismissed,
+            scannerEnabled = p[Keys.scannerEnabled] ?: d.scannerEnabled,
+            scanActive = p[Keys.scanActive] ?: d.scanActive,
+            scannerAutoIdentify = p[Keys.scannerAutoIdentify] ?: d.scannerAutoIdentify,
+            scannerModel = p[Keys.scannerModel].toEnum(d.scannerModel),
         )
     }
 
@@ -104,6 +112,10 @@ class SettingsRepository(context: Context) {
         p[Keys.pictureInPicture] = s.pictureInPicture
         p[Keys.onboardingDone] = s.onboardingDone
         p[Keys.batteryPromptDismissed] = s.batteryPromptDismissed
+        p[Keys.scannerEnabled] = s.scannerEnabled
+        p[Keys.scanActive] = s.scanActive
+        p[Keys.scannerAutoIdentify] = s.scannerAutoIdentify
+        p[Keys.scannerModel] = s.scannerModel.name
     }
 
     private inline fun <reified E : Enum<E>> String?.toEnum(default: E): E =
