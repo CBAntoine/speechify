@@ -127,7 +127,7 @@ export async function createLead(input: Partial<Lead> & { name: string }, create
           email: input.email,
           city: input.city,
           address: input.address,
-          source: "manual",
+          source: input.source ?? "manual",
           score: input.score,
           signals: input.signals,
         },

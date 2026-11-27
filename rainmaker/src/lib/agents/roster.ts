@@ -25,7 +25,8 @@ export type ToolName =
   | "ai_guide_report"
   | "teach_ai_guide"
   | "create_video_ad"
-  | "email_video_ad";
+  | "email_video_ad"
+  | "find_reddit_buyers";
 
 export interface AgentDef {
   id: AgentId;

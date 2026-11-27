@@ -11,6 +11,7 @@ export interface Screen {
 export const SCREENS: Screen[] = [
   { id: "today", label: "Today", path: "/", aliases: ["today", "home", "dashboard", "home page"] },
   { id: "find_clients", label: "Find clients", path: "/prospects", aliases: ["find clients", "find", "prospects", "prospecting", "search"] },
+  { id: "find_clients_reddit", label: "Reddit buyers", path: "/prospects?mode=reddit", aliases: ["reddit", "reddit buyers", "reddit leads", "buyers on reddit"] },
   { id: "pipeline", label: "Pipeline", path: "/pipeline", aliases: ["pipeline", "leads", "board", "deals", "crm"] },
   { id: "inbox", label: "Inbox", path: "/inbox", aliases: ["inbox", "drafts", "messages", "approvals", "tasks"] },
   { id: "ad_studio", label: "Ad Studio", path: "/ads", aliases: ["ad studio", "ads", "campaigns", "creative"] },
@@ -71,6 +72,7 @@ export const COPILOT_CRM_TOOLS = [
   "teach_ai_guide",
   "create_video_ad",
   "email_video_ad",
+  "find_reddit_buyers",
 ] as const;
 export type CopilotCrmTool = (typeof COPILOT_CRM_TOOLS)[number];
 export type CopilotToolName = (typeof COPILOT_UI_TOOLS)[number] | CopilotCrmTool;

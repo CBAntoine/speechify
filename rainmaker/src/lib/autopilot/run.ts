@@ -9,6 +9,7 @@ import { buildDemo, demoPath } from "@/lib/elevenlabs/demo";
 import { sendEmail } from "@/lib/email";
 import { fulfillOrder } from "@/lib/payments/fulfill";
 import { findBusinesses } from "@/lib/prospecting/search";
+import { scanReddit } from "@/lib/reddit/scan";
 import { addActivity, createDraft, getLead, getProfile, patchCampaign, saveCampaign, saveProspects, updateDraft } from "@/lib/repo";
 import { siteUrlStatic } from "@/lib/site";
 import { newId, readDb, update } from "@/lib/store";
@@ -119,6 +120,17 @@ export async function runAutopilot(trigger: "cron" | "manual", opts: { base?: st
         });
         counts.drafted++;
         log({ kind: "followup", text: `Drafted a nudge for ${o.business ?? o.email}, who didn't finish checkout`, orderId: o.id, leadId: o.leadId });
+      }
+    }
+
+    // Reddit buyers: who asked overnight for what you sell (its own switch, in Find clients → Reddit buyers).
+    if (db.reddit?.config.morning && left() > 60_000) {
+      try {
+        const r = await scanReddit("autopilot", { maxAgeHours: 12 });
+        log({ kind: "prospect", text: r.found ? `Reddit: ${r.found} fresh post${r.found === 1 ? "" : "s"} asking for what you sell (${r.added} new). See Find clients → Reddit buyers.` : "Reddit: nobody asked for what you sell overnight." });
+        for (const e of r.errors.slice(0, 2)) log({ kind: "error", text: `Reddit ${e}` });
+      } catch (err) {
+        log({ kind: "error", text: `Reddit scan failed: ${describeError(err)}` });
       }
     }
 

@@ -1,3 +1,5 @@
+import type { RedditConfig } from "./reddit/intent.ts";
+
 // Shared data model. Kept free of runtime imports so tests can load it with
 // Node's type stripping.
 
@@ -13,7 +15,7 @@ export const STAGES: { id: Stage; label: string; hint: string }[] = [
   { id: "lost", label: "Lost", hint: "Not now" },
 ];
 
-export type LeadSource = "google_places" | "openstreetmap" | "open_data" | "web" | "manual" | "agent" | "sample" | "store";
+export type LeadSource = "google_places" | "openstreetmap" | "open_data" | "web" | "manual" | "agent" | "sample" | "store" | "reddit";
 
 export type Severity = "high" | "medium" | "low" | "info";
 
@@ -125,6 +127,33 @@ export interface DemoAgent {
   knowledgeBaseId?: string;
   /** Voice sessions used today, to cap what a shared link can spend. */
   usage?: { day: string; sessions: number };
+}
+
+/** A public Reddit post asking for what you sell, found by the morning scan. */
+export interface RedditSignal {
+  id: string;
+  subreddit: string;
+  author: string;
+  title: string;
+  body: string;
+  url: string;
+  createdAt: string;
+  comments: number;
+  score: number;
+  kinds: string[];
+  reasons: string[];
+  urgent: boolean;
+  budget?: string;
+  services: string[];
+  competitors: string[];
+  /** Claude's read of the post: only what the post itself says. */
+  ai?: { intent: "high" | "medium" | "low" | "none"; need: string; summary: string; business?: string; website?: string; location?: string; budget?: string };
+  /** Contact details the poster shared in the post. */
+  contact: { emails: string[]; websites: string[] };
+  status: "new" | "saved" | "replied" | "drafted" | "dismissed";
+  leadId?: string;
+  reply?: string;
+  foundAt: string;
 }
 
 /** Something true about a business, and where it came from: all a video ad's script may say about them. */
@@ -586,6 +615,8 @@ export interface Db {
   copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string; hash?: string };
   /** Video ads made for leads. */
   videos?: VideoAd[];
+  /** Reddit buyers: settings, the posts found, and the last scan. */
+  reddit?: { config: RedditConfig; signals: RedditSignal[]; lastScanAt?: string; lastErrors?: string[] };
   /** When the owner last talked to the copilot, for its "since your last visit" greeting. */
   copilotSeen?: { lastSessionAt: string; briefSince?: string };
   seeded: boolean;

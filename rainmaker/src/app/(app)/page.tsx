@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CircleAlert, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, PenLine, Radar, Store, TrendingUp, UserPlus, Zap } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleAlert, CircleDollarSign, Flame, Inbox, ListTodo, Megaphone, MessageSquare, PenLine, Radar, Store, TrendingUp, UserPlus, Zap } from "lucide-react";
 import { InstallBanner } from "@/components/today/InstallBanner";
 import { QuickStart } from "@/components/today/QuickStart";
 import { AgentAvatar, Empty, PageHead, ScoreRing, Stat } from "@/components/ui";
@@ -53,6 +53,17 @@ export default async function Today() {
     doNext.push({ href: "/sales", icon: <CircleAlert size={15} />, title: `Finish onboarding ${o.business ?? o.email ?? "a client"}`, sub: "A setup step needs you", tone: "var(--warm)" });
   if (pending.length)
     doNext.push({ href: "/inbox", icon: <Inbox size={15} />, title: `Approve ${pending.length} message${pending.length > 1 ? "s" : ""}`, sub: "Your agents drafted them. Nothing goes out until you say so.", tone: "var(--hot)" });
+  const buyers = (db.reddit?.signals ?? []).filter((s) => s.status === "new" && Date.now() - Date.parse(s.createdAt) < 24 * 3_600_000);
+  if (buyers.length) {
+    const best = [...buyers].sort((a, b) => b.score - a.score)[0];
+    doNext.push({
+      href: "/prospects?mode=reddit",
+      icon: <MessageSquare size={15} />,
+      title: `${buyers.length} ${buyers.length === 1 ? "person" : "people"} on Reddit asked for what you sell`,
+      sub: `Best: "${best.title.slice(0, 70)}${best.title.length > 70 ? "…" : ""}" in r/${best.subreddit}. Reach them while it's fresh.`,
+      tone: "var(--hot)",
+    });
+  }
   for (const t of dueSoon.slice(0, 3)) {
     const d = dueLabel(t.due);
     doNext.push({ href: t.leadId ? `/pipeline?lead=${t.leadId}` : "/inbox", icon: <CalendarClock size={15} />, title: t.title, sub: `${d.text}${leadName(t.leadId) ? ` · ${leadName(t.leadId)}` : ""}`, tone: d.overdue ? "var(--hot)" : "var(--warm)" });

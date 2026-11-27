@@ -112,6 +112,15 @@ export function buildAppState(db: Db, i: Integrations, opts: { baseUrl: string; 
         demos_not_yet_pitched_or_live: withGuide.filter((l) => !l.guide?.trial).slice(0, 8).map((l) => ({ lead_id: l.id, business: l.name, stage: l.stage, tested: Boolean(l.guide?.testedAt) })),
       };
     })(),
+    reddit_buyers: {
+      watching: db.reddit?.config.subreddits ?? [],
+      last_scan: ago(db.reddit?.lastScanAt, now),
+      new: (db.reddit?.signals ?? [])
+        .filter((s) => s.status === "new")
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map((s) => ({ post_id: s.id, subreddit: s.subreddit, title: s.title.slice(0, 120), posted: ago(s.createdAt, now), score: s.score, why: s.reasons.slice(0, 3) })),
+    },
     ad_campaigns: { total: db.campaigns.length, latest: db.campaigns.slice(0, 3).map((c) => ({ campaign_id: c.id, business: c.businessName, made: ago(c.createdAt, now) })) },
     agent_runs: db.runs.slice(0, 3).map((r) => ({ run_id: r.id, agent: r.agentId, goal: r.goal.slice(0, 140), status: r.status, started: ago(r.startedAt, now) })),
     recent_activity: db.activity.slice(0, 8).map((a) => `${ago(a.at, now)}: ${a.text}`),

@@ -94,7 +94,7 @@ export const GUIDE: GuideTopic[] = [
     id: "keys",
     title: "Which key turns on what",
     keywords: ["key", "keys", "api", "environment", "env", "connect", "anthropic", "claude", "elevenlabs", "resend", "google", "database", "password", "cron", "site url"],
-    text: "ANTHROPIC_API_KEY: Claude for ads, outreach, research and real agents. ELEVENLABS_API_KEY: the store's sales assistant, this copilot's voice, demo and client receptionists, voiceovers and ad art. STRIPE_SECRET_KEY, PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET: payments. RESEND_API_KEY + RESEND_FROM: sending email from the Inbox and Autopilot. GOOGLE_PLACES_API_KEY: Google ratings and review counts. DATABASE_URL: Postgres (needed on Vercel). APP_PASSWORD: puts the CRM behind a sign-in (set it before going public). SITE_URL: your public address for links and webhooks. CRON_SECRET: lets Autopilot run daily. Keys are set in the hosting provider's environment variables, then redeploy.",
+    text: "ANTHROPIC_API_KEY: Claude for ads, outreach, research and real agents. ELEVENLABS_API_KEY: the store's sales assistant, this copilot's voice, demo and client receptionists, voiceovers and ad art. STRIPE_SECRET_KEY, PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET: payments. RESEND_API_KEY + RESEND_FROM: sending email from the Inbox and Autopilot. GOOGLE_PLACES_API_KEY: Google ratings and review counts. REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET: the Reddit buyers scan through Reddit's official API (a free app at reddit.com/prefs/apps). DATABASE_URL: Postgres (needed on Vercel). APP_PASSWORD: puts the CRM behind a sign-in (set it before going public). SITE_URL: your public address for links and webhooks. CRON_SECRET: lets Autopilot run daily. Keys are set in the hosting provider's environment variables, then redeploy.",
   },
   {
     id: "playbooks",
@@ -113,6 +113,12 @@ export const GUIDE: GuideTopic[] = [
     title: "Rules Rainmaker follows",
     keywords: ["consent", "law", "legal", "compliance", "spam", "can-spam", "tcpa", "casl", "opt out", "voice clone", "disclosure"],
     text: "Commercial email must include your postal address and an opt-out line (CAN-SPAM); Autopilot's auto-send refuses emails without them. No automated calls or texts to people who haven't opted in (TCPA, CASL), so Autopilot only emails. Voice clones need the written consent of the person whose voice it is. AI receptionists and assistants say they're AI when asked; AI website guides introduce themselves as an AI. The store sells your agency's services, not ElevenLabs credits, and never uses ElevenLabs as your brand.",
+  },
+  {
+    id: "reddit",
+    title: "Reddit buyers",
+    keywords: ["reddit", "subreddit", "buyers", "intent", "recommendations", "alternative to", "looking for", "burned", "hand raisers"],
+    text: "Find clients → Reddit buyers finds people who just asked on Reddit for what you sell. Set the subreddits to watch (your buyers' subs and your cities'), what you sell as people say it, and competitors people leave or compare, then Scan now. It reads each subreddit's newest posts and keeps the fresh ones (up to 4 hours old by default) that say \"recommendations for\", \"alternative to\", \"looking for a good\", \"got burned by\" or \"has anyone used\" about your services or competitors, scored for buying intent (urgent and budget mentions count extra). With Claude it reads the best posts and drops the ones that aren't real requests. Each post: Open post, Draft a reply (helpful, discloses that you run an agency; copy it and post it yourself), Save as lead (if the post names their business or website, that business is checked for its public contact details), and Draft the email (only to an address they or their business published; it lands in the Inbox). Rainmaker never tries to identify anonymous posters. Tick Scan every morning with Autopilot to have it checked daily (it looks back 12 hours). REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET (a free app at reddit.com/prefs/apps) make it use Reddit's official API.",
   },
   {
     id: "ai_guide",

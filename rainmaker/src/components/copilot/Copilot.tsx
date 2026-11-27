@@ -55,6 +55,7 @@ const CRM_LABEL: Record<CopilotCrmTool, (p: Params) => string> = {
   teach_ai_guide: () => "Teaching the AI guide",
   create_video_ad: () => "Making a video ad from their real data (a minute or two)",
   email_video_ad: () => "Drafting the video ad email for your approval",
+  find_reddit_buyers: () => "Reading Reddit for people asking for what you sell",
 };
 
 /** Tools that change data: the screen refreshes after them. */
@@ -282,6 +283,7 @@ function CopilotInner({ ownerName, agencyName, voice }: CopilotProps) {
   useConversationClientTool("teach_ai_guide", (p: Params) => crm("teach_ai_guide", p));
   useConversationClientTool("create_video_ad", (p: Params) => crm("create_video_ad", p));
   useConversationClientTool("email_video_ad", (p: Params) => crm("email_video_ad", p));
+  useConversationClientTool("find_reddit_buyers", (p: Params) => crm("find_reddit_buyers", p));
 
   /** Without the AI: open screens and answer from the guide. */
   const answerLocally = useCallback(

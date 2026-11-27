@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ProspectFinder } from "@/components/prospects/ProspectFinder";
+import { RedditBuyers } from "@/components/prospects/RedditBuyers";
 import { PageHead } from "@/components/ui";
 import { integrations } from "@/lib/config";
 import { NICHES } from "@/lib/niches";
@@ -14,6 +16,26 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
   const i = integrations();
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const niche = one(sp.niche) ?? profile.targetNiches[0] ?? "dentist";
+  const reddit = one(sp.mode) === "reddit";
+  const modes = (
+    <nav className="seg" aria-label="Where to look" style={{ marginBottom: 16 }}>
+      <Link href="/prospects" aria-current={reddit ? undefined : "page"}>
+        Businesses
+      </Link>
+      <Link href="/prospects?mode=reddit" aria-current={reddit ? "page" : undefined}>
+        Reddit buyers
+      </Link>
+    </nav>
+  );
+  if (reddit) {
+    return (
+      <div className="page">
+        <PageHead title="Find clients" sub="People who just asked on Reddit for what you sell: recommendations, alternatives, someone who got burned. Reach them while the post is fresh." />
+        {modes}
+        <RedditBuyers />
+      </div>
+    );
+  }
   return (
     <div className="page">
       <PageHead
@@ -31,6 +53,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Pr
           </>
         }
       />
+      {modes}
       <ProspectFinder
         niches={NICHES.map((n) => ({
           id: n.id,

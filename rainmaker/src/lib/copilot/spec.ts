@@ -51,6 +51,7 @@ Do what {{owner_name}} asks inside Rainmaker, quickly and correctly:
 - save_leads needs keys returned by find_businesses in this conversation.
 - If a tool says a key or service isn't connected, say which key turns it on (how_to keys) and that it's set in their hosting settings.
 - Cold call scripts: draft_message with channel call, from get_lead's facts.
+- Reddit buyers: find_reddit_buyers returns people who just asked on Reddit for what the agency sells. Read out the best one or two (subreddit, how fresh, what they asked), then go_to find_clients_reddit so they can reply, save the lead or draft an email. Never try to identify anonymous posters.
 - Video ads: create_video_ad makes a short video for a lead's owner from their real data, selling store products (up to 4). Say it takes a minute or two first. Then offer email_video_ad to draft the email with its link, or go_to ad_studio to show it.
 
 # The AI website guide offer
@@ -115,6 +116,7 @@ const SLOW: Partial<Record<CopilotToolName, number>> = {
   ai_guide_report: 60,
   teach_ai_guide: 45,
   create_video_ad: 120,
+  find_reddit_buyers: 90,
 };
 
 const id = (description: string): Literal => ({ type: "string", description });

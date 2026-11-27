@@ -18,6 +18,8 @@ export function buildBriefing(db: Db, since: string | undefined, now = new Date(
   if (sales) parts.push(plural(sales, "new paying client"));
   const replied = db.activity.filter((a) => a.kind === "stage" && after(a.at) && /moved to (Replied|Meeting)/.test(a.text)).length;
   if (replied) parts.push(plural(replied, "lead") + " replied or booked a meeting");
+  const buyers = (db.reddit?.signals ?? []).filter((s) => s.status === "new" && after(s.foundAt)).length;
+  if (buyers) parts.push(`${plural(buyers, "Reddit post")} asking for what you sell`);
   const leads = db.leads.filter((l) => !l.sample && after(l.createdAt)).length;
   if (leads) parts.push(plural(leads, "new lead"));
   const drafts = db.drafts.filter((d) => d.status === "pending").length;

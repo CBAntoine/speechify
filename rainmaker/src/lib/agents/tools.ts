@@ -11,6 +11,7 @@ import { researchWeb } from "@/lib/claude/research";
 import { addKnowledge, buildGuide, draftGuidePitch, guideReport, guideUrl, setGuideRoi, startGuideTrial, testGuide } from "@/lib/offers/guide";
 import { INTENT_LABEL, estimateGuideRoi, intentFor, leadValueFor } from "@/lib/offers/guide-math";
 import { createVideoAd, emailVideoAd, productChoices, videoUrl } from "@/lib/video/make";
+import { redditState, scanReddit } from "@/lib/reddit/scan";
 import {
   createDraft,
   createTask,
@@ -87,7 +88,16 @@ const by = (ctx: ToolContext) => (ctx.agentId === "copilot" ? "copilot" : `agent
 // The AI Website Guide offer: a chat and voice agent on a business's website
 // that answers visitors and passes them the leads.
 const GUIDE_TOOLS: Record<
-  "estimate_ai_guide" | "build_ai_guide" | "test_ai_guide" | "pitch_ai_guide" | "start_ai_guide_trial" | "ai_guide_report" | "teach_ai_guide" | "create_video_ad" | "email_video_ad",
+  | "estimate_ai_guide"
+  | "build_ai_guide"
+  | "test_ai_guide"
+  | "pitch_ai_guide"
+  | "start_ai_guide_trial"
+  | "ai_guide_report"
+  | "teach_ai_guide"
+  | "create_video_ad"
+  | "email_video_ad"
+  | "find_reddit_buyers",
   ToolDef
 > = {
   estimate_ai_guide: {
@@ -301,6 +311,38 @@ const GUIDE_TOOLS: Record<
     run: async (input, ctx) => {
       const d = await emailVideoAd(String(input.video_id ?? ""), { to: str(input.to, 200), createdBy: by(ctx) });
       return { result: { draft_id: d.id, to: d.to ?? null, subject: d.subject ?? null, where: "Inbox, waiting for approval" }, summary: `Email drafted to ${d.to}` };
+    },
+  },
+  find_reddit_buyers: {
+    name: "find_reddit_buyers",
+    description:
+      "Find people who just asked on Reddit for what the agency sells: fresh posts in the subreddits set in Find clients → Reddit buyers that say \"recommendations for\", \"alternative to\", \"looking for a good\", \"got burned by\" or \"has anyone used\" about the agency's services or competitors, scored for buying intent. Scans now unless the last scan was under 15 minutes ago. Returns the best posts with links. To act on one, go_to find_clients_reddit.",
+    input_schema: { type: "object", properties: { rescan: { type: "boolean", description: "Scan again even if the last scan was recent" } } },
+    describe: () => "Reading Reddit for buyers",
+    run: async (input, ctx) => {
+      const st = await redditState();
+      const recent = st.lastScanAt && Date.now() - Date.parse(st.lastScanAt) < 15 * 60_000;
+      let errors: string[] = st.lastErrors;
+      if (!recent || input.rescan === true) errors = (await scanReddit(ctx.agentId === "copilot" ? "copilot" : `agent:${ctx.agentId}`)).errors;
+      const fresh = (await redditState()).signals.filter((s) => s.status === "new").sort((a, b) => b.score - a.score).slice(0, 8);
+      return {
+        result: {
+          posts: fresh.map((s) => ({
+            post_id: s.id,
+            subreddit: s.subreddit,
+            title: s.title,
+            posted_hours_ago: Math.round((Date.now() - Date.parse(s.createdAt)) / 3_600_000),
+            score: s.score,
+            why: s.reasons,
+            summary: s.ai?.summary ?? null,
+            business: s.ai?.business ?? null,
+            url: s.url,
+          })),
+          errors,
+          how_to_act: "Open Find clients → Reddit buyers: draft a public reply, save the poster as a lead, or email a business that named itself.",
+        },
+        summary: fresh.length ? `${fresh.length} people asking for what you sell` : "Nobody asking right now",
+      };
     },
   },
   teach_ai_guide: {
