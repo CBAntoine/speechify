@@ -76,3 +76,33 @@ test("starting fresh deletes the leads' video ads and lists their files to delet
   startFresh(db);
   assert.deepEqual(db.videos.map((v) => v.id), ["video_b"], "a paying client's video stays");
 });
+
+test("starting fresh deletes the leads' motion ads and their files, and keeps ads not made for a lead", () => {
+  const { db, a } = fixture();
+  const base = {
+    business: "x",
+    createdAt: AT,
+    updatedAt: AT,
+    createdBy: "user",
+    format: "vertical" as const,
+    brief: { goal: "g" },
+    facts: [],
+    concept: "",
+    brand: { primary: "#000000", accent: "#ffffff", ink: "#ffffff", light: "#ffffff", dark: "#000000" },
+    shots: [],
+    status: "storyboard" as const,
+    revisions: [],
+    sound: { sfx: true, bed: "pulse" as const, music: 0.6, voice: true },
+    writtenBy: "template" as const,
+  };
+  db.motion = [
+    { ...base, id: "motion_a", leadId: a.id, assets: { logo: { id: "asset_mlogo", from: "website" as const }, photos: [{ id: "asset_mp1", from: "upload" as const }], music: { id: "asset_mtrack", name: "t" } }, voiceover: { assetId: "asset_mvoice", model: "m", text: "", segments: [] } },
+    { ...base, id: "motion_typed", assets: { photos: [{ id: "asset_keep2", from: "upload" as const }] } },
+  ];
+  const plan = planFresh(db);
+  assert.equal(plan.motion, 1);
+  assert.ok(["asset_mlogo", "asset_mp1", "asset_mtrack", "asset_mvoice"].every((x) => plan.assets.includes(x)));
+  assert.ok(!plan.assets.includes("asset_keep2"));
+  startFresh(db);
+  assert.deepEqual(db.motion.map((m) => m.id), ["motion_typed"]);
+});

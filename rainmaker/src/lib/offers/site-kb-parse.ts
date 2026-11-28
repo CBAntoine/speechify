@@ -286,3 +286,54 @@ export function faqsFromText(text: string, max = 20): Faq[] {
   }
   return out;
 }
+
+const NOT_A_PHOTO = /logo|icon|sprite|favicon|avatar|badge|pixel|spacer|placeholder|loader|flag|payment|visa|mastercard|paypal|stars?[-_.]|rating|arrow|button|emoji|gravatar|1x1/i;
+
+/**
+ * The big pictures on a page, best first: the share image, then photos in
+ * <img>, <picture> and background images, largest srcset candidate of each.
+ * Logos, icons and tracking pixels are skipped.
+ */
+export function pagePhotos(html: string, pageUrl: string, max = 6): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (u?: string) => {
+    if (!u || out.length >= max || /^data:/i.test(u)) return;
+    let x: URL;
+    try {
+      x = new URL(u.replace(/&amp;/g, "&").trim(), pageUrl);
+    } catch {
+      return;
+    }
+    if (!/^https?:$/.test(x.protocol) || /\.(svg|ico|gif)$/i.test(x.pathname) || NOT_A_PHOTO.test(x.pathname)) return;
+    const key = x.toString();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(key);
+  };
+  const biggest = (srcset?: string) => {
+    if (!srcset) return undefined;
+    const cands = srcset
+      .split(/,\s+(?=\S)/)
+      .map((c) => c.trim().split(/\s+/))
+      .filter((p) => p[0] && !/^data:/i.test(p[0]))
+      .map(([u, d]) => ({ u, n: d ? parseFloat(d) * (d.endsWith("x") ? 1000 : 1) : 1 }));
+    return cands.sort((a, b) => b.n - a.n)[0]?.u;
+  };
+  const meta = (name: string) =>
+    attr(html, new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']+)["']`, "i")) ??
+    attr(html, new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']${name}["']`, "i"));
+  add(meta("og:image"));
+  add(meta("twitter:image"));
+  for (const m of html.matchAll(/<(img|source)\b[^>]*>/gi)) {
+    const tag = m[0];
+    if (/logo|icon/i.test(tag.replace(/\s(?:src|srcset|data-src|data-srcset)=["'][^"']*["']/gi, ""))) continue;
+    const w = Number(attr(tag, /\swidth=["']?(\d+)/i));
+    const h = Number(attr(tag, /\sheight=["']?(\d+)/i));
+    if ((w && w < 400) || (h && h < 250)) continue;
+    const set = attr(tag, /\sdata-srcset=["']([^"']+)["']/i) ?? attr(tag, /\ssrcset=["']([^"']+)["']/i);
+    add(biggest(set) ?? attr(tag, /\sdata-(?:lazy-)?src=["']([^"']+)["']/i) ?? (m[1].toLowerCase() === "img" ? attr(tag, /\ssrc=["']([^"']+)["']/i) : undefined));
+  }
+  for (const m of html.matchAll(/background(?:-image)?\s*:\s*url\(\s*["']?([^"')]+)["']?\s*\)/gi)) add(m[1]);
+  return out;
+}

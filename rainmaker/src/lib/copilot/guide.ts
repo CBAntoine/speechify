@@ -115,6 +115,12 @@ export const GUIDE: GuideTopic[] = [
     text: "Commercial email must include your postal address and an opt-out line (CAN-SPAM); Autopilot's auto-send refuses emails without them. No automated calls or texts to people who haven't opted in (TCPA, CASL), so Autopilot only emails. Voice clones need the written consent of the person whose voice it is. AI receptionists and assistants say they're AI when asked; AI website guides introduce themselves as an AI. The store sells your agency's services, not ElevenLabs credits, and never uses ElevenLabs as your brand.",
   },
   {
+    id: "motion_ads",
+    title: "Motion ads (motion graphics made in code)",
+    keywords: ["motion", "motion ad", "motion graphics", "animated", "animation", "three.js", "4k", "storyboard", "morph", "render", "mp4", "sound design", "music", "whoosh"],
+    text: "Ad Studio → Motion ad makes a motion-graphics ad, made in code, for a business to run on Reels, TikTok, Shorts or YouTube. 1 Assets: pick a pipeline business (or type a name and website), goal, offer, audience, call-to-action line, true things to include and a format (9:16, 1:1, 16:9), then Gather assets and write the storyboard. Their logo, photos and brand colour come from their website; upload more photos (1,500 px+ on the short side for 4K; badges say 4K ready, HD or Low-res), replace the logo (PNG, JPEG, WebP, SVG) and set brand and accent colours. 2 Storyboard: numbered shots with a still, headline, line under it, voiceover line and direction, plus shape, fill (colour, logo or photo by number), size, seconds, camera (push, pull, tilt, orbit), accent and sound effects. Reorder, duplicate, delete, add, Ask Claude for a change, then Approve storyboard. 3 Animate, sound and render: Three.js animates it (every shot morphs into the next, no cross dissolves, centred action, moving background, words sliding up from a mask). Sound: effects made in code, music made in code or their own track, and an ElevenLabs voiceover the music ducks under. Render 1080p MP4 or 4K MP4 draws every frame on the device. Numbers come only from the brief and their data.",
+  },
+  {
     id: "reddit",
     title: "Reddit buyers",
     keywords: ["reddit", "subreddit", "buyers", "intent", "recommendations", "alternative to", "looking for", "burned", "hand raisers"],

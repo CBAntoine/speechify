@@ -129,6 +129,72 @@ export interface DemoAgent {
   usage?: { day: string; sessions: number };
 }
 
+export type MotionShape = "circle" | "ring" | "rounded" | "square" | "pill" | "card" | "phone" | "bar";
+export type MotionFill = "brand" | "accent" | "light" | "dark" | "logo" | "photo";
+export type MotionSfx = "whoosh" | "hit" | "pullback" | "riser" | "ding";
+
+/** One numbered shot of a motion ad: what you approve in the storyboard. */
+export interface MotionShot {
+  /** What happens, and how it morphs into the next shot. */
+  note: string;
+  seconds: number;
+  /** The centre shape this shot morphs into. */
+  shape: MotionShape;
+  fill: MotionFill;
+  /** Which uploaded photo, when fill is "photo". */
+  photo?: number;
+  /** Size of the shape, 0.2 to 1 of the frame's short side. */
+  size: number;
+  headline: string;
+  sub?: string;
+  stat?: { value: string; label: string };
+  camera: "still" | "push" | "pull" | "tilt" | "orbit";
+  accent: "none" | "orbit" | "burst" | "rings" | "lines";
+  sfx: MotionSfx[];
+  /** Optional narration for this shot. */
+  voice?: string;
+}
+
+/** A picture for a motion ad, from their website or uploaded, with its size when known. */
+export interface MotionImage {
+  id: string;
+  w?: number;
+  h?: number;
+  from: "website" | "upload";
+}
+
+/**
+ * A motion-graphics ad made in code: assets, a numbered storyboard you
+ * approve, then an animation rendered in the browser with sound.
+ */
+export interface MotionAd {
+  id: string;
+  leadId?: string;
+  business: string;
+  website?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  format: "vertical" | "square" | "landscape";
+  brief: { goal: string; offer?: string; audience?: string; notes?: string; cta?: string };
+  /** True things about the business the storyboard may use (rating, services, city). */
+  facts: string[];
+  /** The idea in one line. */
+  concept: string;
+  brand: { primary: string; accent: string; ink: string; light: string; dark: string };
+  /** Their logo, photos (shots refer to them by number) and a music track. */
+  assets: { logo?: MotionImage; photos: MotionImage[]; music?: { id: string; name: string } };
+  shots: MotionShot[];
+  status: "storyboard" | "approved";
+  approvedAt?: string;
+  revisions: { at: string; ask: string }[];
+  /** Sound design: synthesized effects; music made in code (pad, pulse) or their uploaded track, and its volume; the voiceover. */
+  sound: { sfx: boolean; bed: "none" | "pad" | "pulse" | "track"; music: number; voice: boolean };
+  /** The narration, recorded in one take: where each shot's line is in the file. */
+  voiceover?: { assetId: string; model: string; text: string; segments: { shot: number; from: number; to: number }[] };
+  writtenBy: "claude" | "template";
+}
+
 /** A public Reddit post asking for what you sell, found by the morning scan. */
 export interface RedditSignal {
   id: string;
@@ -615,6 +681,8 @@ export interface Db {
   copilot?: { agentId: string; toolIds: Record<string, string>; syncedAt: string; hash?: string };
   /** Video ads made for leads. */
   videos?: VideoAd[];
+  /** Motion ads made in code. */
+  motion?: MotionAd[];
   /** Reddit buyers: settings, the posts found, and the last scan. */
   reddit?: { config: RedditConfig; signals: RedditSignal[]; lastScanAt?: string; lastErrors?: string[] };
   /** When the owner last talked to the copilot, for its "since your last visit" greeting. */

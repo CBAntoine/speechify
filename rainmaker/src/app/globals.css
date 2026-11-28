@@ -3405,3 +3405,398 @@ details[open] > .niche-summary .chev {
 .rsignal-body.open {
   display: block;
 }
+
+/* ── Motion ads (Ad Studio → Motion ad) ───────────────────── */
+
+.msteps-help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.msteps-help b {
+  color: var(--text);
+}
+
+.mstepper {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mstepper button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mstepper button span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sunken);
+  font-size: 12px;
+}
+
+.mstepper button[aria-current="step"] {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
+.mstepper button[aria-current="step"] span {
+  background: var(--brand);
+  color: var(--bg);
+}
+
+.mstepper button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.massets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.masset {
+  position: relative;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.masset img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--sunken);
+}
+
+.masset.logo {
+  width: 132px;
+}
+
+.masset.logo img {
+  object-fit: contain;
+  padding: 10px;
+  background: repeating-conic-gradient(var(--sunken) 0% 25%, var(--panel) 0% 50%) 50% / 16px 16px;
+}
+
+.masset figcaption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.masset-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
+
+.masset.add {
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.mcolor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.mcolor input {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+}
+
+.mboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.mboard-preview {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .mboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mboard-preview {
+    position: static;
+    order: -1;
+  }
+}
+
+.mshots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mshot {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  grid-template-areas: "thumb meta" "thumb body";
+  grid-template-rows: auto 1fr;
+  column-gap: 12px;
+  row-gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.mshot-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mshot-body {
+  grid-area: body;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .mshot {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-areas: "thumb meta" "body body";
+  }
+}
+
+.mshot-thumb {
+  grid-area: thumb;
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111;
+  min-height: 84px;
+}
+
+.mshot-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.mshot-n {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mshot-head {
+  font-weight: 650;
+}
+
+.mshot-note {
+  font-style: italic;
+}
+
+.mshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.msunken {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--sunken);
+}
+
+.mplayer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.mplayer.vertical {
+  max-width: 360px;
+}
+
+.mplayer.square {
+  max-width: 480px;
+}
+
+.mplayer-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #0d0d0d;
+  box-shadow: var(--shadow-2);
+}
+
+.mplayer-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mplayer-over {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 13px;
+}
+
+.mplayer-over.error {
+  background: rgba(150, 20, 20, 0.85);
+}
+
+.mplayer-over .faint {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mplayer-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mplayer-scrub {
+  flex: 1;
+  min-width: 60px;
+  margin: 0 6px;
+  accent-color: var(--brand);
+}
+
+.mplayer-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mplayer-shots button {
+  min-width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mplayer-shots button.on {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--bg);
+}
+
+.mprogress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+.mprogress span {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transition: width 0.2s linear;
+}
+
+/* The play button sits on the shape, above the words. */
+.mplayer .vplayer-big {
+  top: 40%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+.mplayer.vertical .vplayer-big {
+  top: 44.4%;
+}
+
+.mboard input[type="range"],
+.mshot-grid input[type="range"] {
+  width: 100%;
+  accent-color: var(--brand);
+}

@@ -15,6 +15,8 @@ export const SCREENS: Screen[] = [
   { id: "pipeline", label: "Pipeline", path: "/pipeline", aliases: ["pipeline", "leads", "board", "deals", "crm"] },
   { id: "inbox", label: "Inbox", path: "/inbox", aliases: ["inbox", "drafts", "messages", "approvals", "tasks"] },
   { id: "ad_studio", label: "Ad Studio", path: "/ads", aliases: ["ad studio", "ads", "campaigns", "creative"] },
+  { id: "ad_studio_video", label: "Video ads", path: "/ads?mode=video", aliases: ["video ad", "video ads", "owner video"] },
+  { id: "ad_studio_motion", label: "Motion ads", path: "/ads?mode=motion", aliases: ["motion ad", "motion ads", "motion graphics", "animated ad", "4k ad", "three.js ad"] },
   { id: "agents", label: "Agents", path: "/agents", aliases: ["agents", "agent", "team"] },
   { id: "autopilot", label: "Autopilot", path: "/autopilot", aliases: ["autopilot", "automation"] },
   { id: "sales", label: "Sales", path: "/sales", aliases: ["sales", "orders", "revenue"] },

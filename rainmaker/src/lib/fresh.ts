@@ -66,8 +66,15 @@ export interface FreshPlan {
   knowledge: string[];
   /** Video ads made for them. */
   videos: number;
+  /** Motion ads made for them. */
+  motion: number;
   /** Stored files to delete afterwards (video logos, photos and voiceovers). */
   assets: string[];
+}
+
+/** A motion ad's stored files: logo, photos, track and narration. */
+export function motionAssetIds(m: Pick<NonNullable<Db["motion"]>[number], "assets" | "voiceover">): string[] {
+  return [m.assets.logo?.id, ...m.assets.photos.map((p) => p.id), m.assets.music?.id, m.voiceover?.assetId].filter((a): a is string => Boolean(a));
 }
 
 /** A video ad's stored files. */
@@ -96,6 +103,7 @@ function targets(db: Db) {
     activity: (a: Db["activity"][number]) => SAMPLE_ACTIVITY.has(a.id) || ofGone(a),
     kept: db.leads.filter((l) => !ids.has(l.id)).map((l) => l.name),
     video: (v: NonNullable<Db["videos"]>[number]) => ids.has(v.leadId),
+    motion: (m: NonNullable<Db["motion"]>[number]) => ofGone(m),
   };
 }
 
@@ -112,7 +120,8 @@ export function planFresh(db: Db): FreshPlan {
     agents: t.agents,
     knowledge: t.knowledge,
     videos: (db.videos ?? []).filter(t.video).length,
-    assets: (db.videos ?? []).filter(t.video).flatMap(videoAssetIds),
+    motion: (db.motion ?? []).filter(t.motion).length,
+    assets: [...(db.videos ?? []).filter(t.video).flatMap(videoAssetIds), ...(db.motion ?? []).filter(t.motion).flatMap(motionAssetIds)],
   };
 }
 
@@ -127,5 +136,6 @@ export function startFresh(db: Db): FreshPlan {
   db.campaigns = db.campaigns.filter((c) => !t.campaign(c));
   db.activity = db.activity.filter((a) => !t.activity(a));
   db.videos = (db.videos ?? []).filter((v) => !t.video(v));
+  if (db.motion) db.motion = db.motion.filter((m) => !t.motion(m));
   return plan;
 }

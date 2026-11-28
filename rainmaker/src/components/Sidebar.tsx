@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Film, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, X, Zap } from "lucide-react";
+import { BookOpen, Bot, ChevronRight, CircleDollarSign, Ellipsis, Film, Inbox, Kanban, LayoutDashboard, LogOut, Megaphone, Radar, Settings, Store, Wand2, X, Zap } from "lucide-react";
 import { openCopilot } from "./copilot/Copilot";
 import { useOverlay } from "./client";
 import { InstallButton, useInstall } from "./pwa";
@@ -27,6 +27,7 @@ const SELL = [
 const MORE = [
   { href: "/ads", label: "Ad Studio", sub: "Tailored ads for any business", icon: Megaphone },
   { href: "/ads?mode=video", label: "Video ads", sub: "A video for the owner, from their real data", icon: Film },
+  { href: "/ads?mode=motion", label: "Motion ads", sub: "Motion graphics in 4K, made in code", icon: Wand2 },
   { href: "/agents", label: "Agents", sub: "Give a goal, watch it work", icon: Bot },
   { href: "/autopilot", label: "Autopilot", sub: "Finds, pitches and onboards clients daily", icon: Zap },
   { href: "/sales", label: "Sales", sub: "Orders, recurring revenue, onboarding", icon: CircleDollarSign },

@@ -342,7 +342,7 @@ export function SettingsForm({
   );
 }
 
-type FreshPlan = { leads: number; drafts: number; tasks: number; campaigns: number; activity: number; keptClients: string[]; agents: number; knowledge: number; videos: number };
+type FreshPlan = { leads: number; drafts: number; tasks: number; campaigns: number; activity: number; keptClients: string[]; agents: number; knowledge: number; videos: number; motion?: number };
 
 /** Delete every lead and what hangs off it (paying clients stay), after typing DELETE. */
 function StartFresh() {
@@ -392,7 +392,7 @@ function StartFresh() {
             {busy ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />} Start fresh…
           </button>
         </div>
-      ) : plan.leads === 0 && !plan.drafts && !plan.tasks && !plan.campaigns && !plan.videos ? (
+      ) : plan.leads === 0 && !plan.drafts && !plan.tasks && !plan.campaigns && !plan.videos && !plan.motion ? (
         <div className="row wrap" style={{ gap: 8 }}>
           <span className="small">There are no leads to delete.</span>
           <button className="btn sm ghost" onClick={() => setPlan(null)}>
@@ -403,7 +403,8 @@ function StartFresh() {
         <div className="tip warn stack" style={{ gap: 8, alignItems: "stretch" }}>
           <span className="small">
             This deletes {n(plan.leads, "lead")}, {n(plan.drafts, "draft")}, {n(plan.tasks, "task")}, {n(plan.campaigns, "ad campaign")}
-            {plan.videos ? ` and ${n(plan.videos, "video ad")}` : ""}
+            {plan.videos ? `, ${n(plan.videos, "video ad")}` : ""}
+            {plan.motion ? `, ${n(plan.motion, "motion ad")}` : ""}
             {plan.agents ? `, and ${n(plan.agents, "demo agent")} in ElevenLabs` : ""}. It can&apos;t be undone.
             {plan.keptClients.length ? ` ${n(plan.keptClients.length, "paying client")} stay${plan.keptClients.length === 1 ? "s" : ""}: ${plan.keptClients.slice(0, 3).join(", ")}${plan.keptClients.length > 3 ? "…" : ""}.` : ""}
           </span>
