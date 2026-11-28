@@ -48,7 +48,7 @@ const SEARCH_FIELDS = [
   "places.googleMapsUri",
   "places.businessStatus",
   "places.primaryType",
-  "places.regularOpeningHours.weekdayDescriptions",
+  "places.regularOpeningHours",
   "nextPageToken",
 ].join(",");
 
