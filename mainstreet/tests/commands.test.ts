@@ -11,7 +11,12 @@ process.env.QUIET = "1";
 
 const { runCommand, parseArgs, getCommand, listCommands } = await import("../src/commands/registry.ts");
 await import("../src/commands/index.ts");
-const { saveLead, getSettings, getLead } = await import("../src/db.ts");
+const { saveLead, getSettings, getLead, addMessage, addApproval, getApproval, messagesFor, isSuppressed } = await import("../src/db.ts");
+const { patchSettings } = await import("../src/db.ts");
+
+// Keep the crew still: some commands nudge it to start work right away, and
+// a background pipeline would race these tests and hold a browser open.
+patchSettings({ crew: { paused: true } });
 
 test("voice-style arguments are coerced", () => {
   const def = getCommand("find_leads")!;
@@ -76,4 +81,43 @@ test("every command has a description, and confirm commands take confirmed", () 
     assert.match(d.name, /^[a-z_]{3,40}$/);
     if (d.risk === "confirm") assert.ok(d.params.confirmed, d.name);
   }
+});
+
+test("do-not-contact drops everything waiting and keeps paying clients won", async () => {
+  const now = new Date().toISOString();
+  const base = { source: "manual" as const, niche: "dentist", city: "Bend", region: "OR", country: "US" as const, priceCents: 50000, followupsSent: 0, createdAt: now, updatedAt: now };
+  saveLead({ ...base, id: "ld_dnc1", sourceId: "m-dnc1", name: "Juniper Ridge Dental", status: "negotiating", email: "hello@juniper-ridge.example", phone: "(541) 555-0177" });
+  addMessage({ leadId: "ld_dnc1", channel: "email", direction: "out", kind: "followup", body: "Just checking in.", status: "queued" });
+  const draft = addMessage({ leadId: "ld_dnc1", channel: "email", direction: "out", kind: "reply", body: "Happy to help.", status: "pending_approval" });
+  const ap = addApproval({ kind: "reply", leadId: "ld_dnc1", leadName: "Juniper Ridge Dental", title: "Reply to Juniper Ridge Dental?", detail: "Happy to help.", payload: { messageId: draft.id } });
+
+  const r = await runCommand("log_outcome", { lead: "juniper ridge", outcome: "dnc" }, { via: "voice" });
+  assert.equal(r.ok, true);
+  assert.equal(getLead("ld_dnc1")!.status, "dnc");
+  assert.deepEqual(messagesFor("ld_dnc1").map((m) => m.status), ["discarded", "discarded"]);
+  assert.equal(getApproval(ap.id)!.status, "expired");
+  assert.ok(isSuppressed(["hello@juniper-ridge.example"]) && isSuppressed(["(541) 555-0177"]));
+
+  saveLead({ ...base, id: "ld_won1", sourceId: "m-won1", name: "Cascade Kids Dentistry", status: "won", email: "office@cascade-kids.example" });
+  await runCommand("log_outcome", { lead: "cascade kids", outcome: "dnc" }, { via: "dashboard" });
+  assert.equal(getLead("ld_won1")!.status, "won");
+  assert.ok(isSuppressed(["office@cascade-kids.example"]));
+});
+
+test("draft_reply says plainly when it couldn't follow instructions", async () => {
+  const now = new Date().toISOString();
+  saveLead({ id: "ld_rep1", source: "manual", sourceId: "m-rep1", name: "Pine Street Dental", niche: "dentist", city: "Boise", region: "ID", country: "US", status: "negotiating", priceCents: 50000, followupsSent: 0, createdAt: now, updatedAt: now, email: "team@pine-street.example", proposalToken: "tok_rep1" });
+  addMessage({ leadId: "ld_rep1", channel: "email", direction: "in", kind: "inbound", subject: "Re: your new website", body: "How much is it, and is there a monthly fee?", status: "received" });
+
+  const first = await runCommand("draft_reply", { lead: "pine street" }, { via: "voice" });
+  assert.equal(first.ok, true);
+  assert.match(first.say, /Want me to send it\?$/);
+
+  // Without Claude the simple reader can't follow the note, and Atlas says so.
+  const second = await runCommand("draft_reply", { lead: "pine street", instructions: "mention we connect their domain for free" }, { via: "voice" });
+  assert.equal(second.ok, true);
+  assert.match(second.say, /Claude isn't connected/);
+  const replies = messagesFor("ld_rep1").filter((m) => m.kind === "reply");
+  assert.deepEqual(replies.map((m) => m.status), ["discarded", "pending_approval"]);
+  assert.equal(replies[0].error, "Replaced by a newer draft");
 });

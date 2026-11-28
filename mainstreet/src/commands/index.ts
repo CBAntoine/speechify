@@ -3,7 +3,7 @@ import { budget } from "../crew/checker.ts";
 import { draftReply, markPaid, sendReplyNow } from "../crew/closer.ts";
 import { applyDecision, describeApproval } from "../crew/decisions.ts";
 import { checkResponseRate, runOnLead, scanNow, tick } from "../crew/orchestrator.ts";
-import { cancelQueued, sendPitchNow } from "../crew/pitcher.ts";
+import { cancelQueued, sendPitchNow, stopContact } from "../crew/pitcher.ts";
 import { proposalUrl, summarize } from "../crew/shared.ts";
 import {
   allLeadNames,
@@ -26,7 +26,6 @@ import {
   searchLeads,
   spendBreakdown,
   spendSince,
-  suppress,
   updateLead,
   updateMessage,
 } from "../db.ts";
@@ -330,7 +329,7 @@ defineCommand({
 });
 
 function cancelPendingPitch(lead: Lead) {
-  for (const m of messagesFor(lead.id)) if (m.kind === "pitch" && m.direction === "out" && m.status !== "sent") updateMessage(m.id, { status: "failed", error: "Rewritten" });
+  for (const m of messagesFor(lead.id)) if (m.kind === "pitch" && m.direction === "out" && m.status !== "sent") updateMessage(m.id, { status: "discarded", error: "Rewritten" });
   const ap = pendingApprovalFor(lead.id, "pitch");
   if (ap) applyDecisionSilently(ap.id);
 }
@@ -570,7 +569,11 @@ defineCommand({
     if (!r.lead) return { ok: false, say: r.say! };
     const d = await draftReply(r.lead, str(a.instructions));
     if (!d) return { ok: false, say: "There's nothing to reply to yet." };
-    return { ok: true, say: `Here's the draft: "${clip(d.body.split("\n—\n")[0], 260)}" Want me to send it?`, data: { messageId: d.id, body: d.body } };
+    const text = clip(d.draft.body.split("\n—\n")[0], 260);
+    const ask = d.ignoredInstructions
+      ? "Heads up: Claude isn't connected, so that's the standard answer and your note isn't in it. Tell me the exact words if you want them in, or I can send it as is."
+      : "Want me to send it?";
+    return { ok: true, say: `Here's the draft: "${text}" ${ask}`, data: { messageId: d.draft.id, body: d.draft.body, ignoredInstructions: d.ignoredInstructions } };
   },
 });
 
@@ -619,11 +622,8 @@ defineCommand({
       return { ok: true, say: `Marked ${l.name} as won for ${money(cents, s().offer.currency)}. Their site is going live.` };
     }
     if (outcome === "dnc") {
-      if (l.email) suppress(l.email, "email", "owner marked do-not-contact");
-      if (l.phone) suppress(l.phone, "phone", "owner marked do-not-contact");
-      suppress(l.sourceId, "place", "owner marked do-not-contact");
-      cancelQueued(l.id, "Do not contact");
-      leadChanged(updateLead(l.id, (x) => ((x.status = "dnc"), (x.notes = stamp("Do not contact"))))!);
+      updateLead(l.id, (x) => (x.notes = stamp("Do not contact")));
+      stopContact(getLead(l.id) ?? l, "Do not contact");
       return { ok: true, say: `${l.name} is on the do-not-contact list.` };
     }
     const map: Record<string, { status?: LeadStatus; text: string; tap?: "call" | "sms" | "dm" }> = {

@@ -468,6 +468,7 @@ const MSG_STATUS: Record<Message["status"], { label: string; tone: string }> = {
   queued: { label: "Queued", tone: "blue" },
   sent: { label: "Sent", tone: "green" },
   failed: { label: "Failed", tone: "red" },
+  discarded: { label: "Not sent", tone: "grey" },
   received: { label: "Received", tone: "sky" },
   manual: { label: "You sent it", tone: "grey" },
 };
@@ -476,7 +477,7 @@ function ThreadItem({ lead, m }: { lead: LeadDetail; m: Message }) {
   const [busy, act] = useBusy();
   const st = MSG_STATUS[m.status];
   return (
-    <li className={cx("bubble", m.direction === "in" ? "is-in" : "is-out", m.channel === "note" && "is-note")}>
+    <li className={cx("bubble", m.direction === "in" ? "is-in" : "is-out", m.channel === "note" && "is-note", m.status === "discarded" && "is-discarded")}>
       <div className="bubble-meta">
         <b>{m.direction === "in" ? lead.name : m.channel === "note" ? "Note" : "You"}</b>
         <span>· {CHANNEL_LABEL[m.channel]}</span>
@@ -484,9 +485,18 @@ function ThreadItem({ lead, m }: { lead: LeadDetail; m: Message }) {
         <span>· {dateTime(m.sentAt ?? m.createdAt)}</span>
         <Chip tone={st.tone}>{st.label}</Chip>
       </div>
-      {m.subject ? <b className="bubble-subject">{m.subject}</b> : null}
-      <p className="bubble-text">{m.body}</p>
-      {m.error ? <p className="field-err">{m.error}</p> : null}
+      {m.status === "discarded" ? (
+        <details className="bubble-discarded">
+          <summary>{m.error ?? "This draft wasn't sent."}</summary>
+          <p className="bubble-text">{m.body}</p>
+        </details>
+      ) : (
+        <>
+          {m.subject ? <b className="bubble-subject">{m.subject}</b> : null}
+          <p className="bubble-text">{m.body}</p>
+          {m.error ? <p className="field-err">{m.error}</p> : null}
+        </>
+      )}
       {m.analysis ? (
         <div className="analysis">
           <div className="row gap-sm wrap">

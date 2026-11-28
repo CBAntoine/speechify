@@ -25,7 +25,7 @@ export async function applyDecision(id: string, decision: "approve" | "reject", 
         updateMessage(payload.messageId, { status: "queued", sendAfter: nextSendSlot() });
         say = `Approved. The pitch to ${lead?.name} goes out in the next send slot.`;
       } else {
-        if (payload.messageId) updateMessage(payload.messageId, { status: "failed", error: "You passed on this one" });
+        if (payload.messageId) updateMessage(payload.messageId, { status: "discarded", error: "You passed on this one" });
         if (lead) leadChanged(updateLead(lead.id, (l) => ((l.status = "skipped"), (l.skipReason = note || "You passed on this one")))!);
         say = `Okay, skipped ${lead?.name ?? "it"}.`;
       }
@@ -36,7 +36,7 @@ export async function applyDecision(id: string, decision: "approve" | "reject", 
         const r = await sendMessage(payload.messageId, { force: true });
         say = r.ok ? `Sent the reply to ${lead?.name}.` : `I approved it but sending failed: ${r.error}`;
       } else {
-        if (payload.messageId) updateMessage(payload.messageId, { status: "failed", error: "You rejected this draft" });
+        if (payload.messageId) updateMessage(payload.messageId, { status: "discarded", error: "You rejected this draft" });
         say = `Okay, I won't send that reply. You can ask me to draft a different one.`;
       }
       break;
@@ -48,7 +48,7 @@ export async function applyDecision(id: string, decision: "approve" | "reject", 
         say = `Approved the ${money(a.amountCents, getSettings().offer.currency)} deal with ${lead?.name}.${payload.messageId ? (r.ok ? " The reply with the next steps went out." : ` The reply didn't send: ${"error" in r ? r.error : ""}`) : ""}`;
       } else {
         if (lead) updateLead(lead.id, (l) => (l.dealValueCents = undefined));
-        if (payload.messageId) updateMessage(payload.messageId, { status: "failed", error: "Deal rejected" });
+        if (payload.messageId) updateMessage(payload.messageId, { status: "discarded", error: "Deal rejected" });
         say = `Okay. The crew won't quote the bigger project for ${lead?.name}; it's yours to handle.`;
       }
       break;

@@ -381,6 +381,10 @@ export function pendingApprovalFor(leadId: string, kind: Approval["kind"]): (App
   return r ? JSON.parse(r.data as string) : undefined;
 }
 
+export function pendingApprovalsFor(leadId: string): Approval[] {
+  return all("SELECT data FROM approvals WHERE lead_id = ? AND status = 'pending'", leadId).map((r) => JSON.parse(r.data as string) as Approval);
+}
+
 export function decideApproval(id: string, status: "approved" | "rejected" | "expired", by: string): Approval | undefined {
   const a = getApproval(id);
   if (!a) return undefined;

@@ -9,6 +9,7 @@ process.env.QUIET = "1";
 
 const { validateSpec, checkHtml, emailProblems } = await import("../src/crew/checker.ts");
 const { demoSpec } = await import("../src/crew/builder.ts");
+const { demoHook, demoScript } = await import("../src/crew/filmer.ts");
 const { patchSettings } = await import("../src/db.ts");
 const { verifyStripeSignature } = await import("../src/providers/stripe.ts");
 const { stripQuoted } = await import("../src/api/webhooks.ts");
@@ -74,4 +75,14 @@ test("design ids match the renderer", () => {
   assert.deepEqual([...FONT_PAIR_IDS].sort(), Object.keys(FONT_PAIRS).sort());
   assert.deepEqual([...ICON_NAMES].sort(), Object.keys(ICONS).sort());
   assert.deepEqual([...VARIANT_IDS].sort(), VARIANTS.map((v) => v.id).sort());
+});
+
+test("the template video hook never cuts its sentence short", () => {
+  assert.equal(demoHook("Cascade Dental"), "We built Cascade Dental a new website");
+  for (const name of ["Bright Smile Dental of Bend", "O'Brien & Duarte Family Dental Care of Fort Collins"]) {
+    const hook = demoHook(name);
+    assert.ok(hook.split(" ").length <= 8, hook);
+    assert.match(hook, /a new website$/);
+  }
+  assert.match(demoScript({ ...lead, name: "Bright Smile Dental of Bend" }, "$500", 3).hook, /a new website$/);
 });

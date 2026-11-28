@@ -53,6 +53,9 @@ export function ApprovalRow({ approval: a, compact }: { approval: Approval; comp
   );
 }
 
+/** Where a decision was made, for the audit trail. */
+const DECIDED_BY: Record<string, string> = { dashboard: "in the app", voice: "by voice", phone: "by phone", mcp: "over MCP" };
+
 export function Approvals() {
   const pending = useApi<{ approvals: Approval[] }>("/api/approvals?status=pending");
   const all = useApi<{ approvals: Approval[] }>("/api/approvals");
@@ -97,7 +100,10 @@ export function Approvals() {
                   ) : null}
                 </span>
                 {a.amountCents ? <span className="num">{money(a.amountCents)}</span> : null}
-                <span className="muted small">{dateTime(a.decidedAt ?? a.createdAt)}</span>
+                <span className="muted small">
+                  {dateTime(a.decidedAt ?? a.createdAt)}
+                  {a.status !== "expired" && a.decidedBy && DECIDED_BY[a.decidedBy] ? ` · ${DECIDED_BY[a.decidedBy]}` : ""}
+                </span>
               </div>
             ))}
           </div>

@@ -14,8 +14,8 @@ const CH: Record<OneTapItem["channel"], { label: string; verb: string; icon: Luc
   dm: { label: "DMs", verb: "Open DM", icon: MessageCircle },
 };
 
-const STATUS_TONE: Record<string, string> = { queued: "blue", pending_approval: "amber", sent: "green", failed: "red", draft: "grey" };
-const STATUS_TEXT: Record<string, string> = { queued: "Queued", pending_approval: "Waiting for you", sent: "Sent", failed: "Failed", draft: "Draft" };
+const STATUS_TONE: Record<string, string> = { queued: "blue", pending_approval: "amber", sent: "green", failed: "red", discarded: "grey", draft: "grey" };
+const STATUS_TEXT: Record<string, string> = { queued: "Queued", pending_approval: "Waiting for you", sent: "Sent", failed: "Failed", discarded: "Not sent", draft: "Draft" };
 
 export function Outreach() {
   const { data, error, loading, reload } = useApi<OutreachResponse>("/api/outreach");

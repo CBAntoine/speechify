@@ -1871,6 +1871,18 @@ img {
   border-color: color-mix(in srgb, var(--blue) 18%, var(--line));
   border-bottom-left-radius: 6px;
 }
+.bubble.is-discarded {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+.bubble-discarded summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.bubble-discarded .bubble-text {
+  margin-top: 6px;
+}
 .bubble.is-note {
   justify-self: stretch;
   max-width: none;

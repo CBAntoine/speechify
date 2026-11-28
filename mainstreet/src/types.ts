@@ -289,7 +289,8 @@ export interface Message {
   kind: "pitch" | "followup" | "reply" | "inbound" | "note";
   subject?: string;
   body: string;
-  status: "draft" | "pending_approval" | "queued" | "sent" | "failed" | "received" | "manual";
+  /** "failed": a send that didn't work. "discarded": a draft that was never meant to go (replaced, rejected or cancelled). */
+  status: "draft" | "pending_approval" | "queued" | "sent" | "failed" | "discarded" | "received" | "manual";
   externalId?: string;
   error?: string;
   createdAt: string;

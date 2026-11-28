@@ -75,12 +75,12 @@ export function seedDemoHistory(days = 12): number {
       addMessage({ leadId: lead.id, channel: "email", direction: "out", kind: "pitch", subject: `made ${lead.name} a new website`, body: "(demo history)", status: "sent", sentAt: at(60 + i * 9), createdAt: at(50) });
       if (r() < 0.15) {
         const rep = REPLIES[replyIdx++ % REPLIES.length];
-        addMessage({ leadId: lead.id, channel: "email", direction: "in", kind: "inbound", subject: `Re: made ${lead.name} a new website`, body: rep.text, status: "received", analysis: rep.a, createdAt: at(60 + i * 9 + 600 + Math.floor(r() * 900)) });
+        addMessage({ leadId: lead.id, channel: "email", direction: "in", kind: "inbound", subject: `Re: made ${lead.name} a new website`, body: rep.text, status: "received", analysis: rep.a, createdAt: at(60 + i * 9 + 90 + Math.floor(r() * 240)) });
         lead.status = rep.then;
         if (rep.then === "won") {
           lead.dealValueCents = s.offer.priceCents;
-          addPayment({ leadId: lead.id, provider: "demo", externalId: `history_${lead.id}`, amountCents: s.offer.priceCents, currency: s.offer.currency, status: "paid", createdAt: at(60 + i * 9 + 1600) });
-          insertEvent({ ts: at(60 + i * 9 + 1600), agent: "closer", level: "success", leadId: lead.id, leadName: lead.name, message: `Paid $${s.offer.priceCents / 100}. Launched their site.` });
+          addPayment({ leadId: lead.id, provider: "demo", externalId: `history_${lead.id}`, amountCents: s.offer.priceCents, currency: s.offer.currency, status: "paid", createdAt: at(60 + i * 9 + 400) });
+          insertEvent({ ts: at(60 + i * 9 + 400), agent: "closer", level: "success", leadId: lead.id, leadName: lead.name, message: `Paid $${s.offer.priceCents / 100}. Launched their site.` });
         }
       } else if (d > 3) {
         lead.status = "lost";

@@ -127,7 +127,7 @@ img,svg,video,iframe{display:block;max-width:100%}
 @media (min-width:860px){
   .hero{padding:76px 0 44px}
   .sec{padding:60px 0}
-  .intro{grid-template-columns:auto 1fr;gap:48px}
+  .intro{grid-template-columns:340px minmax(0,1fr);gap:48px}
   .intro.solo{grid-template-columns:1fr;max-width:760px;margin-inline:auto}
   .phones{justify-content:center;overflow:visible;margin:0;padding:6px 0 18px;gap:28px}
   .swipe{display:none}

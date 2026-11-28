@@ -15,7 +15,6 @@ import {
   kvSet,
   messagesFor,
   pendingApprovalFor,
-  suppress,
   updateLead,
   updateMessage,
 } from "../db.ts";
@@ -27,7 +26,7 @@ import { renderSite } from "../site/render.ts";
 import type { Lead, Message, ReplyAnalysis } from "../types.ts";
 import { clip, errorMessage, money, nowIso, slugify } from "../util.ts";
 import { ESTIMATE, preflight } from "./checker.ts";
-import { cancelQueued, sendMessage } from "./pitcher.ts";
+import { cancelQueued, sendMessage, stopContact } from "./pitcher.ts";
 import { CLOSER_PROMPT } from "./prompts.ts";
 import { abs, emailFooter, facts, leadDir, postalAddress, priceLabel, proposalUrl } from "./shared.ts";
 
@@ -82,14 +81,15 @@ export async function handleInbound(i: Inbound): Promise<{ ok: boolean; leadId?:
       status: "received",
       externalId: i.externalId,
     });
-    const analysis = await analyze(lead, i.text);
+    const { analysis } = await analyze(lead, i.text);
     updateMessage(msg.id, { analysis });
     await act(lead, analysis);
     return { ok: true, leadId: lead.id, intent: analysis.intent };
   });
 }
 
-async function analyze(lead: Lead, text: string, instructions?: string): Promise<ReplyAnalysis> {
+/** Reads a reply with Claude, or with the simple keyword reader when Claude is off or fails (simple: true). */
+async function analyze(lead: Lead, text: string, instructions?: string): Promise<{ analysis: ReplyAnalysis; simple: boolean }> {
   const s = getSettings();
   if (features.claude && preflight(ESTIMATE.reply(), { agent: "closer", what: "reading a reply", lead }).ok) {
     try {
@@ -116,12 +116,12 @@ async function analyze(lead: Lead, text: string, instructions?: string): Promise
         maxTokens: 5000,
         label: "reply",
       });
-      return { ...out, dealHintCents: out.dealHintUsd > 0 ? Math.round(out.dealHintUsd * 100) : undefined };
+      return { analysis: { ...out, dealHintCents: out.dealHintUsd > 0 ? Math.round(out.dealHintUsd * 100) : undefined }, simple: false };
     } catch (err) {
       log("closer", `Couldn't analyse with Claude (${errorMessage(err)}); used the simple reader.`, { lead, level: "warn" });
     }
   }
-  return demoAnalysis(text, lead);
+  return { analysis: demoAnalysis(text, lead), simple: true };
 }
 
 function fillLinks(text: string, lead: Lead): string {
@@ -136,11 +136,7 @@ async function act(lead: Lead, a: ReplyAnalysis): Promise<void> {
   const s = getSettings();
   const human = !["auto_reply", "unsubscribe"].includes(a.intent);
   if (a.intent === "unsubscribe") {
-    if (lead.email) suppress(lead.email, "email", "asked to stop");
-    suppress(lead.sourceId, "place", "asked to stop");
-    cancelQueued(lead.id, "They asked to stop");
-    const u = updateLead(lead.id, (l) => (l.status = "dnc"))!;
-    leadChanged(u);
+    const u = stopContact(lead, "They asked to stop");
     log("closer", "Asked to be removed. Done: they're on the do-not-contact list and won't hear from us again.", { lead: u });
     return;
   }
@@ -213,7 +209,7 @@ async function act(lead: Lead, a: ReplyAnalysis): Promise<void> {
 }
 
 async function saveDraft(lead: Lead, body: string): Promise<Message> {
-  for (const m of messagesFor(lead.id)) if (m.kind === "reply" && m.status === "pending_approval") updateMessage(m.id, { status: "failed", error: "Replaced by a newer draft" });
+  for (const m of messagesFor(lead.id)) if (m.kind === "reply" && m.status === "pending_approval") updateMessage(m.id, { status: "discarded", error: "Replaced by a newer draft" });
   const subject = messagesFor(lead.id).filter((m) => m.direction === "in").pop()?.subject;
   return addMessage({
     leadId: lead.id,
@@ -226,16 +222,19 @@ async function saveDraft(lead: Lead, body: string): Promise<Message> {
   });
 }
 
-/** "Atlas, draft a reply to Bright Smile saying we can do the domain." */
-export async function draftReply(lead: Lead, instructions?: string): Promise<Message | undefined> {
+/**
+ * "Atlas, draft a reply to Bright Smile saying we can do the domain." The draft waits for approval.
+ * ignoredInstructions: the simple reader wrote it (Claude off), so the owner's instructions aren't in it.
+ */
+export async function draftReply(lead: Lead, instructions?: string): Promise<{ draft: Message; ignoredInstructions: boolean } | undefined> {
   const last = messagesFor(lead.id).filter((m) => m.direction === "in").pop();
-  const a = await analyze(lead, last?.body ?? "(no reply yet; write a short check-in)", instructions);
+  const { analysis: a, simple } = await analyze(lead, last?.body ?? "(no reply yet; write a short check-in)", instructions);
   const text = a.suggestedReply.trim() || (instructions ? instructions : "");
   if (!text) return undefined;
   const draft = await saveDraft(lead, fillLinks(text, lead));
   if (!pendingApprovalFor(lead.id, "reply")) addApproval({ kind: "reply", leadId: lead.id, leadName: lead.name, title: `Reply to ${lead.name}?`, detail: clip(draft.body.split("\n—\n")[0], 600), payload: { messageId: draft.id } });
   log("closer", `Drafted a reply${instructions ? ` (${clip(instructions, 60)})` : ""}.`, { lead });
-  return draft;
+  return { draft, ignoredInstructions: Boolean(instructions) && simple };
 }
 
 export async function sendReplyNow(lead: Lead, body?: string): Promise<{ ok: boolean; error?: string; simulated?: boolean }> {

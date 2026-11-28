@@ -4,6 +4,7 @@ import {
   addApproval,
   addMessage,
   countSentSince,
+  decideApproval,
   dueMessages,
   getLead,
   getMessage,
@@ -13,6 +14,8 @@ import {
   kvSet,
   leadsWithStatus,
   messagesFor,
+  pendingApprovalsFor,
+  suppress,
   updateLead,
   updateMessage,
 } from "../db.ts";
@@ -305,9 +308,27 @@ export function queueFollowups(): number {
   return queued;
 }
 
-/** Cancel anything still waiting to go to this lead. */
+const WAITING: Message["status"][] = ["queued", "pending_approval", "draft"];
+
+/** Cancel the pitch and follow-ups still waiting to go to this lead (reply drafts stay). */
 export function cancelQueued(leadId: string, reason: string): void {
-  for (const m of messagesFor(leadId)) if (m.direction === "out" && ["queued", "pending_approval", "draft"].includes(m.status) && m.kind !== "reply") updateMessage(m.id, { status: "failed", error: reason });
+  for (const m of messagesFor(leadId)) if (m.direction === "out" && WAITING.includes(m.status) && m.kind !== "reply") updateMessage(m.id, { status: "discarded", error: reason });
+}
+
+/**
+ * Stop all contact with a business: suppress its email, phone and listing,
+ * drop everything still waiting to go out (reply drafts included) and close
+ * its open approvals. A paying client keeps their "won" status.
+ */
+export function stopContact(lead: Lead, reason: string): Lead {
+  if (lead.email) suppress(lead.email, "email", reason);
+  if (lead.phone) suppress(lead.phone, "phone", reason);
+  suppress(lead.sourceId, "place", reason);
+  for (const m of messagesFor(lead.id)) if (m.direction === "out" && WAITING.includes(m.status)) updateMessage(m.id, { status: "discarded", error: reason });
+  for (const a of pendingApprovalsFor(lead.id)) decideApproval(a.id, "expired", "system");
+  const u = lead.status === "won" ? lead : (updateLead(lead.id, (l) => (l.status = "dnc")) ?? lead);
+  leadChanged(u);
+  return u;
 }
 
 // ── Demo: replies arrive on their own so you can watch the Closer ───────

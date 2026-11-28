@@ -133,6 +133,12 @@ export async function film(lead: Lead): Promise<Lead | undefined> {
   });
 }
 
+/** "We built <name> a new website" if it fits the 8-word hook; long names are already on the badge above it. */
+export function demoHook(name: string): string {
+  const full = `We built ${name.trim()} a new website`;
+  return full.split(/\s+/).length <= 8 ? full : "We built you a new website";
+}
+
 export function demoScript(lead: Lead, price: string, days: number): Script {
   const niche = getNiche(lead.niche);
   const rated = lead.rating && (lead.reviewCount ?? 0) >= 3 ? `${lead.rating.toFixed(1)} stars on Google` : undefined;
@@ -146,7 +152,7 @@ export function demoScript(lead: Lead, price: string, days: number): Script {
   const opener = rated ? `${lead.name}, you've got ${rated}, ${problem[lead.websiteState ?? "none"] ?? "but no website"}.` : `${lead.name}, people in ${lead.city} are searching for a ${niche.label.toLowerCase()} like you.`;
   return {
     script: `${opener} So we built you one. Your hours, your services and your best reviews, on a page that works on any phone. Take a look, and if you like it, it's yours.`,
-    hook: `We built ${lead.name} a new website`.split(" ").slice(0, 8).join(" "),
+    hook: demoHook(lead.name),
     endTitle: `${price} · live in ${days} days`,
     endSubtitle: "Reply to claim it",
   };

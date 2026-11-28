@@ -2,10 +2,10 @@ import path from "node:path";
 import { Hono, type Context } from "hono";
 import { DATA_DIR, DEMO, features, publicBase } from "../config.ts";
 import { markPaid } from "../crew/closer.ts";
-import { cancelQueued } from "../crew/pitcher.ts";
+import { cancelQueued, stopContact } from "../crew/pitcher.ts";
 import { abs, postalAddress, priceLabel } from "../crew/shared.ts";
 import { VARIANT_IDS } from "../design-ids.ts";
-import { addApproval, getLeadByToken, getSettings, kvGet, kvSet, pendingApprovalFor, suppress, updateLead } from "../db.ts";
+import { addApproval, getLeadByToken, getSettings, kvGet, kvSet, pendingApprovalFor, updateLead } from "../db.ts";
 import { leadChanged, log } from "../events.ts";
 import { getNiche } from "../niches.ts";
 import { notifyOwner } from "../providers/notify.ts";
@@ -174,14 +174,7 @@ pub.get("/u/:token", (c) => {
 pub.post("/u/:token", (c) => {
   const lead = getLeadByToken(c.req.param("token"));
   if (!lead) return gone();
-  if (lead.email) suppress(lead.email, "email", "unsubscribed");
-  if (lead.phone) suppress(lead.phone, "phone", "unsubscribed");
-  suppress(lead.sourceId, "place", "unsubscribed");
-  cancelQueued(lead.id, "Unsubscribed");
-  if (lead.status !== "won") {
-    const u = updateLead(lead.id, (l) => (l.status = "dnc"));
-    if (u) leadChanged(u);
-  }
+  stopContact(lead, "Unsubscribed");
   log("closer", "Unsubscribed. They're on the do-not-contact list.", { lead });
   return page("Unsubscribed", `<h1>You're unsubscribed</h1><p>Done. You won't hear from us again.</p>`);
 });
