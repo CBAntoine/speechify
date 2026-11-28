@@ -1,0 +1,40 @@
+{
+  "name": "mainstreet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An agent crew that finds local businesses with no website (or one from 2014), builds each one a mockup and a video, pitches them and closes the sale, with Atlas: an ElevenLabs voice agent you can ask what's happening and give orders to.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning scripts/dev.ts",
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "setup": "node --disable-warning=ExperimentalWarning scripts/setup.ts",
+    "doctor": "node --disable-warning=ExperimentalWarning scripts/doctor.ts",
+    "demo": "node --disable-warning=ExperimentalWarning scripts/demo.ts",
+    "voice:sync": "node --disable-warning=ExperimentalWarning scripts/voice-sync.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.10.0",
+    "@hono/node-server": "2.1.9",
+    "hono": "4.13.19",
+    "playwright": "1.63.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@elevenlabs/react": "1.23.1",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "lucide-react": "1.77.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.8"
+  }
+}

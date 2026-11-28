@@ -1,0 +1,21 @@
+{
+  "name": "Mainstreet",
+  "short_name": "Mainstreet",
+  "description": "Your agent crew that builds and sells websites to local businesses, with Atlas, your voice agent.",
+  "start_url": "/#/today",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F3",
+  "theme_color": "#1E7A4C",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Talk to Atlas", "url": "/#/today?atlas=1" },
+    { "name": "Approvals", "url": "/#/approvals" },
+    { "name": "Outreach", "url": "/#/outreach" }
+  ]
+}
