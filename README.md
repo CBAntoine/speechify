@@ -61,3 +61,12 @@ Map data © OpenStreetMap contributors (ODbL) via OpenFreeMap and OpenMapTiles. 
 ## Also in this repo: Patch, a voice assistant for your home WiFi
 
 [`patch/`](patch/README.md) is a separate app you run on your own computer. It finds every device on your home network and says exactly what each one is (make and model), controls lights, TVs, speakers, plugs, printers and more (including TV channels, apps, YouTube and web searches on the TV), and runs a network tune-up, all by talking or typing to an ElevenLabs agent called Patch. It has its own `package.json` and is not part of the website build. Start with `cd patch && npm install && npm start`, or try it on a simulated home with `npm run demo`.
+
+## Also in this repo: Mainstreet, an agent crew that sells websites to local businesses
+
+[`mainstreet/`](mainstreet/README.md) is a separate app that runs 24/7 on your computer or a small server. Its crew of agents (Scout, Diagnoser, Builder, Filmer, Pitcher, Checker, Closer) does the selling:
+- scans Google Maps for businesses with no website, a dead one or one from 2014
+- builds each one three designs with their real details, plus a 10-second video with an ElevenLabs voiceover
+- pitches them within compliance rules, handles replies and Stripe payment, and launches the site
+
+You run it by talking to **Atlas**, an ElevenLabs voice agent that knows everything happening in the business and takes orders ("approve the first one", "scout med spas in Asheville", "pause the pitcher"). It has its own `package.json`: `cd mainstreet && npm install && npm run setup && npm run demo`.

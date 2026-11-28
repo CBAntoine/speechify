@@ -1,0 +1,16 @@
+# docker compose up -d   → http://localhost:8787
+# Put your keys in .env (APP_PASSWORD is required on a public server).
+services:
+  mainstreet:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+    ports:
+      - "8787:8787"
+    volumes:
+      - mainstreet-data:/data
+volumes:
+  mainstreet-data:
