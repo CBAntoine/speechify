@@ -52,12 +52,18 @@ export const keys = {
 export const CLAUDE_MODEL = env("CLAUDE_MODEL") ?? "claude-opus-5-5";
 export const MAIL_FROM = env("MAIL_FROM"); // "Craig at Mainstreet <craig@yourdomain.com>"
 
+/** Atlas as built in this studio's ElevenLabs workspace. Used when ELEVENLABS_AGENT_ID isn't set; a key from
+ * another workspace makes "Sync Atlas" create a fresh copy there instead. */
+export const DEFAULT_ATLAS_AGENT_ID = "agent_0201m8frayw7fm68dbetfva0yz1n";
+
 export const eleven = {
   api: env("ELEVENLABS_API_BASE") ?? "https://api.elevenlabs.io",
+  /** Set only when pinned in .env (a missing pinned agent is an error, not a reason to create one). */
   agentId: env("ELEVENLABS_AGENT_ID"),
   /** Atlas's LLM inside ElevenLabs: fast enough for live voice and strong at tools. */
   agentLlm: env("ELEVENLABS_AGENT_LLM") ?? "claude-sonnet-5-5",
-  agentVoice: env("ELEVENLABS_AGENT_VOICE_ID") ?? "cjVigY5qzO86Huf0OWal",
+  /** "Jake – calm and confident", built for conversational agents. */
+  agentVoice: env("ELEVENLABS_AGENT_VOICE_ID") ?? "CDdUdrzh7qrDE2xpRZyQ",
   agentTtsModel: env("ELEVENLABS_AGENT_TTS_MODEL") ?? "eleven_v4_turbo",
   /** The Filmer's narrator. "Eric – smooth, trustworthy" is a premade voice every workspace has. */
   voiceoverVoice: env("ELEVENLABS_VOICE_ID") ?? "cjVigY5qzO86Huf0OWal",

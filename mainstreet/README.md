@@ -55,7 +55,17 @@ How it works:
 - **Background jobs.** Long jobs like building, filming and scanning run in the background. When they finish, the dashboard tells Atlas mid-conversation.
 - **Private agent.** Atlas only accepts conversations started with a one-time token from your server.
 
-**Set it up:** add `ELEVENLABS_API_KEY` to `.env`, then run `npm run voice:sync`, or use Settings → Voice → Sync Atlas. That creates Atlas in your workspace with Claude Sonnet 5.5 as its LLM. Sonnet is fast enough for live voice; change it with `ELEVENLABS_AGENT_LLM`. Put the printed id in `ELEVENLABS_AGENT_ID`.
+**Already built.** Atlas is in your ElevenLabs workspace as "Mainstreet – Atlas" (`agent_0201m8frayw7fm68dbetfva0yz1n`):
+- **Model and voice:** Claude Sonnet 5.5 as its LLM (fast enough for live voice) and the "Jake – calm and confident" voice.
+- **Tools and access:** 23 tools. It's private: it only starts with a token from your server.
+- **Tests:** five attached tests, all passing (10 of 10 runs):
+  - "What's going on?" gets the briefing
+  - "Scout med spas in Asheville, North Carolina" starts the right scan
+  - "Stop sending emails for now" pauses the Pitcher
+  - a price change is read back for a yes first
+  - after the yes, it calls again with `confirmed: true`
+
+Add `ELEVENLABS_API_KEY` to `.env` and the orb works; the app uses that agent by default. After changing the prompt (`src/voice/spec.ts`) or the commands (`src/commands/`), push them with `npm run voice:sync` (or Settings → Voice → Sync Atlas), then rerun the tests in ElevenLabs. With a key from a different workspace, sync creates a fresh Atlas there. Change the LLM with `ELEVENLABS_AGENT_LLM`.
 
 **On the phone.** Once the app has a public https address (`PUBLIC_URL`), sync again: Atlas's tools then run as webhooks on your server, so it can work on a phone call too.
 - **Calling Atlas:** attach a phone number to Atlas in ElevenLabs. On a call, Atlas only takes orders from numbers in `OWNER_PHONES`, and asks for `OWNER_VOICE_PIN` before anything that sends, spends or approves.

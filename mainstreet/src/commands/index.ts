@@ -449,7 +449,7 @@ function showSetting(def: SettingDef, v: unknown): string {
 
 defineCommand({
   name: "update_setting",
-  description: `Change one setting. Names: ${Object.keys(SETTINGS).join(", ")}. Money values are in dollars, rates in percent.`,
+  description: `Change one setting. Names: ${Object.keys(SETTINGS).join(", ")}. Money values are in dollars, rates in percent. To stop or pause sending for a while, use pause_crew with agent pitcher instead.`,
   risk: "confirm",
   params: {
     path: { type: "string", required: true, enum: Object.keys(SETTINGS), description: "Which setting." },

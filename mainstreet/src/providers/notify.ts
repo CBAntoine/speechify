@@ -1,4 +1,4 @@
-import { eleven as cfg, features, publicBase } from "../config.ts";
+import { DEFAULT_ATLAS_AGENT_ID, eleven as cfg, features, publicBase } from "../config.ts";
 import { getSettings, kvGet } from "../db.ts";
 import { log } from "../events.ts";
 import { errorMessage, fetchWithTimeout } from "../util.ts";
@@ -52,7 +52,7 @@ export async function notifyOwner(n: OwnerNotice): Promise<void> {
   }
 
   if (n.call && s.escalation.callOwner) {
-    const agentId = kvGet<{ agentId?: string }>("voice_agent")?.agentId ?? cfg.agentId;
+    const agentId = cfg.agentId ?? kvGet<{ agentId?: string }>("voice_agent")?.agentId ?? DEFAULT_ATLAS_AGENT_ID;
     const callKey = "call";
     const lastCall = recent.get(callKey);
     if (!elevenEnabled() || !agentId || !cfg.phoneNumberId || !s.owner.phone) {

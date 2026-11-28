@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { PUBLIC_URL, eleven as cfg, hasPublicUrl, keys } from "../config.ts";
+import { DEFAULT_ATLAS_AGENT_ID, PUBLIC_URL, eleven as cfg, hasPublicUrl, keys } from "../config.ts";
 import { getSettings, kvGet, kvSet } from "../db.ts";
 import { log } from "../events.ts";
 import { ElevenError, elevenJson } from "../providers/eleven.ts";
@@ -25,7 +25,7 @@ export function voiceState(): VoiceAgentState {
 }
 
 export function atlasAgentId(): string | undefined {
-  return cfg.agentId ?? voiceState().agentId;
+  return cfg.agentId ?? voiceState().agentId ?? DEFAULT_ATLAS_AGENT_ID;
 }
 
 export function toolMode(): ToolMode {

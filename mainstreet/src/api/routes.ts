@@ -148,7 +148,7 @@ function compact<T extends { data?: unknown }>(r: T): T {
 
 api.get("/api/voice/status", (c) => {
   const id = atlasAgentId();
-  return c.json({ configured: Boolean(id && elevenEnabled()), agentId: id, toolMode: toolMode(), talkUrl: id ? `https://elevenlabs.io/app/talk-to?agent_id=${id}` : undefined, keyPresent: elevenEnabled(), phoneNumber: Boolean(ecfg.phoneNumberId) });
+  return c.json({ configured: Boolean(id && elevenEnabled()), agentId: id, toolMode: toolMode(), talkUrl: id ? `https://elevenlabs.io/app/agents/agents/${id}` : undefined, keyPresent: elevenEnabled(), phoneNumber: Boolean(ecfg.phoneNumberId) });
 });
 
 api.post("/api/voice/sync", async (c) => {

@@ -173,7 +173,7 @@ let warnedBlockers = "";
 
 export async function sendDue(): Promise<number> {
   const s = getSettings();
-  if (!windowOpen()) return 0;
+  if (!s.pitching.channels.email || !windowOpen()) return 0;
   const blockers = realSendBlockers();
   if (blockers.length) {
     const key = blockers.join(" ");
